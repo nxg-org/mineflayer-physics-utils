@@ -69,7 +69,7 @@ playerState.controlState = ControlStateHandler.DEFAULT(); // specific to players
 
 
 (async () => {
-    const result = await simulator.simUntilOnGroundPrebuilt(playerCtx, fakeWorld, 50) // get resulting state (same as original)
+    const result = await simulator.simUntilOnGround(playerCtx, fakeWorld, 50) // get resulting state (same as original)
     result.applyToBot(fakePlayer as any); // apply to fake bot
 
     expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, 0)); // it works.

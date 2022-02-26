@@ -42,7 +42,9 @@ export interface EntityStateBuilder {
 
 const emptyVec = new Vec3(0, 0, 0);
 export class EntityState implements EntityStateBuilder {
-    
+    // may keep this, may not. Who knows?
+    public age: number = 0;
+
     public isInWater: boolean;
     public isInLava: boolean;
     public isInWeb: boolean;
@@ -296,6 +298,7 @@ export class EntityState implements EntityStateBuilder {
             this.yaw,
             this.pitch
         );
+        other.age = this.age;
         other.isCollidedHorizontally = this.isCollidedHorizontally;
         other.isCollidedVertically = this.isCollidedVertically;
         other.isInWater = this.isInWater;
@@ -321,6 +324,7 @@ export class EntityState implements EntityStateBuilder {
     }
 
     public merge(other: EntityState) {
+        this.age = other.age
         this.position = other.position.clone();
         this.velocity = other.velocity.clone();
         this.onGround = other.onGround;
