@@ -1,4 +1,3 @@
-
 import type { Entity } from "prismarine-entity";
 
 import { applyMdToNewEntity } from "../util/physicsUtils";
@@ -47,7 +46,7 @@ export class BasicSim extends BaseSimulator {
 
     async simUntilOnGround(entity: Entity, world: any, ticks: number = 5) {
         return await this.simulateUntil(
-            (state) => (state.onGround = true),
+            (state) => state.onGround === true,
             () => {},
             () => {},
             EPhysicsCtx.FROM_ENTITY(this.ctx, entity),
@@ -58,7 +57,7 @@ export class BasicSim extends BaseSimulator {
 
     async simUntilOnGroundPrebuilt(ctx: EPhysicsCtx, world: any, ticks: number = 5) {
         return await this.simulateUntil(
-            (state) => (state.onGround = true),
+            (state) => state.onGround === true,
             () => {},
             () => {},
             ctx,

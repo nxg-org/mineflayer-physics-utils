@@ -704,7 +704,7 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
         }
     }
 
-    simulatePlayer(entity: EPhysicsCtx, world: any /*prismarine-world*/): typeof entity {
+    simulatePlayer(entity: EPhysicsCtx, world: any /*prismarine-world*/): EntityState {
         const vel = entity.velocity;
         const pos = entity.position;
 
@@ -757,6 +757,6 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
 
         this.moveEntityWithHeading(entity, strafe, forward, world);
 
-        return entity;
+        return entity.state;
     }
 }

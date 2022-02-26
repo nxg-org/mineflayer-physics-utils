@@ -11,6 +11,7 @@ import block from "prismarine-block";
 import expect from "expect";
 
 import { initSetup } from "../index";
+import { BasicSim } from "../simulators";
 
 const mcData = md("1.17.1");
 const Block = (block as any)("1.17.1");
@@ -57,6 +58,7 @@ fakePlayer.entity = applyMdToNewEntity(EPhysicsCtx, playerType, fakePlayer.entit
 
 // create physics context.
 const physics = new EntityPhysics(mcData, playerType); // creates entity physics w/ environments specific to this entity.
+const simulator = new BasicSim(physics); // creates a wrapper around physics supplying basic simulation info.
 
 // create entity-specific physics context.
 const playerState = EntityState.CREATE_FROM_ENTITY(physics, fakePlayer.entity); // creates a simulation-compatible state.
@@ -65,11 +67,11 @@ const playerCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, playerState, playerType
 // set control state.
 playerState.controlState = ControlStateHandler.DEFAULT(); // specific to players and mobs, specify control scheme to apply.
 
-// simulate until on ground.
-while (!fakePlayer.entity.onGround) {
-    physics.simulatePlayer(playerCtx, fakeWorld).applyToBot(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
-}
 
-expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, 0)); // it works.
+(async () => {
+    const result = await simulator.simUntilOnGroundPrebuilt(playerCtx, fakeWorld, 50) // get resulting state (same as original)
+    result.applyToBot(fakePlayer as any); // apply to fake bot
 
-console.log(fakePlayer.entity.position); //manual run.
+    expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, 0)); // it works.
+    console.log(fakePlayer.entity.position); //manual run.
+})();

@@ -18,7 +18,7 @@
     "scripts": {
         "build": "npx tsc",
         "prepublish": "npm run build",
-        "test": "node --trace-warnings lib/example.js"
+        "test": "node --trace-warnings lib/tests/example.js"
     },
     "dependencies": {
         "@nxg-org/mineflayer-trajectories": "^1.1.0",

@@ -15,7 +15,7 @@ export abstract class BaseSimulator {
     async *predictGenerator(simCtx: EPhysicsCtx, world: any, ticks: number = 1, controls?: ControlStateHandler) {
         simCtx.state.controlState = controls ?? simCtx.state.controlState;
         for (let current = 0; current < ticks; current++) {
-            yield this.ctx.simulatePlayer(simCtx, world).state;
+            yield this.ctx.simulatePlayer(simCtx, world);
         }
         return simCtx;
     }
@@ -26,7 +26,7 @@ export abstract class BaseSimulator {
         for (let current = 0; current < ticks; current++) {
             await this.ctx.simulatePlayer(simCtx, world);
         }
-        return simCtx;
+        return simCtx.state;
     }
 
     async simulateUntil(
