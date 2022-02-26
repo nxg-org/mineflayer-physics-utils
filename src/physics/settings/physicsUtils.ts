@@ -12,20 +12,24 @@ export function makeSupportFeature(mcData: md.IndexedData) {
     return (feature: string) => features.some(({ name, versions }) => name === feature && versions.includes(mcData.version.majorVersion!));
 }
 
+export function load(
+    StaticToEdit: { mcData: md.IndexedData; entityData: md.IndexedData["entitiesByName"]; mobData: md.IndexedData["mobs"] },
+    data: md.IndexedData
+) {
+    StaticToEdit.mcData = data;
+    StaticToEdit.entityData = data["entitiesByName"];
+    StaticToEdit.mobData = data["mobs"];
+}
 
 export function MDEntityNamesToPrismarineEntities(mdEntities: md.IndexedData["entitiesByName"]) {
-    const obj: {[mdEntityName: string]: Entity} = {};
+    const obj: { [mdEntityName: string]: Entity } = {};
     for (const key in mdEntities) {
         const mdEnt = mdEntities[key];
         obj[key] = new Entity(mdEnt.id);
-
     }
 
     return obj;
-
 }
-
-
 
 export enum CheapEffects {
     SPEED,
@@ -77,8 +81,8 @@ export function getStatusEffectNamesForVersion(supportFeature: ReturnType<typeof
 // lol. In case of expansion, yk.
 export function getEnchantmentNamesForVersion(supportFeature: ReturnType<typeof makeSupportFeature>) {
     return {
-        depthStriderEnchantmentName: "depth_strider"
-    }
+        depthStriderEnchantmentName: "depth_strider",
+    };
 }
 
 export function getBetweenRectangle(src: AABB, dest: AABB) {

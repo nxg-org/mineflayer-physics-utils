@@ -1,18 +1,21 @@
 import { Bot } from "mineflayer";
-import { Physics } from "./physics/engines/physics";
 import registry from "prismarine-registry"
-import { NewCheapSettings } from "./physics/settings/cheapSettings";
-import { EntityPhysicsContext } from "./physics/settings/entityPhysicsCtx";
+import { EntityPhysics } from "./physics/engines/entityPhysics";
+import { IPhysics } from "./physics/engines/IPhysics";
+import { PhysicsSettings } from "./physics/settings/physicsSettings";
+import { EPhysicsCtx } from "./physics/settings/entityPhysicsCtx";
 
 export class PhysicsUtilWrapper {
 
-    public readonly physics: Physics
+    public playerPhysics!: IPhysics
+    public readonly physicsSettings = PhysicsSettings;
+    public readonly ePhysicsCtx = EPhysicsCtx;
 
     constructor(private bot: Bot) {
-        const data = registry(bot.version);
-        EntityPhysicsContext.mcData = data;
-        this.physics = new Physics(data);
- 
-        const tmp = NewCheapSettings.FROM_ENTITY(bot.entity)
+            const data = registry(bot.version);
+            PhysicsSettings.loadData(data)
+            EPhysicsCtx.loadData(data)
+            this.playerPhysics = new EntityPhysics(data, data.entitiesByName["player"]);
+        
     }
 }

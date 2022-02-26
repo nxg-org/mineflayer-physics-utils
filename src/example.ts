@@ -1,15 +1,18 @@
 import { createBot } from "mineflayer";
+import e, { Entity } from "prismarine-entity";
 import physics from "./index"
 import { PlayerPoses } from "./physics/states/poses";
 
-console.log(PlayerPoses[1])
 const bot = createBot({
     username: "bruh",
-    host: "localhost",
-    version: "1.8.9"
+    host: "minecraft.next-gen.dev",
+    version: "1.17.1"
 })
 
 bot.loadPlugin(physics)
+
+console.log(new bot.physicsUtil.ePhysicsCtx.entityConstructor(1));
+
 
 
 

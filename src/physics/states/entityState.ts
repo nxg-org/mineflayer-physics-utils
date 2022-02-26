@@ -7,9 +7,7 @@ import { PlayerPoses } from "./poses";
 import { PlayerState } from "./playerState";
 import { isEntityUsingItem, whichHandIsEntityUsingBoolean } from "../settings/physicsUtils";
 import nbt from "prismarine-nbt";
-import { PhysicsSettings } from "../settings/physicsSettings";
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
-import { Physics } from "../engines/physics";
 import { IPhysics } from "../engines/IPhysics";
 
 export interface EntityStateBuilder {
@@ -41,6 +39,7 @@ export interface EntityStateBuilder {
 
 const emptyVec = new Vec3(0, 0, 0);
 export class EntityState implements EntityStateBuilder {
+    
     public isInWater: boolean;
     public isInLava: boolean;
     public isInWeb: boolean;
@@ -116,7 +115,7 @@ export class EntityState implements EntityStateBuilder {
         this.pose = PlayerPoses.STANDING;
     }
 
-    public static CREATE_FROM_BOT(ctx: Physics, bot: Bot): EntityState {
+    public static CREATE_FROM_BOT(ctx: IPhysics, bot: Bot): EntityState {
         return new EntityState(
             ctx,
             bot.entity.height,
@@ -130,7 +129,7 @@ export class EntityState implements EntityStateBuilder {
         ).updateFromBot(bot);
     }
 
-    public static CREATE_FROM_ENTITY(ctx: Physics, entity: Entity): EntityState {
+    public static CREATE_FROM_ENTITY(ctx: IPhysics, entity: Entity): EntityState {
         return new EntityState(
             ctx,
             entity.height,
@@ -144,7 +143,7 @@ export class EntityState implements EntityStateBuilder {
         ).updateFromEntity(entity);
     }
 
-    public static CREATE_FROM_PLAYER_STATE(ctx: Physics, state: PlayerState): EntityState {
+    public static CREATE_FROM_PLAYER_STATE(ctx: IPhysics, state: PlayerState): EntityState {
         return new EntityState(
             ctx,
             state.height,
@@ -164,7 +163,7 @@ export class EntityState implements EntityStateBuilder {
      * @param raw CONSUMEABLE, build this with clones.
      * @returns PhysicsState
      */
-    public static CREATE_RAW(ctx: Physics, raw: EntityStateBuilder) {
+    public static CREATE_RAW(ctx: IPhysics, raw: EntityStateBuilder) {
         return new EntityState(ctx, raw.height, raw.halfWidth, raw.position, raw.velocity, raw.onGround, raw.controlState, raw.yaw, raw.pitch);
     }
 

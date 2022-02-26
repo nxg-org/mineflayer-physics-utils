@@ -1,6 +1,5 @@
 import { Bot, ControlState, ControlStateStatus, Effect } from "mineflayer";
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
-import { Physics } from "../engines/physics";
 import * as nbt from "prismarine-nbt";
 import { Vec3 } from "vec3";
 import {
@@ -14,6 +13,7 @@ import {
 import md from "minecraft-data";
 import { ControlStateHandler } from "../player/playerControls";
 import { EntityStateBuilder } from "./entityState";
+import { IPhysics } from "../engines/IPhysics";
 
 
 
@@ -107,10 +107,10 @@ export class PlayerState implements EntityStateBuilder {
     public effects: Effect[];
     public statusEffectNames;
 
-    public readonly ctx: Physics;
+    public readonly ctx: IPhysics;
     private readonly supportFeature: ReturnType<typeof makeSupportFeature>;
 
-    constructor(ctx: Physics, bot: Bot, control?: ControlStateHandler) {
+    constructor(ctx: IPhysics, bot: Bot, control?: ControlStateHandler) {
         this.supportFeature = makeSupportFeature(ctx.data);
         this.ctx = ctx;
         this.bot = bot;
@@ -326,13 +326,13 @@ export class PlayerState implements EntityStateBuilder {
     }
 
     public getAABB(): AABB {
-        const w = this.ctx.settings.playerHalfWidth;
+        const w = this.halfWidth;
         return new AABB(
             this.position.x - w,
             this.position.y,
             this.position.z - w,
             this.position.x + w,
-            this.position.y + this.ctx.settings.playerHeight,
+            this.position.y + this.height,
             this.position.z + w
         );
     }

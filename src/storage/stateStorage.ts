@@ -1,5 +1,5 @@
 import { Entity } from "prismarine-entity";
-import { Physics } from "../physics/engines/physics";
+import { IPhysics } from "../physics/engines/IPhysics";
 import { EntityState } from "../physics/states/entityState";
 
 export class StateStorage {
@@ -38,7 +38,7 @@ export class StateStorage {
         
     }
 
-    public push(tick: number, entity: Entity, ctx: Physics) {
+    public push(tick: number, entity: Entity, ctx: IPhysics) {
         this._internal[tick] = EntityState.CREATE_FROM_ENTITY(ctx, entity);
         return this
     }
