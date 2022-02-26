@@ -7,7 +7,6 @@ import entityLoader, { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
 import md from "minecraft-data";
 
-
 function getPose(entity: Entity) {
     const pose = entity.metadata.find((e) => (e as any).type === 18);
     return pose ? ((pose as any).value as number) : PlayerPoses.STANDING;
