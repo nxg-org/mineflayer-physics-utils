@@ -18,6 +18,8 @@
     "scripts": {
         "build": "npx tsc",
         "prepublish": "npm run build",
+        "fix": "ts-standard --fix",
+        "lint": "ts-standard",
         "test": "node --trace-warnings lib/example.js"
     },
     "dependencies": {
@@ -30,6 +32,7 @@
         "prismarine-item": "^1.11.1",
         "prismarine-physics": "^1.3.1",
         "prismarine-registry": "^1.1.0",
+        "ts-standard": "^11.0.0",
         "vec3": "^0.1.7"
     },
     "devDependencies": {
