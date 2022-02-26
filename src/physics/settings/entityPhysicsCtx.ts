@@ -79,6 +79,16 @@ export class EPhysicsCtx {
         );
     }
 
+    public static FROM_ENTITY_STATE(ctx: IPhysics, entityState: EntityState, entityType: md.Entity) {
+        return new EPhysicsCtx(
+            ctx,
+            entityState.pose,
+            entityState,
+            entityType, //unsafe.
+            entityType.type === "player" || !!EPhysicsCtx.mobData[entityType.id]
+        );
+    }
+
     public clone() {
         return new EPhysicsCtx(this.ctx, this.state.pose, this.state.clone(), this.entityType, this.useControls);
     }

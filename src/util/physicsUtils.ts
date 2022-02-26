@@ -19,7 +19,7 @@ export function applyMdToNewEntity(ctx: typeof EPhysicsCtx, entityType: md.Entit
     tmp.name = entityType.name
 
     Object.assign(tmp, options);
-    return tmp;
+    return tmp as Entity;
 }
 
 
