@@ -1,19 +1,16 @@
 import { AABB, AABBUtils } from "@nxg-org/mineflayer-util-plugin";
-import entityLoader, { Entity } from "prismarine-entity";
-import { Vec3 } from "vec3";
-import { PlayerPoses, PlayerPosesByNumber } from "../states/poses";
-import md from "minecraft-data";
+import { PlayerPoses } from "../states/poses";
 import { EntityState } from "../states/entityState";
 import { IPhysics } from "../engines/IPhysics";
+import { applyMdToNewEntity } from "./physicsUtils";
+import entityLoader, { Entity } from "prismarine-entity";
+import { Vec3 } from "vec3";
+import md from "minecraft-data";
+
 
 function getPose(entity: Entity) {
     const pose = entity.metadata.find((e) => (e as any).type === 18);
     return pose ? ((pose as any).value as number) : PlayerPoses.STANDING;
-}
-
-function applyMdToNewEntity(entityType: md.Entity): Entity {
-    const tmp = new Entity(10);
-    return tmp;
 }
 
 function load(data: md.IndexedData) {
@@ -70,7 +67,7 @@ export class EPhysicsCtx {
 
     public static FROM_ENTITY_TYPE(ctx: IPhysics, entityType: md.Entity) {
         const isMob = !!EPhysicsCtx.mobData[entityType.id];
-        const newE = applyMdToNewEntity(entityType);
+        const newE = applyMdToNewEntity(EPhysicsCtx, entityType);
         return new EPhysicsCtx(
             ctx,
             PlayerPoses.STANDING,

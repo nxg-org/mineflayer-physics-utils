@@ -14,7 +14,6 @@ import {
     getEnchantmentNamesForVersion,
     getStatusEffectNamesForVersion,
     makeSupportFeature,
-    MDEntityNamesToPrismarineEntities,
 } from "../settings/physicsUtils";
 import { PlayerState } from "../states/playerState";
 import { EntityState } from "../states/entityState";
@@ -32,6 +31,7 @@ type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersi
  */
 
 export class EntityPhysics<T extends md.Entity> implements IPhysics {
+
     public data: md.IndexedData;
     public entity: T;
     public movementSpeedAttribute: any;
@@ -109,6 +109,13 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
         Object.freeze(this.enchantmentNames)
 
     }
+
+
+    public static FROM_ENTITY(mcData: md.IndexedData, entity: Entity) {
+        const mdEntity = mcData.entitiesByName[entity.name!] // unsafe.
+        return new EntityPhysics(mcData, mdEntity);
+    }
+
 
     getPlayerBB(entity: EPhysicsCtx, pos: { x: number; y: number; z: number }): AABB {
         const w = entity.getHalfWidth();

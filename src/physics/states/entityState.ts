@@ -174,7 +174,7 @@ export class EntityState implements EntityStateBuilder {
         this.attributes = (bot.entity as any).attributes;
         this.effects = bot.entity.effects;
 
-        this.jumpBoost = this.ctx.getEffectLevelCustom(CheapEffects.JUMP_BOOST, bot.entity.effects);
+        this.jumpBoost = this.ctx.getEffectLevelCustom(CheapEffects.JUMP_BOOST, this.effects);
         this.speed = this.ctx.getEffectLevelCustom(CheapEffects.SPEED, this.effects);
         this.slowness = this.ctx.getEffectLevelCustom(CheapEffects.SLOWNESS, this.effects);
 

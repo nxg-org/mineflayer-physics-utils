@@ -9,14 +9,3 @@ export enum PlayerPoses {
     LONG_JUMPING,
     DYING,
 }
-
-export const PlayerPosesByNumber = {
-    0: PlayerPoses.STANDING,
-    1: PlayerPoses.FALL_FLYING,
-    2: PlayerPoses.SLEEPING,
-    3: PlayerPoses.SWIMMING,
-    4: PlayerPoses.SPIN_ATTACK, // dunno
-    5: PlayerPoses.SNEAKING,
-    6: PlayerPoses.LONG_JUMPING,
-    7: PlayerPoses.DYING,
-} as const;

@@ -1,35 +1,28 @@
+import { Entity, EntityType } from "prismarine-entity";
+import { EPhysicsCtx } from "./entityPhysicsCtx";
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import md from "minecraft-data";
-import { Bot } from "mineflayer";
-import { Block } from "prismarine-block";
-import { Entity } from "prismarine-entity";
-import { promisify } from "util";
-import { Vec3 } from "vec3";
 import features from "../info/features.json";
-import { PlayerState } from "../states/playerState";
 
 export function makeSupportFeature(mcData: md.IndexedData) {
     return (feature: string) => features.some(({ name, versions }) => name === feature && versions.includes(mcData.version.majorVersion!));
 }
 
-export function load(
-    StaticToEdit: { mcData: md.IndexedData; entityData: md.IndexedData["entitiesByName"]; mobData: md.IndexedData["mobs"] },
-    data: md.IndexedData
-) {
-    StaticToEdit.mcData = data;
-    StaticToEdit.entityData = data["entitiesByName"];
-    StaticToEdit.mobData = data["mobs"];
+
+export function applyMdToNewEntity(ctx: typeof EPhysicsCtx, entityType: md.Entity): Entity {
+    //entityType.category
+    // entityType.internalId
+    const tmp = new ctx.entityConstructor(-1);
+    tmp.displayName = entityType.displayName
+    tmp.height = entityType.height ?? 0;
+    tmp.width = entityType.width ?? 0;
+    tmp.type = entityType.type as EntityType;
+    tmp.name = entityType.name
+
+    return tmp;
 }
 
-export function MDEntityNamesToPrismarineEntities(mdEntities: md.IndexedData["entitiesByName"]) {
-    const obj: { [mdEntityName: string]: Entity } = {};
-    for (const key in mdEntities) {
-        const mdEnt = mdEntities[key];
-        obj[key] = new Entity(mdEnt.id);
-    }
 
-    return obj;
-}
 
 export enum CheapEffects {
     SPEED,

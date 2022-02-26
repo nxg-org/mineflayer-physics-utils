@@ -24,11 +24,6 @@ export interface MovementSimOptions {
     jumpFirst: boolean;
 }
 
-/**
- * To be used once per movement.
- *
- * Provide state that will serve as a base. The state itself will not be modified/consumed unless called for.
- */
 export class MovementSimulations {
     constructor(public bot: Bot, public readonly ctx: IPhysics) {}
 
