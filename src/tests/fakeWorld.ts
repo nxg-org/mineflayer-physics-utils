@@ -11,6 +11,8 @@ import md from "minecraft-data";
 import block from "prismarine-block"
 import expect from "expect"
 
+import { initSetup } from "../index";
+
 
 const mcData = md('1.17.1')
 const Block = (block as any)('1.17.1')
@@ -48,8 +50,7 @@ function createFakePlayer (pos: Vec3) {
 }
 
 //init
-PhysicsSettings.loadData(mcData);
-EPhysicsCtx.loadData(mcData);
+initSetup(mcData);
 
 
 //create fake bot
