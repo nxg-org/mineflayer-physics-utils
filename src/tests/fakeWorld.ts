@@ -13,7 +13,6 @@ import expect from "expect"
 
 import { initSetup } from "../index";
 
-
 const mcData = md('1.17.1')
 const Block = (block as any)('1.17.1')
 
@@ -49,30 +48,30 @@ function createFakePlayer (pos: Vec3) {
   }
 }
 
-//init
+//init (imports mcData to necessary modules).
 initSetup(mcData);
 
-
 //create fake bot
-const playerType = mcData.entitiesByName["player"]
-const fakePlayer = createFakePlayer(new Vec3(0, 80, 0))
-fakePlayer.entity = applyMdToNewEntity(EPhysicsCtx, playerType, fakePlayer.entity)
+const playerType = mcData.entitiesByName["player"] // specify type we will be simulating.
+const fakePlayer = createFakePlayer(new Vec3(0, 80, 0)) // call function supplied by prismarine-physics
+fakePlayer.entity = applyMdToNewEntity(EPhysicsCtx, playerType, fakePlayer.entity) // ensure compatibility.
 
 // create physics context.
-const physics = new EntityPhysics(mcData, playerType)
+const physics = new EntityPhysics(mcData, playerType) // creates entity physics w/ environments specific to this entity.
 
 // create entity-specific physics context.
-const playerState = EntityState.CREATE_FROM_ENTITY(physics, fakePlayer.entity)
-const playerCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, playerState, playerType);
+const playerState = EntityState.CREATE_FROM_ENTITY(physics, fakePlayer.entity) // creates a simulation-compatible state.
+const playerCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, playerState, playerType); // create wrapper context (supplies AABB, pose info, etc).
 
 
 // set control state.
-playerState.controlState = ControlStateHandler.DEFAULT() //.set("forward", true).set("right", true);
+playerState.controlState = ControlStateHandler.DEFAULT() // specific to players and mobs, specify control scheme to apply.
 
 // simulate until on ground.
 while (!fakePlayer.entity.onGround) {
-  physics.simulatePlayer(playerCtx, fakeWorld).state.applyToBot(fakePlayer as any)
+  physics.simulatePlayer(playerCtx, fakeWorld).state.applyToBot(fakePlayer as any) // (applyToBot since fakePlayer is supposed to be a bot)
 }
 
-expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, 0))
-console.log(fakePlayer.entity.position)
+expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, 0)) // it works.
+
+console.log(fakePlayer.entity.position) //manual run.
