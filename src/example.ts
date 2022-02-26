@@ -1,7 +1,5 @@
 import { createBot } from "mineflayer";
-import e, { Entity } from "prismarine-entity";
 import physics from "./index"
-import { PlayerPoses } from "./physics/states/poses";
 
 const bot = createBot({
     username: "bruh",

@@ -14,7 +14,7 @@ import {
     getEnchantmentNamesForVersion,
     getStatusEffectNamesForVersion,
     makeSupportFeature,
-} from "../settings/physicsUtils";
+} from "../../util/physicsUtils";
 import { PlayerState } from "../states/playerState";
 import { EntityState } from "../states/entityState";
 import { IPhysics, MobsByName } from "./IPhysics";

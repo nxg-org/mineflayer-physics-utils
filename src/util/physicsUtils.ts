@@ -1,15 +1,14 @@
 import { Entity, EntityType } from "prismarine-entity";
-import { EPhysicsCtx } from "./entityPhysicsCtx";
+import { EPhysicsCtx } from "../physics/settings";
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
+import features from "../physics/info/features.json";
 import md from "minecraft-data";
-import features from "../info/features.json";
 
 export function makeSupportFeature(mcData: md.IndexedData) {
     return (feature: string) => features.some(({ name, versions }) => name === feature && versions.includes(mcData.version.majorVersion!));
 }
 
-
-export function applyMdToNewEntity(ctx: typeof EPhysicsCtx, entityType: md.Entity): Entity {
+export function applyMdToNewEntity(ctx: typeof EPhysicsCtx, entityType: md.Entity, options: Partial<Entity> = {}): Entity {
     //entityType.category
     // entityType.internalId
     const tmp = new ctx.entityConstructor(-1);
@@ -19,6 +18,7 @@ export function applyMdToNewEntity(ctx: typeof EPhysicsCtx, entityType: md.Entit
     tmp.type = entityType.type as EntityType;
     tmp.name = entityType.name
 
+    Object.assign(tmp, options);
     return tmp;
 }
 

@@ -2,7 +2,7 @@ import { AABB, AABBUtils } from "@nxg-org/mineflayer-util-plugin";
 import { PlayerPoses } from "../states/poses";
 import { EntityState } from "../states/entityState";
 import { IPhysics } from "../engines/IPhysics";
-import { applyMdToNewEntity } from "./physicsUtils";
+import { applyMdToNewEntity } from "../../util/physicsUtils";
 import entityLoader, { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
 import md from "minecraft-data";
@@ -29,6 +29,9 @@ export class EPhysicsCtx {
     public static entityData: md.IndexedData["entitiesByName"];
     public static mobData: md.IndexedData["mobs"];
 
+    /**
+     * From minecraft's Player.java file.
+     */
     public static readonly playerPoseContext: PlayerPoseContext = {
         0: { width: 0.6, height: 1.8 },
         1: { width: 0.2, height: 0.2 },
@@ -64,9 +67,9 @@ export class EPhysicsCtx {
         );
     }
 
-    public static FROM_ENTITY_TYPE(ctx: IPhysics, entityType: md.Entity) {
+    public static FROM_ENTITY_TYPE(ctx: IPhysics, entityType: md.Entity, options: Partial<Entity> = {}) {
         const isMob = !!EPhysicsCtx.mobData[entityType.id];
-        const newE = applyMdToNewEntity(EPhysicsCtx, entityType);
+        const newE = applyMdToNewEntity(EPhysicsCtx, entityType, options);
         return new EPhysicsCtx(
             ctx,
             PlayerPoses.STANDING,

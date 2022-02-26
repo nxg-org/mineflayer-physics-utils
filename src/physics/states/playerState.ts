@@ -8,7 +8,7 @@ import {
     makeSupportFeature,
     whichHandIsEntityUsing,
     whichHandIsEntityUsingBoolean,
-} from "../settings/physicsUtils";
+} from "../../util/physicsUtils";
 // import { bot.entity } from "prismarine-entity";
 import md from "minecraft-data";
 import { ControlStateHandler } from "../player/playerControls";

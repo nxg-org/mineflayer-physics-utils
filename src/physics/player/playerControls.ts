@@ -1,7 +1,7 @@
 import { Bot, ControlState, ControlStateStatus } from "mineflayer";
 import { Vec3 } from "vec3";;
 import { MathUtils } from "@nxg-org/mineflayer-util-plugin";
-import { PlayerState } from "../states/playerState";
+import { EntityState, PlayerState } from "../states";
 
 export class ControlStateHandler implements ControlStateStatus {
     constructor(
@@ -30,7 +30,7 @@ export class ControlStateHandler implements ControlStateStatus {
         );
     }
 
-    public static COPY_STATE(state: PlayerState) {
+    public static COPY_STATE(state: EntityState | PlayerState) {
         return new ControlStateHandler(
             state.controlState.forward,
             state.controlState.back,
@@ -136,7 +136,7 @@ export class PlayerControls extends ControlStateHandler {
         );
     }
 
-    public static COPY_STATE(state: PlayerState) {
+    public static COPY_STATE(state: EntityState | PlayerState) {
         return new PlayerControls(
             state.controlState.forward,
             state.controlState.back,
@@ -199,51 +199,5 @@ export class PlayerControls extends ControlStateHandler {
         yield ["jump", this.jump];
         yield ["sprint", this.sprint];
         yield ["sneak", this.sneak];
-    }
-}
-
-export class AdvancedPlayerControls extends PlayerControls {
-    public isGrounded: boolean;
-    public faceBackwards: number;
-    public mlg: number;
-    public bucketTimer: number;
-    public bucketTarget: { x: number; y: number; z: number };
-    public lastTimer: number;
-
-    constructor(
-        forward: boolean,
-        back: boolean,
-        left: boolean,
-        right: boolean,
-        jump: boolean,
-        sprint: boolean,
-        sneak: boolean,
-        leftClick: boolean,
-        rightClick: boolean,
-        yaw: number,
-        pitch: number,
-        force: boolean = false
-    ) {
-        super(forward, back, left, right, jump, sprint, sneak, leftClick, rightClick, yaw, pitch, force);
-
-        this.isGrounded = true;
-        this.faceBackwards = 0; //4
-        this.mlg = 0;
-        this.bucketTimer = 0;
-        this.bucketTarget = { x: 0, y: 0, z: 0 };
-        this.lastTimer = 0; //-10
-    }
-
-    public static DEFAULT(): AdvancedPlayerControls {
-        return new AdvancedPlayerControls(false, false, false, false, false, false, false, false, false, NaN, NaN);
-    }
-
-    public static LOOK(yaw: number, pitch: number) {
-        return new AdvancedPlayerControls(false, false, false, false, false, false, false, false, false, NaN, NaN);
-    }
-
-    public static LOOKAT(pos: Vec3) {
-        const info = MathUtils.dirToYawAndPitch(pos);
-        return new AdvancedPlayerControls(false, false, false, false, false, false, false, false, false, info.yaw, info.pitch);
     }
 }

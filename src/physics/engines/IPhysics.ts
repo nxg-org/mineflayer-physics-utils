@@ -5,7 +5,7 @@ import { Block } from "prismarine-block";
 import { Entity } from "prismarine-entity";
 import { PhysicsSettings } from "../settings/physicsSettings";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
-import { CheapEffects, CheapEnchantments, makeSupportFeature } from "../settings/physicsUtils";
+import { CheapEffects, CheapEnchantments, makeSupportFeature } from "../../util/physicsUtils";
 
 export type MobsByName = { [mobName: string]: Entity };
 export interface IPhysics {

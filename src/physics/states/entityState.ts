@@ -1,14 +1,17 @@
-import { Entity } from "prismarine-entity";
-import { Bot, Effect } from "mineflayer";
-import { Vec3 } from "vec3";
-import { CheapEffects, CheapEnchantments } from "../settings/physicsUtils";
-import { ControlStateHandler } from "../player/playerControls";
-import { PlayerPoses } from "./poses";
-import { PlayerState } from "./playerState";
-import { isEntityUsingItem, whichHandIsEntityUsingBoolean } from "../settings/physicsUtils";
-import nbt from "prismarine-nbt";
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
-import { IPhysics } from "../engines/IPhysics";
+import { CheapEffects, CheapEnchantments, isEntityUsingItem, whichHandIsEntityUsingBoolean } from "../../util/physicsUtils";
+import type { Entity } from "prismarine-entity";
+import type { Bot, Effect } from "mineflayer";
+import { Vec3 } from "vec3";
+
+
+import { ControlStateHandler } from "../player/playerControls";
+import { PlayerState } from "./playerState";
+import { PlayerPoses } from "./poses";
+
+import { IPhysics } from "../engines";
+import nbt from "prismarine-nbt";
+
 
 export interface EntityStateBuilder {
     height: number;
