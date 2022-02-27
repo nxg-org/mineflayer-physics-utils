@@ -509,9 +509,9 @@ micromatch@^4.0.4:
     picomatch "^2.2.3"
 
 minecraft-data@^2.100.1, minecraft-data@^2.106.0, minecraft-data@^2.109.0, minecraft-data@^2.113.0, minecraft-data@^2.113.1, minecraft-data@^2.62.1, minecraft-data@^2.74.0, minecraft-data@^2.75.0, minecraft-data@^2.98.0:
-  version "2.113.1"
-  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.113.1.tgz#150a9192abc7b39cbaef33e6fd84eac8ea079d8c"
-  integrity sha512-XM7JRFmeT7CIQYrzDtYU0FOGXtGAY2YBZZTfWAoOi80LUDljzCUwwYWzZM80rM/U+OfRNT4r2z6ok7BrcF1x0Q==
+  version "2.113.2"
+  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.113.2.tgz#0c70c42e76e33f8ca8913c2a1f02885e8dc1105c"
+  integrity sha512-C5inllkvKlRRz/OxXZxIvvC4J7b8qr1bMEIkZQtNTdCHtj0Gcjq2tw8Z1E30x+oqTmtVAeW/CluAUOIO4MjT1g==
 
 minecraft-folder-path@^1.2.0:
   version "1.2.0"
