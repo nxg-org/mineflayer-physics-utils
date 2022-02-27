@@ -16,7 +16,9 @@ export default function loader(bot: Bot): void {
     if (!bot.physicsUtil) {
         initSetup(registry(bot.version));
         bot.physicsUtil = new PhysicsUtilWrapper(bot);
+        console.log(bot.physicsUtil)
     }
+    console.log(bot)
 }
 
 export function initSetup(data: IndexedData) {

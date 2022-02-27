@@ -4,7 +4,7 @@ import md, { Effects, Enchantments } from "minecraft-data";
 import * as math from "../info/math";
 import * as attributes from "../info/attributes";
 import * as features from "../info/features.json";
-import { Effect, Entity } from "prismarine-entity";
+import loader, { Effect, Entity } from "prismarine-entity";
 import { Bot, Enchantment } from "mineflayer";
 import { Block } from "prismarine-block";
 import { NormalizedEnchant } from "prismarine-item";
@@ -31,7 +31,6 @@ type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersi
  */
 
 export class EntityPhysics<T extends md.Entity> implements IPhysics {
-
     public data: md.IndexedData;
     public entity: T;
     public movementSpeedAttribute: any;
@@ -54,6 +53,7 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
     public readonly enchantmentNames: { [type in CheapEnchantments]: string };
 
     public settings: PhysicsSettings;
+    public perEntityCtx = EPhysicsCtx;
 
 
     constructor(mcData: md.IndexedData, entity: T) {
@@ -113,6 +113,7 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
 
     public static FROM_ENTITY(mcData: md.IndexedData, entity: Entity) {
         const mdEntity = mcData.entitiesByName[entity.name!] // unsafe.
+        // if (!mdEntity) throw "Invalid entity name: " + entity.name
         return new EntityPhysics(mcData, mdEntity);
     }
 

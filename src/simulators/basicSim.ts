@@ -1,4 +1,4 @@
-import { Entity } from "prismarine-entity";
+import loader, {Entity} from "prismarine-entity";
 
 import { applyMdToNewEntity } from "../util/physicsUtils";
 import { IPhysics } from "../physics/engines";
@@ -8,11 +8,13 @@ import { Vec3 } from "vec3";
 import { BaseSimulator } from "./baseSimulator";
 
 import md from "minecraft-data";
+import { SimObjects } from ".";
 
-type SimObjects = Entity | md.Entity | EPhysicsCtx;
+
 export class BasicSim extends BaseSimulator {
     constructor(public readonly ctx: IPhysics) {
         super(ctx);
+        console.log(Entity)
     }
 
     public async simXTicks(entity: SimObjects, world: any, ticks: number = 5, options: Partial<Entity> = {}) {
@@ -28,7 +30,7 @@ export class BasicSim extends BaseSimulator {
     }
 
     private async _simXTicksRaw(mdEntity: md.Entity, world: any, ticks: number = 5, options: Partial<Entity> = {}) {
-        this._simXTicks(applyMdToNewEntity(EPhysicsCtx, mdEntity, options), world, ticks);
+        return this._simXTicks(applyMdToNewEntity(EPhysicsCtx, mdEntity, options), world, ticks);
     }
 
     private async _simXTicks(entity: Entity, world: any, ticks: number) {

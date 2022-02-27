@@ -54,6 +54,7 @@ export class PhysicsUtilWrapper {
 
     public async exampleSim(entity: Entity, type: SimulationTypes, ticks: number = 10, destination?: Vec3) {
         const simulator = new BasicSim(EntityPhysics.FROM_ENTITY(this.data, entity));
+      
         switch (type) {
             case SimulationTypes.FOR_X_TICKS:
                 return await simulator.simXTicks(entity, this.bot.world, ticks);

@@ -9,4 +9,5 @@ const bot = createBot({
 
 bot.loadPlugin(physics)
 
+
 // expect(player.entity.position).toEqual(new Vec3(0, 60, 0))

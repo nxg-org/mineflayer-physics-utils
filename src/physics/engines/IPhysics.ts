@@ -11,6 +11,7 @@ import { EntityState } from "../states";
 export type MobsByName = { [mobName: string]: Entity };
 export interface IPhysics {
     settings: PhysicsSettings;
+    perEntityCtx: typeof EPhysicsCtx;
     data: IndexedData;
     supportFeature: ReturnType<typeof makeSupportFeature>;
     getEffectLevel: (effect: string, effects: Effect[]) => number;
