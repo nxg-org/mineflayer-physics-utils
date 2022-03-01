@@ -10,12 +10,9 @@ import { EntityState } from "../states";
 
 export type MobsByName = { [mobName: string]: Entity };
 export interface IPhysics {
-    settings: PhysicsSettings;
     perEntityCtx: typeof EPhysicsCtx;
     data: IndexedData;
     supportFeature: ReturnType<typeof makeSupportFeature>;
-    getEffectLevel: (effect: string, effects: Effect[]) => number;
-    getEnchantmentLevel: (effect: string, enchantments: any[]) => number;
     getEffectLevelCustom: (effect: CheapEffects, effects: Effect[]) => number;
     getEnchantmentLevelCustom: (effect: CheapEnchantments, enchantments: any[]) => number;
     getUnderlyingBlockBBs(queryBB: AABB, world: any): AABB[];

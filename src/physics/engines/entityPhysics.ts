@@ -30,13 +30,11 @@ type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersi
  * I will eventually split this code into PlayerState and bot.entityState, where bot.entityState contains fewer controls.
  */
 
-export class EntityPhysics<T extends md.Entity> implements IPhysics {
+export class EntityPhysics implements IPhysics {
     public data: md.IndexedData;
-    public entity: T;
     public movementSpeedAttribute: any;
     public supportFeature: ReturnType<typeof makeSupportFeature>;
     public blockSlipperiness: { [name: string]: number };
-
 
     protected slimeBlockId: number;
     protected soulsandId: number;
@@ -52,17 +50,12 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
     public readonly statusEffectNames: { [type in CheapEffects]: string };
     public readonly enchantmentNames: { [type in CheapEnchantments]: string };
 
-    public settings: PhysicsSettings;
     public perEntityCtx = EPhysicsCtx;
 
-
-    constructor(mcData: md.IndexedData, entity: T) {
-        this.entity = entity;
+    constructor(mcData: md.IndexedData) {
         this.data = mcData;
         const blocksByName = mcData.blocksByName;
         this.supportFeature = makeSupportFeature(mcData);
-        this.settings = PhysicsSettings.FROM_MD_ENTITY(this, this.entity);
-  
         this.movementSpeedAttribute = (this.data.attributesByName.movementSpeed as any).resource;
 
         this.blockSlipperiness = {};
@@ -73,7 +66,7 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
 
         // 1.9+
         if (blocksByName.frosted_ice) this.blockSlipperiness[blocksByName.frosted_ice.id] = 0.98;
-    
+
         // 1.13+
         if (blocksByName.blue_ice) this.blockSlipperiness[blocksByName.blue_ice.id] = 0.989;
 
@@ -100,25 +93,16 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
             this.statusEffectNames[ind as CheapEffects] = tmp[key as CheapEffectNames];
             ind++;
         }
-        Object.freeze(this.statusEffectNames)
+        Object.freeze(this.statusEffectNames);
         ind = 0;
         const tmp1 = getEnchantmentNamesForVersion(this.supportFeature);
         for (const key in tmp1) {
             this.enchantmentNames[ind as CheapEnchantments] = tmp1[key as CheapEnchantmentNames];
         }
-        Object.freeze(this.enchantmentNames)
-
+        Object.freeze(this.enchantmentNames);
     }
 
-
-    public static FROM_ENTITY(mcData: md.IndexedData, entity: Entity) {
-        const mdEntity = mcData.entitiesByName[entity.name!] // unsafe.
-        // if (!mdEntity) throw "Invalid entity name: " + entity.name
-        return new EntityPhysics(mcData, mdEntity);
-    }
-
-
-    getPlayerBB(entity: EPhysicsCtx, pos: { x: number; y: number; z: number }): AABB {
+    getEntityBB(entity: EPhysicsCtx, pos: { x: number; y: number; z: number }): AABB {
         const w = entity.getHalfWidth();
         return new AABB(-w, 0, -w, w, entity.height, w).offset(pos.x, pos.y, pos.z);
     }
@@ -128,6 +112,13 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
         pos.x = bb.minX + halfWidth;
         pos.y = bb.minY;
         pos.z = bb.minZ + halfWidth;
+    }
+
+    shouldMoveEntity(entity: EPhysicsCtx) {
+        return !(
+            (entity.state.isCollidedHorizontally || entity.state.isCollidedVertically) &&
+            !entity.collisionBehavior.affectedAfterCollision
+        );
     }
 
     getUnderlyingBlockBBs(queryBB: AABB, world: any /*prismarine-world*/): AABB[] {
@@ -171,7 +162,7 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
     }
 
     adjustPositionHeight(entity: EPhysicsCtx, pos: Vec3, world: any /*prismarine-world*/) {
-        const playerBB = this.getPlayerBB(entity, pos);
+        const playerBB = this.getEntityBB(entity, pos);
         const queryBB = playerBB.clone().extend(0, -1, 0);
         const surroundingBBs = this.getSurroundingBBs(queryBB, world);
 
@@ -183,10 +174,16 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
     }
 
     moveEntity(entity: EPhysicsCtx, dx: number, dy: number, dz: number, world: any /*prismarine-world*/) {
+        if (!this.shouldMoveEntity(entity)) {
+            entity.velocity.set(0, 0, 0);
+            return;
+        }
         const vel = entity.velocity;
         const pos = entity.position;
 
-        if (entity.state.isInWeb) {
+      
+
+        if (entity.state.isInWeb && !entity.entityType.name.includes("arrow")) {
             dx *= 0.25;
             dy *= 0.05;
             dz *= 0.25;
@@ -202,23 +199,23 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
         let oldVelZ = dz;
         const oldOldVelZ = dz;
 
-        if (entity.state.controlState.sneak && entity.state.onGround) {
+        if (entity.useControls && entity.state.controlState.sneak && entity.state.onGround) {
             const step = 0.05;
 
             // In the 3 loops bellow, y offset should be -1, but that doesnt reproduce vanilla behavior.
-            for (; dx !== 0 && this.getSurroundingBBs(this.getPlayerBB(entity, pos).offset(dx, 0, 0), world).length === 0; oldVelX = dx) {
+            for (; dx !== 0 && this.getSurroundingBBs(this.getEntityBB(entity, pos).offset(dx, 0, 0), world).length === 0; oldVelX = dx) {
                 if (dx < step && dx >= -step) dx = 0;
                 else if (dx > 0) dx -= step;
                 else dx += step;
             }
 
-            for (; dz !== 0 && this.getSurroundingBBs(this.getPlayerBB(entity, pos).offset(0, 0, dz), world).length === 0; oldVelZ = dz) {
+            for (; dz !== 0 && this.getSurroundingBBs(this.getEntityBB(entity, pos).offset(0, 0, dz), world).length === 0; oldVelZ = dz) {
                 if (dz < step && dz >= -step) dz = 0;
                 else if (dz > 0) dz -= step;
                 else dz += step;
             }
 
-            while (dx !== 0 && dz !== 0 && this.getSurroundingBBs(this.getPlayerBB(entity, pos).offset(dx, 0, dz), world).length === 0) {
+            while (dx !== 0 && dz !== 0 && this.getSurroundingBBs(this.getEntityBB(entity, pos).offset(dx, 0, dz), world).length === 0) {
                 if (dx < step && dx >= -step) dx = 0;
                 else if (dx > 0) dx -= step;
                 else dx += step;
@@ -232,7 +229,7 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
             }
         }
 
-        let playerBB = this.getPlayerBB(entity, pos);
+        let playerBB = this.getEntityBB(entity, pos);
         const queryBB = playerBB.clone().extend(dx, dy, dz);
         const surroundingBBs = this.getSurroundingBBs(queryBB, world);
         const oldBB = playerBB.clone();
@@ -253,13 +250,13 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
         playerBB.offset(0, 0, dz);
 
         // Step on block if height < stepHeight
-        if (this.settings.stepHeight > 0 && (entity.state.onGround || (dy !== oldVelY && oldVelY < 0)) && (dx !== oldVelX || dz !== oldVelZ)) {
+        if (entity.stepHeight > 0 && (entity.state.onGround || (dy !== oldVelY && oldVelY < 0)) && (dx !== oldVelX || dz !== oldVelZ)) {
             const oldVelXCol = dx;
             const oldVelYCol = dy;
             const oldVelZCol = dz;
             const oldBBCol = playerBB.clone();
 
-            dy = this.settings.stepHeight;
+            dy = entity.stepHeight;
             const queryBB = oldBB.clone().extend(oldVelX, dy, oldVelZ);
             const surroundingBBs = this.getSurroundingBBs(queryBB, world);
 
@@ -334,7 +331,12 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
         if (dx !== oldVelX) vel.x = 0;
         if (dz !== oldVelZ) vel.z = 0;
         if (dy !== oldVelY) {
-            if (blockAtFeet && blockAtFeet.type === this.slimeBlockId && !entity.state.controlState.sneak) {
+            if (
+                entity.collisionBehavior.blockEffects &&
+                blockAtFeet &&
+                blockAtFeet.type === this.slimeBlockId &&
+                !entity.state.controlState.sneak
+            ) {
                 vel.y = -vel.y;
             } else {
                 vel.y = 0;
@@ -349,24 +351,27 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
                 for (cursor.x = Math.floor(playerBB.minX); cursor.x <= Math.floor(playerBB.maxX); cursor.x++) {
                     const block = world.getBlock(cursor);
                     if (block) {
-                        if (this.supportFeature("velocityBlocksOnCollision")) {
+                        if (entity.collisionBehavior.blockEffects && this.supportFeature("velocityBlocksOnCollision")) {
                             if (block.type === this.soulsandId) {
-                                vel.x *= this.settings.soulsandSpeed;
-                                vel.z *= this.settings.soulsandSpeed;
+                                vel.x *= PhysicsSettings.soulsandSpeed;
+                                vel.z *= PhysicsSettings.soulsandSpeed;
                             } else if (block.type === this.honeyblockId) {
-                                vel.x *= this.settings.honeyblockSpeed;
-                                vel.z *= this.settings.honeyblockSpeed;
+                                vel.x *= PhysicsSettings.honeyblockSpeed;
+                                vel.z *= PhysicsSettings.honeyblockSpeed;
                             }
                         }
                         if (block.type === this.webId) {
                             entity.state.isInWeb = true;
-                        } else if (block.type === this.bubblecolumnId) {
+                        }
+
+                        // no blockEffects check here, apparently all entities are affected by this.
+                        else if (block.type === this.bubblecolumnId) {
                             const down = !block.metadata;
                             const aboveBlock = world.getBlock(cursor.offset(0, 1, 0));
                             const bubbleDrag =
                                 aboveBlock && aboveBlock.type === 0 /* air */
-                                    ? this.settings.bubbleColumnSurfaceDrag
-                                    : this.settings.bubbleColumnDrag;
+                                    ? PhysicsSettings.bubbleColumnSurfaceDrag
+                                    : PhysicsSettings.bubbleColumnDrag;
                             if (down) {
                                 vel.y = Math.max(bubbleDrag.maxDown, vel.y - bubbleDrag.down);
                             } else {
@@ -377,23 +382,24 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
                 }
             }
         }
-        if (this.supportFeature("velocityBlocksOnTop")) {
+        if (entity.collisionBehavior.blockEffects && this.supportFeature("velocityBlocksOnTop")) {
             const blockBelow = world.getBlock(entity.position.floored().offset(0, -0.5, 0));
             if (blockBelow) {
                 if (blockBelow.type === this.soulsandId) {
-                    vel.x *= this.settings.soulsandSpeed;
-                    vel.z *= this.settings.soulsandSpeed;
+                    vel.x *= PhysicsSettings.soulsandSpeed;
+                    vel.z *= PhysicsSettings.soulsandSpeed;
                 } else if (blockBelow.type === this.honeyblockId) {
-                    vel.x *= this.settings.honeyblockSpeed;
-                    vel.z *= this.settings.honeyblockSpeed;
+                    vel.x *= PhysicsSettings.honeyblockSpeed;
+                    vel.z *= PhysicsSettings.honeyblockSpeed;
                 }
             }
         }
     }
 
     applyHeading(entity: EPhysicsCtx, strafe: number, forward: number, multiplier: number) {
+        if (!this.shouldMoveEntity(entity)) return;
         let speed = Math.sqrt(strafe * strafe + forward * forward);
-        if (speed < 0.01) return new Vec3(0, 0, 0);
+        if (speed < 0.01) return;
 
         speed = multiplier / Math.max(speed, 1);
 
@@ -440,64 +446,13 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
         return 0;
     }
 
-    getEffectLevel(effectName: string, effects: Effect[]) {
-        const effectDescriptor = this.data.effectsByName[effectName];
-        if (!effectDescriptor) {
-            return 0;
-        }
-        const effectInfo = effects[effectDescriptor.id];
-        if (!effectInfo) {
-            return 0;
-        }
-        return effectInfo.amplifier + 1;
-    }
-
-    /**
-     * Slightly modified since I cannot find the typing.
-     */
-    getEnchantmentLevelTest(enchantmentName: string, enchantments: NormalizedEnchant[]) {
-        const enchantmentDescriptor = this.data.enchantmentsByName[enchantmentName];
-        if (!enchantmentDescriptor) {
-            return 0;
-        }
-
-        for (const enchInfo of enchantments) {
-            if (typeof enchInfo.name === "string") {
-                if (enchInfo.name.includes(enchantmentName)) {
-                    return enchInfo.lvl;
-                }
-            } else if (enchInfo.name === enchantmentDescriptor.id) {
-                return enchInfo.lvl;
-            }
-        }
-        return 0;
-    }
-
-    getEnchantmentLevel(enchantmentName: string, enchantments: any[]) {
-        const enchantmentDescriptor = this.data.enchantmentsByName[enchantmentName];
-        if (!enchantmentDescriptor) {
-            return 0;
-        }
-
-        for (const enchInfo of enchantments) {
-            if (typeof enchInfo.id === "string") {
-                if (enchInfo.id.includes(enchantmentName)) {
-                    return enchInfo.lvl;
-                }
-            } else if (enchInfo.id === enchantmentDescriptor.id) {
-                return enchInfo.lvl;
-            }
-        }
-        return 0;
-    }
-
     isOnLadder(pos: { x: number; y: number; z: number }, world: any /*prismarine-world*/) {
         const block = world.getBlock(pos);
         return block && (block.type === this.ladderId || block.type === this.vineId);
     }
 
     doesNotCollide(entity: EPhysicsCtx, pos: { x: number; y: number; z: number }, world: any /*prismarine-world*/) {
-        const pBB = this.getPlayerBB(entity, pos);
+        const pBB = this.getEntityBB(entity, pos);
         return !this.getSurroundingBBs(pBB, world).some((x) => pBB.intersects(x)) && this.getWaterInBB(pBB, world).length === 0;
     }
 
@@ -608,75 +563,91 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
     }
 
     moveEntityWithHeading(entity: EPhysicsCtx, strafe: number, forward: number, world: any /*prismarine-world*/) {
+        if (!this.shouldMoveEntity(entity)) {
+            entity.velocity.set(0, 0, 0);
+            return;
+        }
         const vel = entity.velocity;
         const pos = entity.position;
 
-        const gravityMultiplier = vel.y <= 0 && entity.state.slowFalling > 0 ? this.settings.slowFalling : 1;
+    
 
+        const gravityMultiplier = vel.y <= 0 && entity.state.slowFalling > 0 ? PhysicsSettings.slowFalling : 1;
+
+        // Unsure how to handle this w/ other entities.
         if (!entity.state.isInWater && !entity.state.isInLava) {
-            // Normal movement
-            let acceleration = this.settings.airborneAcceleration;
-            let inertia = this.settings.airborneInertia;
+            let acceleration = PhysicsSettings.airborneAcceleration;
+            let inertia = PhysicsSettings.airborneInertia;
             const blockUnder = world.getBlock(pos.offset(0, -1, 0));
             if (entity.state.onGround && blockUnder) {
                 let playerSpeedAttribute;
-                if (entity.state.attributes && entity.state.attributes[this.settings.movementSpeedAttribute]) {
+                if (entity.state.attributes && entity.state.attributes[this.movementSpeedAttribute]) {
                     // Use server-side player attributes
-                    playerSpeedAttribute = entity.state.attributes[this.settings.movementSpeedAttribute];
+                    playerSpeedAttribute = entity.state.attributes[this.movementSpeedAttribute];
                 } else {
                     // Create an attribute if the player does not have it
-                    playerSpeedAttribute = attributes.createAttributeValue(this.settings.playerSpeed);
+                    //TODO: Generalize to all entities.
+                    playerSpeedAttribute = attributes.createAttributeValue(PhysicsSettings.playerSpeed);
                 }
                 // Client-side sprinting (don't rely on server-side sprinting)
                 // setSprinting in LivingEntity.java
-                playerSpeedAttribute = attributes.deleteAttributeModifier(playerSpeedAttribute, this.settings.sprintingUUID); // always delete sprinting (if it exists)
+                //TODO: Generalize to all entities.
+                playerSpeedAttribute = attributes.deleteAttributeModifier(playerSpeedAttribute, PhysicsSettings.sprintingUUID); // always delete sprinting (if it exists)
                 if (entity.state.controlState.sprint) {
-                    if (!attributes.checkAttributeModifier(playerSpeedAttribute, this.settings.sprintingUUID)) {
+                    if (!attributes.checkAttributeModifier(playerSpeedAttribute, PhysicsSettings.sprintingUUID)) {
                         playerSpeedAttribute = attributes.addAttributeModifier(playerSpeedAttribute, {
-                            uuid: this.settings.sprintingUUID,
-                            amount: this.settings.sprintSpeed,
+                            uuid: PhysicsSettings.sprintingUUID,
+                            amount: PhysicsSettings.sprintSpeed,
                             operation: 2,
                         });
                     }
                 }
                 // Calculate what the speed is (0.1 if no modification)
                 const attributeSpeed = attributes.getAttributeValue(playerSpeedAttribute);
-                inertia = (this.blockSlipperiness[blockUnder.type] || this.settings.defaultSlipperiness) * 0.91;
+                inertia = (this.blockSlipperiness[blockUnder.type] || PhysicsSettings.defaultSlipperiness) * 0.91;
                 acceleration = attributeSpeed * (0.1627714 / (inertia * inertia * inertia));
                 if (acceleration < 0) acceleration = 0; // acceleration should not be negative
             }
 
             this.applyHeading(entity, strafe, forward, acceleration);
 
-            if (this.isOnLadder(pos, world)) {
-                vel.x = math.clamp(-this.settings.ladderMaxSpeed, vel.x, this.settings.ladderMaxSpeed);
-                vel.z = math.clamp(-this.settings.ladderMaxSpeed, vel.z, this.settings.ladderMaxSpeed);
-                vel.y = Math.max(vel.y, entity.state.controlState.sneak ? 0 : -this.settings.ladderMaxSpeed);
+            if (entity.collisionBehavior.blockEffects && this.isOnLadder(pos, world)) {
+                vel.x = math.clamp(-PhysicsSettings.ladderMaxSpeed, vel.x, PhysicsSettings.ladderMaxSpeed);
+                vel.z = math.clamp(-PhysicsSettings.ladderMaxSpeed, vel.z, PhysicsSettings.ladderMaxSpeed);
+                vel.y = Math.max(vel.y, entity.state.controlState.sneak ? 0 : -PhysicsSettings.ladderMaxSpeed);
             }
 
             this.moveEntity(entity, vel.x, vel.y, vel.z, world);
 
             if (
+                entity.collisionBehavior.blockEffects &&
                 this.isOnLadder(pos, world) &&
                 (entity.state.isCollidedHorizontally || (this.supportFeature("climbUsingJump") && entity.state.controlState.jump))
             ) {
-                vel.y = this.settings.ladderClimbSpeed; // climb ladder
+                vel.y = PhysicsSettings.ladderClimbSpeed; // climb ladder
             }
 
-            // Apply friction and gravity
-            if (entity.state.levitation > 0) {
-                vel.y += (0.05 * entity.state.levitation - vel.y) * 0.2;
+            // Not adding an additional function call. No point.
+            if (entity.gravityThenDrag) {
+                // Apply gravity, then air drag.
+                if (entity.state.levitation > 0)  vel.y += (0.05 * entity.state.levitation - vel.y) * 0.2;
+                else  vel.y -= entity.gravity * gravityMultiplier;
+                vel.y *= entity.airdrag;
             } else {
-                vel.y -= this.settings.gravity * gravityMultiplier;
+                 // Apply airdrag, then gravity.
+                vel.y *= entity.airdrag;
+                if (entity.state.levitation > 0)  vel.y += (0.05 * entity.state.levitation - vel.y) * 0.2;
+                else  vel.y -= entity.gravity * gravityMultiplier;
+                
             }
-            vel.y *= this.settings.airdrag;
+
             vel.x *= inertia;
             vel.z *= inertia;
         } else {
             // Water / Lava movement
             const lastY = pos.y;
-            let acceleration = this.settings.liquidAcceleration;
-            const inertia = entity.state.isInWater ? this.settings.waterInertia : this.settings.lavaInertia;
+            let acceleration = PhysicsSettings.liquidAcceleration;
+            const inertia = entity.state.isInWater ? PhysicsSettings.waterInertia : PhysicsSettings.lavaInertia;
             let horizontalInertia = inertia;
 
             if (entity.state.isInWater) {
@@ -692,71 +663,96 @@ export class EntityPhysics<T extends md.Entity> implements IPhysics {
                 if (entity.state.dolphinsGrace > 0) horizontalInertia = 0.96;
             }
 
+
             this.applyHeading(entity, strafe, forward, acceleration);
             this.moveEntity(entity, vel.x, vel.y, vel.z, world);
-            vel.y *= inertia;
-            vel.y -= (entity.state.isInWater ? this.settings.waterGravity : this.settings.lavaGravity) * gravityMultiplier;
+            if (entity.gravityThenDrag) {
+                vel.y -= (entity.state.isInWater ? entity.waterGravity : entity.lavaGravity) * gravityMultiplier;
+                vel.y *= inertia;
+            } else {
+                vel.y *= inertia;
+                vel.y -= (entity.state.isInWater ? entity.waterGravity : entity.lavaGravity) * gravityMultiplier;
+            }
             vel.x *= horizontalInertia;
             vel.z *= horizontalInertia;
 
-            if (entity.state.isCollidedHorizontally && this.doesNotCollide(entity, pos.offset(vel.x, vel.y + 0.6 - pos.y + lastY, vel.z), world)) {
-                vel.y = this.settings.outOfLiquidImpulse; // jump out of liquid
+            if (
+                entity.state.isCollidedHorizontally &&
+                this.doesNotCollide(entity, pos.offset(vel.x, vel.y + 0.6 - pos.y + lastY, vel.z), world)
+            ) {
+                vel.y = PhysicsSettings.outOfLiquidImpulse; // jump out of liquid
             }
         }
     }
 
     simulatePlayer(entity: EPhysicsCtx, world: any /*prismarine-world*/): EntityState {
+        if (!this.shouldMoveEntity(entity)) {
+            entity.velocity.set(0, 0, 0);
+            return entity.state;
+        }
+
+        
         const vel = entity.velocity;
         const pos = entity.position;
 
-        const waterBB = this.getPlayerBB(entity, pos).contract(0.001, 0.401, 0.001);
-        const lavaBB = this.getPlayerBB(entity, pos).contract(0.1, 0.4, 0.1);
+
+        const waterBB = this.getEntityBB(entity, pos).contract(0.001, 0.401, 0.001);
+        const lavaBB = this.getEntityBB(entity, pos).contract(0.1, 0.4, 0.1);
+
+        // assume that if we shouldn't move entity, isInWater and isInLava are already properly set.
 
         entity.state.isInWater = this.isInWaterApplyCurrent(waterBB, vel, world);
         entity.state.isInLava = this.isMaterialInBB(lavaBB, this.lavaId, world);
 
         // Reset velocity component if it falls under the threshold
-        if (Math.abs(vel.x) < this.settings.negligeableVelocity) vel.x = 0;
-        if (Math.abs(vel.y) < this.settings.negligeableVelocity) vel.y = 0;
-        if (Math.abs(vel.z) < this.settings.negligeableVelocity) vel.z = 0;
+        if (Math.abs(vel.x) < PhysicsSettings.negligeableVelocity) vel.x = 0;
+        if (Math.abs(vel.y) < PhysicsSettings.negligeableVelocity) vel.y = 0;
+        if (Math.abs(vel.z) < PhysicsSettings.negligeableVelocity) vel.z = 0;
 
         // Handle inputs
-        if (entity.state.controlState.jump || entity.state.jumpQueued) {
-            if (entity.state.jumpTicks > 0) entity.state.jumpTicks--;
-            if (entity.state.isInWater || entity.state.isInLava) {
-                vel.y += 0.04; //0.03999999910593033
-            } else if (entity.state.onGround && entity.state.jumpTicks === 0) {
-                const blockBelow = world.getBlock(entity.position.floored().offset(0, -0.5, 0));
-                vel.y = Math.fround(0.42) * (blockBelow && blockBelow.type === this.honeyblockId ? this.settings.honeyblockJumpSpeed : 1);
-                if (entity.state.jumpBoost > 0) {
-                    vel.y += 0.1 * entity.state.jumpBoost;
+        if (entity.useControls) {
+            if (entity.state.controlState.jump || entity.state.jumpQueued) {
+                if (entity.state.jumpTicks > 0) entity.state.jumpTicks--;
+                if (entity.state.isInWater || entity.state.isInLava) {
+                    vel.y += Math.fround(0.4);
+                } else if (entity.state.onGround && entity.state.jumpTicks === 0) {
+                    const blockBelow = world.getBlock(entity.position.floored().offset(0, -0.5, 0));
+                    vel.y =
+                        Math.fround(0.42) * (blockBelow && blockBelow.type === this.honeyblockId ? PhysicsSettings.honeyblockJumpSpeed : 1);
+                    if (entity.state.jumpBoost > 0) {
+                        vel.y += 0.1 * entity.state.jumpBoost;
+                    }
+                    if (entity.state.controlState.sprint) {
+                        const yaw = Math.PI - entity.state.yaw;
+                        vel.x -= Math.sin(yaw) * 0.2;
+                        vel.z += Math.cos(yaw) * 0.2;
+                    }
+                    entity.state.jumpTicks = PhysicsSettings.autojumpCooldown;
                 }
-                if (entity.state.controlState.sprint) {
-                    const yaw = Math.PI - entity.state.yaw;
-                    vel.x -= Math.sin(yaw) * 0.2;
-                    vel.z += Math.cos(yaw) * 0.2;
-                }
-                entity.state.jumpTicks = this.settings.autojumpCooldown;
+            } else {
+                entity.state.jumpTicks = 0; // reset autojump cooldown
             }
-        } else {
-            entity.state.jumpTicks = 0; // reset autojump cooldown
+            entity.state.jumpQueued = false;
+
+            let strafe =
+                ((entity.state.controlState.right as unknown as number) - (entity.state.controlState.left as unknown as number)) * 0.98;
+            let forward =
+                ((entity.state.controlState.forward as unknown as number) - (entity.state.controlState.back as unknown as number)) * 0.98;
+
+            if (entity.state.controlState.sneak) {
+                strafe *= PhysicsSettings.sneakSpeed;
+                forward *= PhysicsSettings.sneakSpeed;
+                entity.state.controlState.sprint = false;
+            }
+
+            if (entity.state.isUsingItem) {
+                strafe *= PhysicsSettings.usingItemSpeed;
+                forward *= PhysicsSettings.usingItemSpeed;
+                entity.state.controlState.sprint = false;
+            }
+
+            this.moveEntityWithHeading(entity, strafe, forward, world);
         }
-        entity.state.jumpQueued = false;
-
-        let strafe = ((entity.state.controlState.right as unknown as number) - (entity.state.controlState.left as unknown as number)) * 0.98;
-        let forward = ((entity.state.controlState.forward as unknown as number) - (entity.state.controlState.back as unknown as number)) * 0.98;
-
-        if (entity.state.controlState.sneak) {
-            strafe *= this.settings.sneakSpeed;
-            forward *= this.settings.sneakSpeed;
-        }
-
-        if (entity.state.isUsingItem) {
-            strafe *= this.settings.usingItemSpeed;
-            forward *= this.settings.usingItemSpeed;
-        }
-
-        this.moveEntityWithHeading(entity, strafe, forward, world);
 
         return entity.state;
     }

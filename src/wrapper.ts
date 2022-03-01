@@ -1,7 +1,7 @@
 
 import { EntityPhysics, IPhysics } from "./physics/engines";
 import { EPhysicsCtx, PhysicsSettings } from "./physics/settings";
-import { BasicSim } from "./simulators";
+import { BaseSimulator, BasicSim } from "./simulators";
 import { Vec3 } from "vec3";
 
 import registry from "prismarine-registry"
