@@ -20,7 +20,7 @@ export enum SimulationTypes {
 }
 
 export class PhysicsUtilWrapper {
-    public playerPhysics!: IPhysics;
+    public engine!: IPhysics;
     public readonly physicsSettings = PhysicsSettings;
     public readonly ePhysicsCtx = EPhysicsCtx;
     public readonly data: md.IndexedData;
@@ -29,15 +29,11 @@ export class PhysicsUtilWrapper {
         this.data = registry(bot.version);
         PhysicsSettings.loadData(this.data);
         EPhysicsCtx.loadData(this.data);
-        this.playerPhysics = new EntityPhysics(this.data, this.data.entitiesByName["player"]);
+        this.engine = new EntityPhysics(this.data);
     }
 
-    public getPhysicsSim(entity: Entity) {
-        return EntityPhysics.FROM_ENTITY(this.data, entity);
-    }
-
-    public getPhysicsSimRaw(entity: md.Entity) {
-        return new EntityPhysics(this.data, entity);
+    public getPhysicsSim() {
+        return new EntityPhysics(this.data);
     }
 
     public getPhysicsCtx(ctx: IPhysics, entity: Entity) {
@@ -49,20 +45,34 @@ export class PhysicsUtilWrapper {
     }
 
     public simulate(simulator: IPhysics, simCtx: EPhysicsCtx, world: any) {
-        return simulator.simulatePlayer(simCtx, world);
+        return simulator.simulate(simCtx, world);
     }
 
-    public async exampleSim(entity: Entity, type: SimulationTypes, ticks: number = 10, destination?: Vec3) {
-        const simulator = new BasicSim(EntityPhysics.FROM_ENTITY(this.data, entity));
+    public exampleSim(entity: Entity, type: SimulationTypes, ticks: number = 10, destination?: Vec3) {
+        const simulator = new BasicSim(new EntityPhysics(this.data));
       
         switch (type) {
             case SimulationTypes.FOR_X_TICKS:
-                return await simulator.simXTicks(entity, this.bot.world, ticks);
+                return simulator.simXTicks(entity, this.bot.world, ticks);
             case SimulationTypes.UNTIL_GROUND:
-                return await simulator.simUntilOnGround(entity, this.bot.world, ticks);
+                return simulator.simUntilOnGround(entity, this.bot.world, ticks);
             case SimulationTypes.TO_DESTINATION:
                 if (!destination) throw "Invalid destination for example sim.";
-                return await simulator.simUntilDestination(entity, destination, this.bot.world, ticks);
+                return simulator.simUntilDestination(entity, destination, this.bot.world, ticks);
+        }
+    }
+
+    public advancedExample(simCtx: EPhysicsCtx, type: SimulationTypes, ticks: number = 10, destination?: Vec3) {
+        const simulator = new BasicSim(new EntityPhysics(this.data));
+      
+        switch (type) {
+            case SimulationTypes.FOR_X_TICKS:
+                return simulator.simXTicksPrebuilt(simCtx, this.bot.world, ticks);
+            case SimulationTypes.UNTIL_GROUND:
+                return simulator.simUntilOnGroundPrebuilt(simCtx, this.bot.world, ticks);
+            case SimulationTypes.TO_DESTINATION:
+                if (!destination) throw "Invalid destination for example sim.";
+                return simulator.simUntilDestinationPrebuilt(simCtx, destination, this.bot.world, ticks);
         }
     }
 }

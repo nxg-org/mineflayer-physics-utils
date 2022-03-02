@@ -3,11 +3,13 @@ import { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
 import md from "minecraft-data";
 import block from "prismarine-block";
+import entity from "prismarine-entity"
 
 export default function load(version: string) {
 
     const mcData = md(version);
     const Block = (block as any)(version);
+    const Entity = (entity as any)(version)
 
 
     const fakeWorld = {
@@ -18,12 +20,15 @@ export default function load(version: string) {
             return b;
         },
     };
-    
-    const createFakePlayer =  (pos: Vec3) => {
+
+    const createFakeEntity = (name: string, pos: Vec3) => {
+        if (!mcData.entitiesByName[name!]) throw "invalid name"
+        const tmp = mcData.entitiesByName[name!]
         return {
-            entity: {
-                type: "player",
-                name: "player",
+                name: name,
+                type: tmp.type,
+                height:tmp.height,
+                width: tmp.width,
                 position: pos,
                 velocity: new Vec3(0, 0, 0),
                 onGround: false,
@@ -34,15 +39,30 @@ export default function load(version: string) {
                 isCollidedVertically: false,
                 yaw: 0,
                 effects: {} as Effect[],
-            } as unknown as Entity,
+                metadata: [],
+                equipment: new Array(6)
+            } as unknown as Entity
+    }
+
+    const modifyEntity = (name: string, entity: Entity) => {
+        if (!mcData.entitiesByName[name!]) throw "invalid name"
+        const tmp = mcData.entitiesByName[name!]
+        entity.height = tmp.height ?? 0
+        entity.width = tmp.width ?? 0
+    }
+    
+    const createFakePlayer =  (pos: Vec3) => {
+        return {
+            entity: createFakeEntity("player", pos),
             jumpTicks: 0,
             jumpQueued: false,
             version: "1.17.1",
             inventory: {
                 slots: [],
             },
+            world: fakeWorld
         };
     }
 
-    return {mcData, Block, fakeWorld, createFakePlayer};
+    return {mcData, Block, Entity, fakeWorld, createFakePlayer, createFakeEntity, modifyEntity};
 }

@@ -10,14 +10,13 @@ import { EntityState } from "../states";
 
 export type MobsByName = { [mobName: string]: Entity };
 export interface IPhysics {
-    perEntityCtx: typeof EPhysicsCtx;
     data: IndexedData;
     supportFeature: ReturnType<typeof makeSupportFeature>;
     getEffectLevelCustom: (effect: CheapEffects, effects: Effect[]) => number;
     getEnchantmentLevelCustom: (effect: CheapEnchantments, enchantments: any[]) => number;
     getUnderlyingBlockBBs(queryBB: AABB, world: any): AABB[];
     getSurroundingBBs(queryBB: AABB, world: any): AABB[];
-    simulatePlayer(simCtx: EPhysicsCtx, world: any): EntityState;
+    simulate(simCtx: EPhysicsCtx, world: any): EntityState;
 
     readonly statusEffectNames: { [type in CheapEffects]: string };
     readonly enchantmentNames: { [type in CheapEnchantments]: string };

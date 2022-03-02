@@ -20,7 +20,7 @@ const fakePlayer = createFakePlayer(new Vec3(0, 80, 0)); // call function suppli
 fakePlayer.entity = applyMdToNewEntity(EPhysicsCtx, playerType, fakePlayer.entity); // ensure compatibility.
 
 // create physics context.
-const physics = new EntityPhysics(mcData, playerType); // creates entity physics w/ environments specific to this entity.
+const physics = new EntityPhysics(mcData); // creates entity physics w/ environments specific to this entity.
 const simulator = new BasicSim(physics); // creates a wrapper around physics supplying basic simulation info.
 
 // create entity-specific physics context.
@@ -32,7 +32,7 @@ playerState.controlState = ControlStateHandler.DEFAULT(); // specific to players
 
 
 (async () => {
-    const result = await simulator.simUntilOnGround(playerCtx, fakeWorld, 50) // get resulting state (same as original)
+    const result = await simulator.simUntilOnGroundPrebuilt(playerCtx, fakeWorld, 50) // get resulting state (same as original)
     result.applyToBot(fakePlayer as any); // apply to fake bot
 
     expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, 0)); // it works.

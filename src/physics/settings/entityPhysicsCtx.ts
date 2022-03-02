@@ -63,9 +63,10 @@ export class EPhysicsCtx {
     };
 
     constructor(public ctx: IPhysics, public pose: PlayerPoses, public readonly state: EntityState, public readonly entityType: md.Entity) {
+       
         this.position = state.position;
         this.velocity = state.velocity;
-
+        
         if (entityType.type === "player" || !!EPhysicsCtx.mobData[entityType.id]) {
             this.gravity = 0.08;
             this.airdrag = Math.fround(1 - 0.02);

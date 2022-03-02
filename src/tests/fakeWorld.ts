@@ -47,6 +47,7 @@ function createFakePlayer(pos: Vec3) {
     };
 }
 
+
 //init (imports mcData to necessary modules).
 initSetup(mcData);
 
@@ -56,7 +57,7 @@ const fakePlayer = createFakePlayer(new Vec3(0, 80, 0)); // call function suppli
 fakePlayer.entity = applyMdToNewEntity(EPhysicsCtx, playerType, fakePlayer.entity); // ensure compatibility.
 
 // create physics context.
-const physics = new EntityPhysics(mcData, playerType); // creates entity physics w/ environments specific to this entity.
+const physics = new EntityPhysics(mcData); // creates entity physics w/ environments specific to this entity.
 
 // create entity-specific physics context.
 const playerState = EntityState.CREATE_FROM_ENTITY(physics, fakePlayer.entity); // creates a simulation-compatible state.
@@ -67,7 +68,7 @@ playerState.controlState = ControlStateHandler.DEFAULT(); // specific to players
 
 // simulate until on ground.
 while (!fakePlayer.entity.onGround) {
-    physics.simulatePlayer(playerCtx, fakeWorld).applyToBot(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
+    physics.simulate(playerCtx, fakeWorld).applyToBot(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
 }
 
 expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, 0)); // it works.

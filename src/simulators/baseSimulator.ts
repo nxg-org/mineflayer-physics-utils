@@ -12,31 +12,31 @@ type Controller = (state: EntityState, ticks: number) => void; // (...any: any[]
 export abstract class BaseSimulator {
     constructor(public readonly ctx: IPhysics) {}
 
-    async *predictGenerator(simCtx: EPhysicsCtx, world: any, ticks: number = 1, controls?: ControlStateHandler) {
+    *predictGenerator(simCtx: EPhysicsCtx, world: any, ticks: number = 1, controls?: ControlStateHandler) {
         simCtx.state.controlState = controls ?? simCtx.state.controlState;
         for (let current = 0; current < ticks; current++) {
-            yield this.ctx.simulatePlayer(simCtx, world);
+            yield this.ctx.simulate(simCtx, world);
         }
         return simCtx;
     }
 
-    async predictForward(target: Entity, world: any, ticks: number = 1, controls?: ControlStateHandler) {
+    predictForward(target: Entity, world: any, ticks: number = 1, controls?: ControlStateHandler) {
         const simCtx = EPhysicsCtx.FROM_ENTITY(this.ctx, target);
         simCtx.state.controlState = controls ?? simCtx.state.controlState;
         for (let current = 0; current < ticks; current++) {
-            await this.ctx.simulatePlayer(simCtx, world);
+            this.ctx.simulate(simCtx, world);
         }
         return simCtx.state;
     }
 
-    async simulateUntil(
+    simulateUntil(
         goal: SimulationGoal,
         onGoalReach: OnGoalReachFunction,
         controller: Controller,
         simCtx: EPhysicsCtx,
         world: any,
         ticks = 1
-    ): Promise<EntityState> {
+    ): EntityState {
         for (let i = 0; i < ticks; i++) {
             if (goal(simCtx.state)) {
                 onGoalReach(simCtx.state);
@@ -44,7 +44,7 @@ export abstract class BaseSimulator {
             }
             if (simCtx.state.isInLava) break;
             controller(simCtx.state, ticks);
-            await this.ctx.simulatePlayer(simCtx, world);
+            this.ctx.simulate(simCtx, world);
             simCtx.state.age++;
         }
         return simCtx.state;

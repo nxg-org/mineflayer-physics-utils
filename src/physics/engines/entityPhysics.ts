@@ -50,8 +50,6 @@ export class EntityPhysics implements IPhysics {
     public readonly statusEffectNames: { [type in CheapEffects]: string };
     public readonly enchantmentNames: { [type in CheapEnchantments]: string };
 
-    public perEntityCtx = EPhysicsCtx;
-
     constructor(mcData: md.IndexedData) {
         this.data = mcData;
         const blocksByName = mcData.blocksByName;
@@ -685,7 +683,7 @@ export class EntityPhysics implements IPhysics {
         }
     }
 
-    simulatePlayer(entity: EPhysicsCtx, world: any /*prismarine-world*/): EntityState {
+    simulate(entity: EPhysicsCtx, world: any /*prismarine-world*/): EntityState {
         if (!this.shouldMoveEntity(entity)) {
             entity.velocity.set(0, 0, 0);
             return entity.state;

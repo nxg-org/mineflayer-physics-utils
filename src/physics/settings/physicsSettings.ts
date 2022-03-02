@@ -57,7 +57,7 @@ export class PhysicsSettings {
     public static airborneInertia: number = 0.91;
     public static airborneAcceleration: number = 0.02;
 
-    public static sprintSpeed: number = 0.3;
+    public static sprintSpeed: number = Math.fround(0.3);
     public static sneakSpeed: number = 0.3;
     public static usingItemSpeed: number = 0.2;
 }
