@@ -495,15 +495,10 @@ micromatch@^4.0.4:
     braces "^3.0.1"
     picomatch "^2.2.3"
 
-minecraft-data@^2.100.1, minecraft-data@^2.106.0, minecraft-data@^2.109.0, minecraft-data@^2.113.0, minecraft-data@^2.113.1, minecraft-data@^2.74.0, minecraft-data@^2.75.0, minecraft-data@^2.98.0:
-  version "2.113.1"
-  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.113.1.tgz#150a9192abc7b39cbaef33e6fd84eac8ea079d8c"
-  integrity sha512-XM7JRFmeT7CIQYrzDtYU0FOGXtGAY2YBZZTfWAoOi80LUDljzCUwwYWzZM80rM/U+OfRNT4r2z6ok7BrcF1x0Q==
-
-minecraft-data@^2.62.1:
-  version "2.113.3"
-  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.113.3.tgz#2e2f2e5596036e6030fa30b5beca14d218dc5bf9"
-  integrity sha512-1JWkIlIx3aX80F93Ktt0lDuOLXOWgg42mET6zJkqrRDvhgp3kOzQb+4Ju6THqDkqZcwpuO7imvbuRX9VngFTdQ==
+minecraft-data@^2.100.1, minecraft-data@^2.106.0, minecraft-data@^2.109.0, minecraft-data@^2.113.0, minecraft-data@^2.113.1, minecraft-data@^2.62.1, minecraft-data@^2.74.0, minecraft-data@^2.75.0, minecraft-data@^2.98.0:
+  version "2.115.1"
+  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.115.1.tgz#d525a83a87ec0b3951b5004d9fae169043a229be"
+  integrity sha512-h6Xfb4izl9d96wFcXUfztwu2Aavtkp/cP2b0BacPl+c9N0Lq4yMNGL7dtvJGbhW3UyZYFWUB3sT1BjGOXFFH2A==
 
 minecraft-folder-path@^1.2.0:
   version "1.2.0"
