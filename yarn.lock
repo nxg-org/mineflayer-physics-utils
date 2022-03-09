@@ -495,15 +495,10 @@ micromatch@^4.0.4:
     braces "^3.0.1"
     picomatch "^2.2.3"
 
-minecraft-data@^2.100.1, minecraft-data@^2.106.0, minecraft-data@^2.109.0, minecraft-data@^2.113.0, minecraft-data@^2.113.1, minecraft-data@^2.74.0, minecraft-data@^2.75.0, minecraft-data@^2.98.0:
-  version "2.113.1"
-  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.113.1.tgz#150a9192abc7b39cbaef33e6fd84eac8ea079d8c"
-  integrity sha512-XM7JRFmeT7CIQYrzDtYU0FOGXtGAY2YBZZTfWAoOi80LUDljzCUwwYWzZM80rM/U+OfRNT4r2z6ok7BrcF1x0Q==
-
-minecraft-data@^2.62.1:
-  version "2.113.3"
-  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.113.3.tgz#2e2f2e5596036e6030fa30b5beca14d218dc5bf9"
-  integrity sha512-1JWkIlIx3aX80F93Ktt0lDuOLXOWgg42mET6zJkqrRDvhgp3kOzQb+4Ju6THqDkqZcwpuO7imvbuRX9VngFTdQ==
+minecraft-data@^2.100.1, minecraft-data@^2.106.0, minecraft-data@^2.109.0, minecraft-data@^2.113.0, minecraft-data@^2.113.1, minecraft-data@^2.114.1, minecraft-data@^2.62.1, minecraft-data@^2.74.0, minecraft-data@^2.75.0, minecraft-data@^2.98.0:
+  version "2.118.0"
+  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.118.0.tgz#55a2dff63245bf0bf2a958ec5d31600aff1e7b93"
+  integrity sha512-LGuNH3rUdR8hb+e2Cmgcsyg7GKS17EzRjzV5D9jGLJfMXNFzKEuPT4i6YmlD5rXBEVIGEytR+RaVzb3UgnDlHA==
 
 minecraft-folder-path@^1.2.0:
   version "1.2.0"
@@ -681,11 +676,13 @@ prismarine-chunk@^1.29.0:
     xxhash-wasm "^0.4.2"
 
 prismarine-entity@^2.0.0:
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/prismarine-entity/-/prismarine-entity-2.0.0.tgz#dd0c991a8f5a24c078211b5c5a3fc411d07758b7"
-  integrity sha512-6TPldMDiUhK8drNHKVW5783IHkkgHQWQwPO9NPRUXyZNKYzhqLKeTxOAsmtcR9mjTORbrILzJUyB0qZgSyfOrA==
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/prismarine-entity/-/prismarine-entity-2.1.0.tgz#7319072f17e68d0e942304ad4e2218a0167ef67b"
+  integrity sha512-EK+YjhdVAwf7M/ZoVLjPB2Vm4YVapzzYRyWrAA2lyyAKXN1ktxZwkPOM16Vx1VN+JhGYi9MYc2HVTxY2R4QWLA==
   dependencies:
+    minecraft-data "^2.114.1"
     prismarine-chat "^1.4.1"
+    prismarine-item "^1.11.2"
     vec3 "^0.1.4"
 
 prismarine-item@^1.10.0, prismarine-item@^1.10.1, prismarine-item@^1.11.0, prismarine-item@^1.11.1, prismarine-item@^1.11.2, prismarine-item@^1.5.0:
