@@ -495,15 +495,10 @@ micromatch@^4.0.4:
     braces "^3.0.1"
     picomatch "^2.2.3"
 
-minecraft-data@^2.100.1, minecraft-data@^2.106.0, minecraft-data@^2.109.0, minecraft-data@^2.113.0, minecraft-data@^2.113.1, minecraft-data@^2.74.0, minecraft-data@^2.75.0, minecraft-data@^2.98.0:
-  version "2.113.1"
-  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.113.1.tgz#150a9192abc7b39cbaef33e6fd84eac8ea079d8c"
-  integrity sha512-XM7JRFmeT7CIQYrzDtYU0FOGXtGAY2YBZZTfWAoOi80LUDljzCUwwYWzZM80rM/U+OfRNT4r2z6ok7BrcF1x0Q==
-
-minecraft-data@^2.62.1:
-  version "2.113.3"
-  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.113.3.tgz#2e2f2e5596036e6030fa30b5beca14d218dc5bf9"
-  integrity sha512-1JWkIlIx3aX80F93Ktt0lDuOLXOWgg42mET6zJkqrRDvhgp3kOzQb+4Ju6THqDkqZcwpuO7imvbuRX9VngFTdQ==
+minecraft-data@^2.100.1, minecraft-data@^2.106.0, minecraft-data@^2.109.0, minecraft-data@^2.113.0, minecraft-data@^2.113.1, minecraft-data@^2.118.0, minecraft-data@^2.62.1, minecraft-data@^2.74.0, minecraft-data@^2.75.0, minecraft-data@^2.98.0:
+  version "2.119.1"
+  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.119.1.tgz#2ed8abc221b412198ef4f985110e79885ca0d143"
+  integrity sha512-B6YnLhYyvGOR+Hz/h63qvebHU/5JV7AViUEgQKIL/Lqn2LrXYmPl5xqEvfscFWTiQErIBnMEOeu0uWzKlWKlVw==
 
 minecraft-folder-path@^1.2.0:
   version "1.2.0"
@@ -689,10 +684,11 @@ prismarine-entity@^2.0.0:
     vec3 "^0.1.4"
 
 prismarine-item@^1.10.0, prismarine-item@^1.10.1, prismarine-item@^1.11.0, prismarine-item@^1.11.1, prismarine-item@^1.11.2, prismarine-item@^1.5.0:
-  version "1.11.2"
-  resolved "https://registry.yarnpkg.com/prismarine-item/-/prismarine-item-1.11.2.tgz#8d6f6737b7f2cf1442ce49c944e632f363efdda2"
-  integrity sha512-OMkI/4g4N+Z0+63MIVbnxRZOjjyGs9E0KZ/v5UQZ0M6ZsxTGLHl2IqQAxVr59GrM4DsB8S+2Cp3A7t3EKZ1asQ==
+  version "1.11.3"
+  resolved "https://registry.yarnpkg.com/prismarine-item/-/prismarine-item-1.11.3.tgz#8f0bec484895cad33d36381289e1a16f5b57db2e"
+  integrity sha512-3zgExGF6hektrRlvarkh+il2wp4EyPzi7oJiOxabeaqSfc17taBbJubPJeEZHdi7sy4sB0diF10PgrESD8mc3Q==
   dependencies:
+    minecraft-data "^2.118.0"
     prismarine-nbt "^2.0.0"
 
 prismarine-nbt@^2.0.0:
