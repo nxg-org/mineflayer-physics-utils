@@ -1,0 +1,142 @@
+{
+    "living_entities": {
+        "names": ["player", "zombie", "skeleton", "creeper", "spider", "enderman", "slime", "magma_cube"],
+        "default": {
+            "gravityThenDrag": true,
+            "useControls": true,
+            "stepHeight": 1,
+            "gravity": 0.08,
+            "airdrag": 0.9800000190734863,
+            "airborneInertia": 0.91,
+            "airborneAccel": 0.02,
+            "waterInertia": 0.8,
+            "lavaInertia": 0.5,
+            "liquidAccel": 0.02,
+            "collisionBehavior": {
+                "blockEffects": true,
+                "affectedAfterCollision": true
+            }
+        },
+        "player": {
+            "stepHeight": 0.6
+        }
+    },
+    "projectiles": {
+        "names": ["arrow", "trident", "egg", "snowball", "potion", "ender_pearl", "experience_bottle", "llama_spit", "fishing_bobber"],
+        "default": {
+            "gravityThenDrag": false,
+            "useControls": false,
+            "stepHeight": 0,
+            "gravity": 0.03,
+            "airdrag": 0.9800000190734863,
+            "airborneInertia": 0.99,
+            "airborneAccel": 0.02,
+            "waterInertia": 0.6,
+            "lavaInertia": 1,
+            "liquidAccel": 0.02,
+            "collisionBehavior": {
+                "blockEffects": false,
+                "affectedAfterCollision": false
+            }
+        },
+        "arrow": {
+            "gravity": 0.05,
+            "airdrag": 0.9900000095367432
+        },
+        "trident": {
+            "gravity": 0.05,
+            "airdrag": 0.9900000095367432,
+            "waterInertia": 0.99
+        },
+        "llama_spit": {
+            "gravity": 0.06,
+            "airdrag": 0.9900000095367432
+        },
+        "experience_bottle": {
+            "gravity": 0.03
+        },
+        "fishing_bobber": {
+            "airdrag": 0.9200000166893005
+        }
+    },
+    "dead_vehicles": {
+        "names": ["minecart", "boat"],
+        "default": {
+            "gravityThenDrag": true,
+            "useControls": false,
+            "stepHeight": 0,
+            "gravity": 0.04,
+            "airdrag": 0.949999988079071,
+            "airborneInertia": 0.91,
+            "airborneAccel": 0.02,
+            "waterInertia": 0.8,
+            "lavaInertia": 0.5,
+            "liquidAccel": 0.02,
+            "collisionBehavior": {
+                "blockEffects": false,
+                "affectedAfterCollision": true
+            }
+        },
+        "boat": {
+            "gravity": 0.04,
+            "airdrag": 1
+        }
+    },
+    "shot_entities": {
+        "names": ["fireball", "skull"],
+        "default": {
+            "gravityThenDrag": true,
+            "useControls": false,
+            "stepHeight": 0,
+            "gravity": 0,
+            "airdrag": 0,
+            "airborneInertia": 1,
+            "airborneAccel": 0,
+            "waterInertia": 1,
+            "lavaInertia": 1,
+            "liquidAccel": 0,
+            "collisionBehavior": {
+                "blockEffects": false,
+                "affectedAfterCollision": false
+            }
+        }
+    },
+    "blocks": {
+        "names": ["falling_block", "tnt"],
+        "default": {
+            "gravityThenDrag": false,
+            "useControls": false,
+            "stepHeight": 0,
+            "gravity": 0.04,
+            "airdrag": 0.9800000190734863,
+            "airborneInertia": 1,
+            "airborneAccel": 0.02,
+            "waterInertia": 0.8,
+            "lavaInertia": 0.5,
+            "liquidAccel": 0.02,
+            "collisionBehavior": {
+                "blockEffects": false,
+                "affectedAfterCollision": false
+            }
+        }
+    },
+    "other": {
+        "names": ["experience_orb"],
+        "default": {
+            "gravityThenDrag": false,
+            "useControls": false,
+            "stepHeight": 0,
+            "gravity": 0.03,
+            "airdrag": 0.9800000190734863,
+            "airborneInertia": 1,
+            "airborneAccel": 0,
+            "waterInertia": 1,
+            "lavaInertia": 0,
+            "liquidAccel": 0,
+            "collisionBehavior": {
+                "blockEffects": true,
+                "affectedAfterCollision": true
+            }
+        }
+    }
+}

@@ -179,8 +179,6 @@ export class EntityPhysics implements IPhysics {
         const vel = entity.velocity;
         const pos = entity.position;
 
-      
-
         if (entity.state.isInWeb && !entity.entityType.name.includes("arrow")) {
             dx *= 0.25;
             dy *= 0.05;
@@ -395,7 +393,10 @@ export class EntityPhysics implements IPhysics {
     }
 
     applyHeading(entity: EPhysicsCtx, strafe: number, forward: number, multiplier: number) {
-        if (!this.shouldMoveEntity(entity)) return;
+        if (!this.shouldMoveEntity(entity)) {
+            entity.velocity.set(0, 0, 0);
+            return;
+        }
         let speed = Math.sqrt(strafe * strafe + forward * forward);
         if (speed < 0.01) return;
 
@@ -568,14 +569,12 @@ export class EntityPhysics implements IPhysics {
         const vel = entity.velocity;
         const pos = entity.position;
 
-    
-
         const gravityMultiplier = vel.y <= 0 && entity.state.slowFalling > 0 ? PhysicsSettings.slowFalling : 1;
 
         // Unsure how to handle this w/ other entities.
         if (!entity.state.isInWater && !entity.state.isInLava) {
-            let acceleration = PhysicsSettings.airborneAcceleration;
-            let inertia = PhysicsSettings.airborneInertia;
+            let acceleration = entity.airborneAccel;
+            let inertia = entity.airborneInertia;
             const blockUnder = world.getBlock(pos.offset(0, -1, 0));
             if (entity.state.onGround && blockUnder) {
                 let playerSpeedAttribute;
@@ -628,15 +627,14 @@ export class EntityPhysics implements IPhysics {
             // Not adding an additional function call. No point.
             if (entity.gravityThenDrag) {
                 // Apply gravity, then air drag.
-                if (entity.state.levitation > 0)  vel.y += (0.05 * entity.state.levitation - vel.y) * 0.2;
-                else  vel.y -= entity.gravity * gravityMultiplier;
+                if (entity.state.levitation > 0) vel.y += (0.05 * entity.state.levitation - vel.y) * 0.2;
+                else vel.y -= entity.gravity * gravityMultiplier;
                 vel.y *= entity.airdrag;
             } else {
-                 // Apply airdrag, then gravity.
+                // Apply airdrag, then gravity.
                 vel.y *= entity.airdrag;
-                if (entity.state.levitation > 0)  vel.y += (0.05 * entity.state.levitation - vel.y) * 0.2;
-                else  vel.y -= entity.gravity * gravityMultiplier;
-                
+                if (entity.state.levitation > 0) vel.y += (0.05 * entity.state.levitation - vel.y) * 0.2;
+                else vel.y -= entity.gravity * gravityMultiplier;
             }
 
             vel.x *= inertia;
@@ -644,8 +642,8 @@ export class EntityPhysics implements IPhysics {
         } else {
             // Water / Lava movement
             const lastY = pos.y;
-            let acceleration = PhysicsSettings.liquidAcceleration;
-            const inertia = entity.state.isInWater ? PhysicsSettings.waterInertia : PhysicsSettings.lavaInertia;
+            let acceleration = entity.liquidAccel;
+            const inertia = entity.state.isInWater ? entity.waterInertia : entity.lavaInertia;
             let horizontalInertia = inertia;
 
             if (entity.state.isInWater) {
@@ -660,7 +658,6 @@ export class EntityPhysics implements IPhysics {
 
                 if (entity.state.dolphinsGrace > 0) horizontalInertia = 0.96;
             }
-
 
             this.applyHeading(entity, strafe, forward, acceleration);
             this.moveEntity(entity, vel.x, vel.y, vel.z, world);
@@ -689,10 +686,8 @@ export class EntityPhysics implements IPhysics {
             return entity.state;
         }
 
-        
         const vel = entity.velocity;
         const pos = entity.position;
-
 
         const waterBB = this.getEntityBB(entity, pos).contract(0.001, 0.401, 0.001);
         const lavaBB = this.getEntityBB(entity, pos).contract(0.1, 0.4, 0.1);
@@ -707,6 +702,8 @@ export class EntityPhysics implements IPhysics {
         if (Math.abs(vel.y) < PhysicsSettings.negligeableVelocity) vel.y = 0;
         if (Math.abs(vel.z) < PhysicsSettings.negligeableVelocity) vel.z = 0;
 
+        let strafe = 0;
+        let forward = 0;
         // Handle inputs
         if (entity.useControls) {
             if (entity.state.controlState.jump || entity.state.jumpQueued) {
@@ -732,9 +729,9 @@ export class EntityPhysics implements IPhysics {
             }
             entity.state.jumpQueued = false;
 
-            let strafe =
+            strafe =
                 ((entity.state.controlState.right as unknown as number) - (entity.state.controlState.left as unknown as number)) * 0.98;
-            let forward =
+            forward =
                 ((entity.state.controlState.forward as unknown as number) - (entity.state.controlState.back as unknown as number)) * 0.98;
 
             if (entity.state.controlState.sneak) {
@@ -748,9 +745,9 @@ export class EntityPhysics implements IPhysics {
                 forward *= PhysicsSettings.usingItemSpeed;
                 entity.state.controlState.sprint = false;
             }
-
-            this.moveEntityWithHeading(entity, strafe, forward, world);
         }
+
+        this.moveEntityWithHeading(entity, strafe, forward, world);
 
         return entity.state;
     }

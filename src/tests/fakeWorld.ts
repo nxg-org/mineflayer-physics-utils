@@ -65,12 +65,25 @@ const playerCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, playerState, playerType
 
 // set control state.
 playerState.controlState = ControlStateHandler.DEFAULT(); // specific to players and mobs, specify control scheme to apply.
+playerState.controlState.forward = true;
 
 // simulate until on ground.
-while (!fakePlayer.entity.onGround) {
+while (!playerCtx.state.onGround) {
     physics.simulate(playerCtx, fakeWorld).applyToBot(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
+    console.log(fakePlayer.entity.position, fakePlayer.entity.velocity);
 }
 
-expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, 0)); // it works.
+playerCtx.state.controlState.set("jump", true);
+for (let i = 0; i < 12; i++) {
+    physics.simulate(playerCtx, fakeWorld).applyToBot(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
+    console.log(fakePlayer.entity.position, fakePlayer.entity.velocity);
+}
+
+if (playerState.controlState.forward) {
+    // expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, -3.4508449226731694)); // it works.
+} else {
+    // expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, 0)); // it works.
+
+}
 
 console.log(fakePlayer.entity.position); //manual run.

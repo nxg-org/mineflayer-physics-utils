@@ -7,6 +7,8 @@ import entityLoader, { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
 import md from "minecraft-data";
 
+import info from "../info/entity_physics.json";
+
 function getPose(entity: Entity) {
     const pose = entity.metadata.find((e) => (e as any).type === 18);
     return pose ? ((pose as any).value as number) : PlayerPoses.STANDING;
@@ -54,6 +56,13 @@ export class EPhysicsCtx {
     public readonly lavaGravity: number;
 
     public readonly airdrag: number = Math.fround(1 - 0.0);
+    public readonly airborneInertia: number = 0.91;
+    public readonly airborneAccel: number = 0.02;
+
+    public readonly waterInertia: number = 0.8;
+    public readonly lavaInertia: number = 0.5;
+    public readonly liquidAccel: number = 0.02;
+
     public readonly gravityThenDrag: boolean = false;
     public readonly useControls: boolean = false;
 
@@ -63,129 +72,79 @@ export class EPhysicsCtx {
     };
 
     constructor(public ctx: IPhysics, public pose: PlayerPoses, public readonly state: EntityState, public readonly entityType: md.Entity) {
-       
         this.position = state.position;
         this.velocity = state.velocity;
-        
-        if (entityType.type === "player" || !!EPhysicsCtx.mobData[entityType.id]) {
-            this.gravity = 0.08;
-            this.airdrag = Math.fround(1 - 0.02);
-            this.gravityThenDrag = true;
-            this.useControls = true;
-            this.stepHeight = entityType.type === "player" ? 0.6 : 1.0;
-            this.collisionBehavior = {
-                blockEffects: true,
-                affectedAfterCollision: true,
-            };
-        }
 
-        if (entityType.name?.includes("experience_bottle")) {
-            this.gravity = 0.06;
-            this.airdrag = Math.fround(1 - 0.01);
-        }
-        if (entityType.name?.includes("spit")) {
-            this.gravity = 0.06;
-            this.airdrag = Math.fround(1 - 0.01);
-        }
-        switch (entityType.type) {
-            case "water_creature":
-            case "animal":
-            case "hostile":
-            case "mob":
-                this.gravity = 0.08;
-                this.airdrag = Math.fround(1 - 0.02);
-                this.gravityThenDrag = true;
-                this.useControls = true;
-                this.stepHeight = 1.0;
-                this.collisionBehavior = {
-                    blockEffects: true,
-                    affectedAfterCollision: true,
-                };
-            case "projectile":
-                this.gravity = 0.03;
-                this.airdrag = Math.fround(1 - 0.01);
-                this.collisionBehavior = {
-                    blockEffects: false,
-                    affectedAfterCollision: false,
-                };
-            case "orb":
-                this.gravity = 0.03;
-                this.airdrag = Math.fround(1 - 0.02);
-                this.collisionBehavior = {
-                    blockEffects: false,
-                    affectedAfterCollision: true,
-                };
-            case "other":
-                if (entityType.name?.includes("minecart")) {
-                    this.gravity = 0.04;
-                    this.airdrag = Math.fround(1 - 0.05);
-                    this.collisionBehavior = {
-                        blockEffects: false,
-                        affectedAfterCollision: true,
-                    };
-                } else if (entityType.name?.includes("block") || entityType.name?.includes("tnt")) {
-                    this.gravity = 0.04;
+        if (entityType.type === "player" || !!EPhysicsCtx.mobData[entityType.id]) {
+            // @ts-expect-error
+            const additional = info.living_entities[entityType.type];
+            Object.assign(this, info.living_entities.default, additional);
+        } else if (entityType.name.includes("experience_orb")) {
+            Object.assign(this, info.other.default);
+        } else if (entityType.name.includes("spit")) {
+            Object.assign(this, info.projectiles.default, info.projectiles.llama_spit);
+        } else {
+            switch (entityType.type) {
+                case "water_creature":
+                case "animal":
+                case "hostile":
+                case "mob":
+                    this.gravity = 0.08;
                     this.airdrag = Math.fround(1 - 0.02);
-                    this.collisionBehavior = {
-                        blockEffects: false,
-                        affectedAfterCollision: true,
-                    };
-                } else if (entityType.name?.includes("boat")) {
-                    this.gravity = 0.04;
-                    this.airdrag = Math.fround(1 - 0);
-                    this.collisionBehavior = {
-                        blockEffects: false,
-                        affectedAfterCollision: true,
-                    };
-                } else if (
-                    entityType.name?.includes("egg") ||
-                    entityType.name?.includes("snowball") ||
-                    entityType.name?.includes("potion") ||
-                    entityType.name?.includes("pearl")
-                ) {
-                    this.gravity = 0.03;
-                    this.airdrag = Math.fround(1 - 0.01);
-                    this.collisionBehavior = {
-                        blockEffects: false,
-                        affectedAfterCollision: false,
-                    };
-                } else if (entityType.name?.includes("orb")) {
-                    this.gravity = 0.03;
-                    this.airdrag = Math.fround(1 - 0.02);
-                    this.collisionBehavior = {
-                        blockEffects: false,
-                        affectedAfterCollision: true,
-                    };
-                } else if (entityType.name?.includes("bobber")) {
-                    this.gravity = 0.03;
-                    this.airdrag = Math.fround(1 - 0.08);
-                    this.collisionBehavior = {
-                        blockEffects: false,
-                        affectedAfterCollision: true,
-                    };
-                } else if (entityType.name?.includes("spit")) {
-                    this.gravity = 0.06;
-                    this.airdrag = Math.fround(1 - 0.01);
-                    this.collisionBehavior = {
-                        blockEffects: false,
-                        affectedAfterCollision: true,
-                    };
-                } else if (entityType.name?.includes("arrow") || entityType.name?.includes("trident")) {
-                    this.gravity = 0.05;
-                    this.airdrag = Math.fround(1 - 0.01);
-                    this.collisionBehavior = {
-                        blockEffects: false,
-                        affectedAfterCollision: false,
-                    };
-                } else if (entityType.name?.includes("fireball") || entityType.name?.includes("skull")) {
-                    this.gravity = 0.0;
-                    this.airdrag = Math.fround(1 - 0.05);
                     this.gravityThenDrag = true;
+                    this.useControls = true;
+                    this.stepHeight = 1.0;
+                    this.collisionBehavior = {
+                        blockEffects: true,
+                        affectedAfterCollision: true,
+                    };
+                case "projectile":
+                    this.gravity = 0.03;
+                    this.airdrag = Math.fround(1 - 0.01);
+                    this.airborneInertia = 0.99;
+                    this.airborneAccel = 0.06;
+                    this.waterInertia = 0.25;
+                    this.lavaInertia = 0;
+                    this.liquidAccel = 0.02;
                     this.collisionBehavior = {
                         blockEffects: false,
                         affectedAfterCollision: false,
                     };
-                }
+                case "orb":
+                    this.gravity = 0.03;
+                    this.airdrag = Math.fround(1 - 0.02);
+                    this.collisionBehavior = {
+                        blockEffects: false,
+                        affectedAfterCollision: true,
+                    };
+                case "other":
+                    if (entityType.name.includes("minecart") || entityType.name.includes("boat")) {
+                        Object.assign(this, info.dead_vehicles.default, entityType.name === "boat" ? info.dead_vehicles.boat : undefined);
+                    } else if (entityType.name?.includes("block") || entityType.name?.includes("tnt")) {
+                        Object.assign(this, info.blocks.default);
+                    } else if (
+                        entityType.name?.includes("egg") ||
+                        entityType.name?.includes("snowball") ||
+                        entityType.name?.includes("potion") ||
+                        entityType.name?.includes("pearl")
+                    ) {
+                        Object.assign(this, info.projectiles.default);
+                    } else if (entityType.name?.includes("orb")) {
+                        Object.assign(this, info.other.default);
+                    } else if (entityType.name?.includes("bobber")) {
+                        Object.assign(this, info.projectiles.default, info.projectiles.fishing_bobber);
+                    } else if (entityType.name?.includes("spit")) {
+                        Object.assign(this, info.projectiles.default, info.projectiles.llama_spit);
+                    } else if (entityType.name?.includes("arrow") || entityType.name?.includes("trident")) {
+                        Object.assign(
+                            this,
+                            info.projectiles.default,
+                            entityType.name.includes("arrow") ? info.projectiles.arrow : info.projectiles.trident
+                        );
+                    } else if (entityType.name?.includes("fireball") || entityType.name?.includes("skull")) {
+                        Object.assign(this, info.shot_entities.default);
+                    }
+            }
         }
 
         if (ctx.supportFeature("independentLiquidGravity")) {

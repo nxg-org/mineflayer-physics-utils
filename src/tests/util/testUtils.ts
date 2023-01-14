@@ -25,23 +25,23 @@ export default function load(version: string) {
         if (!mcData.entitiesByName[name!]) throw "invalid name"
         const tmp = mcData.entitiesByName[name!]
         return {
-                name: name,
-                type: tmp.type,
-                height:tmp.height,
-                width: tmp.width,
-                position: pos,
-                velocity: new Vec3(0, 0, 0),
-                onGround: false,
-                isInWater: false,
-                isInLava: false,
-                isInWeb: false,
-                isCollidedHorizontally: false,
-                isCollidedVertically: false,
-                yaw: 0,
-                effects: {} as Effect[],
-                metadata: [],
-                equipment: new Array(6)
-            } as unknown as Entity
+            name: name,
+            type: tmp.type,
+            height: tmp.height,
+            width: tmp.width,
+            position: pos,
+            velocity: new Vec3(0, 0, 0),
+            onGround: false,
+            isInWater: false,
+            isInLava: false,
+            isInWeb: false,
+            isCollidedHorizontally: false,
+            isCollidedVertically: false,
+            yaw: 0,
+            effects: {} as Effect[],
+            metadata: [],
+            equipment: new Array(6)
+        } as unknown as Entity
     }
 
     const modifyEntity = (name: string, entity: Entity) => {
@@ -50,8 +50,8 @@ export default function load(version: string) {
         entity.height = tmp.height ?? 0
         entity.width = tmp.width ?? 0
     }
-    
-    const createFakePlayer =  (pos: Vec3) => {
+
+    const createFakePlayer = (pos: Vec3) => {
         return {
             entity: createFakeEntity("player", pos),
             jumpTicks: 0,
@@ -64,5 +64,5 @@ export default function load(version: string) {
         };
     }
 
-    return {mcData, Block, Entity, fakeWorld, createFakePlayer, createFakeEntity, modifyEntity};
+    return { mcData, Block, Entity, fakeWorld, createFakePlayer, createFakeEntity, modifyEntity };
 }

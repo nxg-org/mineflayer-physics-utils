@@ -54,8 +54,8 @@ export class PhysicsSettings {
     public static sprintingUUID: string = "662a6b8d-da3e-4c1c-8813-96ea6097278d"; // SPEED_MODIFIER_SPRINTING_UUID is from LivingEntity.java
     public static jumpHeight: number = Math.fround(0.42);
 
-    public static airborneInertia: number = 0.91;
-    public static airborneAcceleration: number = 0.02;
+    public static airborneInertia: number = 0.99;
+    public static airborneAcceleration: number = 0.06;
 
     public static sprintSpeed: number = Math.fround(0.3);
     public static sneakSpeed: number = 0.3;

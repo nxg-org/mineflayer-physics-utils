@@ -278,8 +278,10 @@ export class EntityState implements EntityStateBuilder {
      * No idea when you'd use this.
      */
     public applyToEntity(entity: Entity) {
-        entity.position.set(this.position.x, this.position.y, this.position.z);
-        entity.velocity.set(this.velocity.x, this.velocity.y, this.velocity.z);
+        entity.position = this.position
+        entity.velocity = this.velocity
+        // entity.position.set(this.position.x, this.position.y, this.position.z);
+        // entity.velocity.set(this.velocity.x, this.velocity.y, this.velocity.z);
         entity.onGround = this.onGround;
         entity.yaw = this.yaw;
         entity.pitch = this.pitch;
