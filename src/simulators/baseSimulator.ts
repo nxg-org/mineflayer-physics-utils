@@ -5,7 +5,7 @@ import { IPhysics } from "../physics/engines";
 import { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
 
-export type SimulationGoal = (state: EntityState, ticks?: number) => boolean;
+export type SimulationGoal = (state: EntityState, ticks: number) => boolean | ((state: EntityState) => boolean);
 export type OnGoalReachFunction = (state: EntityState) => void;
 export type Controller = (state: EntityState, ticks: number) => void; // (...any: any[]) => void;
 
