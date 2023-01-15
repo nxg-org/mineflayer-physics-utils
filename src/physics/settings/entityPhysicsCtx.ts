@@ -2,7 +2,7 @@ import { AABB, AABBUtils } from "@nxg-org/mineflayer-util-plugin";
 import { PlayerPoses } from "../states/poses";
 import { EntityState } from "../states/entityState";
 import { IPhysics } from "../engines/IPhysics";
-import { applyMdToNewEntity } from "../../util/physicsUtils";
+import { applyMdToNewEntity, DefaultPlayer } from "../../util/physicsUtils";
 import entityLoader, { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
 import md from "minecraft-data";
@@ -71,7 +71,7 @@ export class EPhysicsCtx {
         affectedAfterCollision: true,
     };
 
-    constructor(public ctx: IPhysics, public pose: PlayerPoses, public readonly state: EntityState, public readonly entityType: md.Entity) {
+    constructor(public ctx: IPhysics, public pose: PlayerPoses, public readonly state: EntityState, public readonly entityType: md.Entity = DefaultPlayer) {
         this.position = state.position;
         this.velocity = state.velocity;
 

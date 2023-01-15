@@ -8,7 +8,16 @@ export function makeSupportFeature(mcData: md.IndexedData) {
     return (feature: string) => features.some(({ name, versions }) => name === feature && versions.includes(mcData.version.majorVersion!));
 }
 
-export function applyMdToNewEntity(ctx: typeof EPhysicsCtx, entityType: md.Entity, options: Partial<Entity> = {}): Entity {
+export const DefaultPlayer: md.Entity = {
+    displayName: "Player",
+    height: 1.8,
+    width: 0.6,
+    type: "player",
+    name: "player",
+    id: -1
+}
+
+export function applyMdToNewEntity(ctx: typeof EPhysicsCtx, entityType: md.Entity = DefaultPlayer, options: Partial<Entity> = {}): Entity {
     //entityType.category
     // entityType.internalId
     const tmp = new ctx.entityConstructor(-1);

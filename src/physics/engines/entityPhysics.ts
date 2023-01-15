@@ -179,7 +179,7 @@ export class EntityPhysics implements IPhysics {
         const vel = entity.velocity;
         const pos = entity.position;
 
-        if (entity.state.isInWeb && !entity.entityType.name.includes("arrow")) {
+        if (entity.state.isInWeb && !entity.entityType?.name.includes("arrow")) {
             dx *= 0.25;
             dy *= 0.05;
             dz *= 0.25;

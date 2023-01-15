@@ -28,3 +28,6 @@ export { EPhysicsCtx, PhysicsSettings } from "./physics/settings";
 export { BaseSimulator } from "./simulators";
 export { EntityPhysics } from "./physics/engines";
 export { EntityState } from "./physics/states";
+
+
+export type { SimulationGoal, Controller, OnGoalReachFunction }from "./simulators";
