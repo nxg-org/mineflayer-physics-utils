@@ -29,6 +29,13 @@ export abstract class BaseSimulator {
         return simCtx.state;
     }
 
+    predictForwardRaw(simCtx: EPhysicsCtx, world: any, ticks: number = 1) {
+        for (let current = 0; current < ticks; current++) {
+            this.ctx.simulate(simCtx, world);
+        }
+        return simCtx.state;
+    }
+
     simulateUntil(
         goal: SimulationGoal,
         onGoalReach: OnGoalReachFunction,
