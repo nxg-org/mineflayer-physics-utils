@@ -1,11 +1,12 @@
 import { AABB, AABBUtils } from "@nxg-org/mineflayer-util-plugin";
-import { PlayerPoses } from "../states/poses";
-import { EntityState } from "../states/entityState";
-import { IPhysics } from "../engines/IPhysics";
-import { applyMdToNewEntity, DefaultPlayer } from "../../util/physicsUtils";
+import md from "minecraft-data";
+import type { Bot } from "mineflayer";
 import entityLoader, { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
-import md from "minecraft-data";
+import { applyMdToNewEntity, DefaultPlayer } from "../../util/physicsUtils";
+import { IPhysics } from "../engines/IPhysics";
+import { EntityState } from "../states/entityState";
+import { PlayerPoses } from "../states/poses";
 
 import info from "../info/entity_physics.json";
 
@@ -157,6 +158,10 @@ export class EPhysicsCtx {
             this.waterGravity = 0.005;
             this.lavaGravity = 0.02;
         }
+    }
+
+    public static FROM_BOT(ctx: IPhysics, bot: Bot) {
+        return new EPhysicsCtx(ctx, getPose(bot.entity), EntityState.CREATE_FROM_BOT(ctx, bot));
     }
 
     public static FROM_ENTITY(ctx: IPhysics, entity: Entity) {
