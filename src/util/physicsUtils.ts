@@ -34,8 +34,8 @@ export function applyMdToNewEntity(ctx: typeof EPhysicsCtx, entityType: md.Entit
 
 
 export enum CheapEffects {
-    SPEED,
     JUMP_BOOST,
+    SPEED,
     SLOWNESS,
     DOLPHINS_GRACE,
     SLOW_FALLING,
