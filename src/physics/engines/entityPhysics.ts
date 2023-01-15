@@ -414,7 +414,7 @@ export class EntityPhysics implements IPhysics {
         vel.z += forward * cos + strafe * sin;
     }
 
-    getEffectLevelCustom(wantedEffect: CheapEffects, effects: Effect[]) {
+    getEffectLevel(wantedEffect: CheapEffects, effects: Effect[]) {
         const effectDescriptor = this.data.effectsByName[this.statusEffectNames[wantedEffect]];
         if (!effectDescriptor) {
             return 0;
@@ -426,7 +426,7 @@ export class EntityPhysics implements IPhysics {
         return effectInfo.amplifier + 1;
     }
 
-    getEnchantmentLevelCustom(wantedEnchantment: CheapEnchantments, enchantments: any[]) {
+    getEnchantmentLevel(wantedEnchantment: CheapEnchantments, enchantments: any[]) {
         const enchantmentName = this.enchantmentNames[wantedEnchantment];
         const enchantmentDescriptor = this.data.enchantmentsByName[enchantmentName];
         if (!enchantmentDescriptor) {

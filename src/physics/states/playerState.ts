@@ -144,13 +144,13 @@ export class PlayerState implements EntityStateBuilder {
         this.effects = bot.entity.effects;
         this.statusEffectNames = getStatusEffectNamesForVersion(this.supportFeature);
 
-        this.jumpBoost = this.ctx.getEffectLevelCustom(CheapEffects.JUMP_BOOST, this.effects);
-        this.speed = this.ctx.getEffectLevelCustom(CheapEffects.SPEED, this.effects);
-        this.slowness = this.ctx.getEffectLevelCustom(CheapEffects.SLOWNESS, this.effects);
+        this.jumpBoost = this.ctx.getEffectLevel(CheapEffects.JUMP_BOOST, this.effects);
+        this.speed = this.ctx.getEffectLevel(CheapEffects.SPEED, this.effects);
+        this.slowness = this.ctx.getEffectLevel(CheapEffects.SLOWNESS, this.effects);
 
-        this.dolphinsGrace = this.ctx.getEffectLevelCustom(CheapEffects.DOLPHINS_GRACE, this.effects);
-        this.slowFalling = this.ctx.getEffectLevelCustom(CheapEffects.SLOW_FALLING, this.effects);
-        this.levitation = this.ctx.getEffectLevelCustom(CheapEffects.LEVITATION, this.effects);
+        this.dolphinsGrace = this.ctx.getEffectLevel(CheapEffects.DOLPHINS_GRACE, this.effects);
+        this.slowFalling = this.ctx.getEffectLevel(CheapEffects.SLOW_FALLING, this.effects);
+        this.levitation = this.ctx.getEffectLevel(CheapEffects.LEVITATION, this.effects);
 
         
         // this.jumpBoost = ctx.getEffectLevel(this.statusEffectNames.jumpBoostEffectName, this.effects);
@@ -167,7 +167,7 @@ export class PlayerState implements EntityStateBuilder {
         if (boots && boots.nbt) {
             const simplifiedNbt = nbt.simplify(boots.nbt);
             const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
-            this.depthStrider = this.ctx.getEnchantmentLevelCustom(CheapEnchantments.DEPTH_STRIDER, enchantments);
+            this.depthStrider = this.ctx.getEnchantmentLevel(CheapEnchantments.DEPTH_STRIDER, enchantments);
         } else {
             this.depthStrider = 0;
         }
@@ -202,13 +202,13 @@ export class PlayerState implements EntityStateBuilder {
         // effects
         this.effects = bot.entity.effects;
 
-        this.jumpBoost = this.ctx.getEffectLevelCustom(CheapEffects.JUMP_BOOST, this.effects);
-        this.speed = this.ctx.getEffectLevelCustom(CheapEffects.SPEED, this.effects);
-        this.slowness = this.ctx.getEffectLevelCustom(CheapEffects.SLOWNESS, this.effects);
+        this.jumpBoost = this.ctx.getEffectLevel(CheapEffects.JUMP_BOOST, this.effects);
+        this.speed = this.ctx.getEffectLevel(CheapEffects.SPEED, this.effects);
+        this.slowness = this.ctx.getEffectLevel(CheapEffects.SLOWNESS, this.effects);
 
-        this.dolphinsGrace = this.ctx.getEffectLevelCustom(CheapEffects.DOLPHINS_GRACE, this.effects);
-        this.slowFalling = this.ctx.getEffectLevelCustom(CheapEffects.SLOW_FALLING, this.effects);
-        this.levitation = this.ctx.getEffectLevelCustom(CheapEffects.LEVITATION, this.effects);
+        this.dolphinsGrace = this.ctx.getEffectLevel(CheapEffects.DOLPHINS_GRACE, this.effects);
+        this.slowFalling = this.ctx.getEffectLevel(CheapEffects.SLOW_FALLING, this.effects);
+        this.levitation = this.ctx.getEffectLevel(CheapEffects.LEVITATION, this.effects);
 
         
         // armour enchantments
@@ -217,7 +217,7 @@ export class PlayerState implements EntityStateBuilder {
         if (boots && boots.nbt) {
             const simplifiedNbt = nbt.simplify(boots.nbt);
             const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
-            this.depthStrider = this.ctx.getEnchantmentLevelCustom(CheapEnchantments.DEPTH_STRIDER, enchantments);
+            this.depthStrider = this.ctx.getEnchantmentLevel(CheapEnchantments.DEPTH_STRIDER, enchantments);
         } else {
             this.depthStrider = 0;
         }
