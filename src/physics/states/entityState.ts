@@ -173,28 +173,10 @@ export class EntityState implements EntityStateBuilder {
     }
 
     public updateFromBot(bot: Bot): EntityState {
+        this.updateFromEntity(bot.entity);
         this.controlState = ControlStateHandler.COPY_BOT(bot);
-        this.onGround = this.onGround;
-        this.isUsingItem = isEntityUsingItem(bot.entity);
-        this.attributes = (bot.entity as any).attributes;
-        this.effects = bot.entity.effects;
-
-        this.jumpBoost = this.ctx.getEffectLevel(CheapEffects.JUMP_BOOST, this.effects);
-        this.speed = this.ctx.getEffectLevel(CheapEffects.SPEED, this.effects);
-        this.slowness = this.ctx.getEffectLevel(CheapEffects.SLOWNESS, this.effects);
-
-        this.dolphinsGrace = this.ctx.getEffectLevel(CheapEffects.DOLPHINS_GRACE, this.effects);
-        this.slowFalling = this.ctx.getEffectLevel(CheapEffects.SLOW_FALLING, this.effects);
-        this.levitation = this.ctx.getEffectLevel(CheapEffects.LEVITATION, this.effects);
-
-        const boots = bot.entity.equipment[5];
-        if (boots && boots.nbt) {
-            const simplifiedNbt = nbt.simplify(boots.nbt);
-            const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
-            this.depthStrider = this.ctx.getEnchantmentLevel(CheapEnchantments.DEPTH_STRIDER, enchantments);
-        } else {
-            this.depthStrider = 0;
-        }
+        this.jumpTicks = (bot as any).jumpTicks;
+        this.jumpQueued = (bot as any).jumpQueued;
         return this;
     }
 
