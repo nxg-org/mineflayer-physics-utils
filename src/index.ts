@@ -9,12 +9,13 @@ import registry from "prismarine-registry"
 declare module "mineflayer" {
     interface Bot {
         physicsUtil: PhysicsUtilWrapper;
+        registry: IndexedData
     }
 }
 
 export default function loader(bot: Bot): void {
     if (!bot.physicsUtil) {
-        initSetup(registry(bot.version));
+        initSetup(bot.registry);
         bot.physicsUtil = new PhysicsUtilWrapper(bot);
     }
 }

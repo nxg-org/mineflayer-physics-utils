@@ -5,7 +5,7 @@ import { IPhysics } from "../physics/engines";
 import { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
 
-export type SimulationGoal = (state: EntityState) => boolean;
+export type SimulationGoal = (state: EntityState, ticks?: number) => boolean;
 export type OnGoalReachFunction = (state: EntityState) => void;
 export type Controller = (state: EntityState, ticks: number) => void; // (...any: any[]) => void;
 
@@ -38,7 +38,7 @@ export abstract class BaseSimulator {
         ticks = 1
     ): EntityState {
         for (let i = 0; i < ticks; i++) {
-            if (goal(simCtx.state)) {
+            if (goal(simCtx.state, i)) {
                 onGoalReach(simCtx.state);
                 break;
             }
@@ -70,10 +70,10 @@ export abstract class BaseSimulator {
     }
 
     static buildAnyGoal(...goals: SimulationGoal[]): SimulationGoal {
-        return (state) => goals.map((goal) => goal(state)).some(g => !!g);
+        return (state, ticks) => goals.map((goal) => goal(state, ticks)).some(g => !!g);
     }
 
     static buildAllGoal(...goals: SimulationGoal[]): SimulationGoal {
-        return (state) => goals.map((goal) => goal(state)).every(g => !!g);
+        return (state, ticks) => goals.map((goal) => goal(state, ticks)).every(g => !!g);
     }
 }
