@@ -43,7 +43,7 @@ export abstract class BaseSimulator {
                 break;
             }
             if (simCtx.state.isInLava) break;
-            controller(simCtx.state, ticks);
+            controller(simCtx.state, i);
             this.ctx.simulate(simCtx, world);
             simCtx.state.age++;
         }
