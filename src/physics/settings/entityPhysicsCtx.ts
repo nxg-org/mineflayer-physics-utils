@@ -11,7 +11,7 @@ import { PlayerPoses } from "../states/poses";
 import info from "../info/entity_physics.json";
 
 function getPose(entity: Entity) {
-    const pose = entity.metadata.find((e) => (e as any).type === 18);
+    const pose = entity.metadata.find((e) => (e as any)?.type === 18);
     return pose ? ((pose as any).value as number) : PlayerPoses.STANDING;
 }
 
