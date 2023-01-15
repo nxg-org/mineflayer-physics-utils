@@ -29,7 +29,8 @@ export abstract class BaseSimulator {
         return simCtx.state;
     }
 
-    predictForwardRaw(simCtx: EPhysicsCtx, world: any, ticks: number = 1) {
+    predictForwardRaw(simCtx: EPhysicsCtx, world: any, ticks: number = 1, controls?: ControlStateHandler) {
+        simCtx.state.controlState = controls ?? simCtx.state.controlState;
         for (let current = 0; current < ticks; current++) {
             this.ctx.simulate(simCtx, world);
         }
