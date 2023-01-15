@@ -68,4 +68,12 @@ export abstract class BaseSimulator {
             controllers.forEach((control) => control(state, ticks));
         };
     }
+
+    static buildAnyGoal(...goals: SimulationGoal[]): SimulationGoal {
+        return (state) => goals.map((goal) => goal(state)).some(g => !!g);
+    }
+
+    static buildAllGoal(...goals: SimulationGoal[]): SimulationGoal {
+        return (state) => goals.map((goal) => goal(state)).every(g => !!g);
+    }
 }
