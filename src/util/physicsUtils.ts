@@ -60,13 +60,14 @@ export function whichHandIsEntityUsingBoolean(entity: Entity): boolean {
 
 export function getStatusEffectNamesForVersion(supportFeature: ReturnType<typeof makeSupportFeature>) {
     if (supportFeature("effectNamesAreRegistryNames")) {
+        // seems to not matter right now.
         return {
-            jumpBoostEffectName: "jump_boost",
-            speedEffectName: "speed",
-            slownessEffectName: "slowness",
-            dolphinsGraceEffectName: "dolphins_grace",
-            slowFallingEffectName: "slow_falling",
-            levitationEffectName: "levitation",
+            jumpBoostEffectName: "JumpBoost",
+            speedEffectName: "Speed",
+            slownessEffectName: "Slowness",
+            dolphinsGraceEffectName: "DolphinsGrace",
+            slowFallingEffectName: "SlowFalling",
+            levitationEffectName: "Levitation",
         };
     } else {
         return {
