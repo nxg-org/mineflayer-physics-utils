@@ -173,7 +173,7 @@ export class EPhysicsCtx {
         return new EPhysicsCtx(ctx, PlayerPoses.STANDING, EntityState.CREATE_FROM_ENTITY(ctx, newE), entityType);
     }
 
-    public static FROM_ENTITY_STATE(ctx: IPhysics, entityState: EntityState, entityType: md.Entity) {
+    public static FROM_ENTITY_STATE(ctx: IPhysics, entityState: EntityState, entityType?: md.Entity) {
         return new EPhysicsCtx(ctx, entityState.pose, entityState, entityType);
     }
 
