@@ -192,14 +192,14 @@ export class EntityState implements EntityStateBuilder {
         this.sneakCollision = false; //TODO
 
         //not sure what to do here, ngl.
-        this.jumpTicks = 0;
-        this.jumpQueued = false;
+        this.jumpTicks ||= 0;
+        this.jumpQueued ||= false;
 
         // Input only (not modified)
         this.attributes = (entity as any).attributes;
         this.yaw = entity.yaw;
         this.pitch = entity.pitch;
-        this.controlState = ControlStateHandler.DEFAULT();
+        this.controlState ||= ControlStateHandler.DEFAULT();
 
         this.isUsingItem = isEntityUsingItem(entity);
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(entity) && this.isUsingItem;
