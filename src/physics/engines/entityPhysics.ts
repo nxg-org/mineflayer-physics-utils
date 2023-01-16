@@ -726,7 +726,7 @@ export class EntityPhysics implements IPhysics {
             entity.state.jumpQueued = false;
 
             strafe =
-                ((entity.state.controlState.right as unknown as number) - (entity.state.controlState.left as unknown as number)) * 0.98;
+                ((entity.state.controlState.left as unknown as number) - (entity.state.controlState.right as unknown as number)) * 0.98;
             forward =
                 ((entity.state.controlState.forward as unknown as number) - (entity.state.controlState.back as unknown as number)) * 0.98;
 
