@@ -26,7 +26,7 @@ export class PhysicsUtilWrapper {
     public readonly data: md.IndexedData;
 
     constructor(private bot: Bot) {
-        this.data = registry(bot.version);
+        this.data = bot.registry;
         PhysicsSettings.loadData(this.data);
         EPhysicsCtx.loadData(this.data);
         this.engine = new EntityPhysics(this.data);

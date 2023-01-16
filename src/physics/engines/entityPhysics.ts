@@ -1,25 +1,21 @@
-import { Vec3 } from "vec3";
 import { AABB, AABBUtils } from "@nxg-org/mineflayer-util-plugin";
-import md, { Effects, Enchantments } from "minecraft-data";
-import * as math from "../info/math";
-import * as attributes from "../info/attributes";
-import * as features from "../info/features.json";
-import loader, { Effect, Entity } from "prismarine-entity";
-import { Bot, Enchantment } from "mineflayer";
+import md from "minecraft-data";
 import { Block } from "prismarine-block";
-import { NormalizedEnchant } from "prismarine-item";
+import { Effect } from "prismarine-entity";
+import { Vec3 } from "vec3";
 import {
     CheapEffects,
     CheapEnchantments,
     getEnchantmentNamesForVersion,
     getStatusEffectNamesForVersion,
-    makeSupportFeature,
+    makeSupportFeature
 } from "../../util/physicsUtils";
-import { PlayerState } from "../states/playerState";
-import { EntityState } from "../states/entityState";
-import { IPhysics, MobsByName } from "./IPhysics";
-import { PhysicsSettings } from "../settings/physicsSettings";
+import * as attributes from "../info/attributes";
+import * as math from "../info/math";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
+import { PhysicsSettings } from "../settings/physicsSettings";
+import { EntityState } from "../states/entityState";
+import { IPhysics } from "./IPhysics";
 
 type CheapEffectNames = keyof ReturnType<typeof getStatusEffectNamesForVersion>;
 type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersion>;

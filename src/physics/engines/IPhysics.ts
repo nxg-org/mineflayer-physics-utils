@@ -1,11 +1,9 @@
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import { IndexedData } from "minecraft-data";
 import { Effect } from "mineflayer";
-import { Block } from "prismarine-block";
 import { Entity } from "prismarine-entity";
-import { PhysicsSettings } from "../settings/physicsSettings";
-import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { CheapEffects, CheapEnchantments, makeSupportFeature } from "../../util/physicsUtils";
+import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { EntityState } from "../states";
 
 export type MobsByName = { [mobName: string]: Entity };

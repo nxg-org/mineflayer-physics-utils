@@ -1,2 +1,3 @@
-export * from "./IPhysics"
 export * from "./entityPhysics"
+export * from "./IPhysics"
+

@@ -1,7 +1,8 @@
-import { Bot, ControlState, ControlStateStatus } from "mineflayer";
-import { Vec3 } from "vec3";;
 import { MathUtils } from "@nxg-org/mineflayer-util-plugin";
+import { Bot, ControlState, ControlStateStatus } from "mineflayer";
+import { Vec3 } from "vec3";
 import { EntityState, PlayerState } from "../states";
+;
 
 export class ControlStateHandler implements ControlStateStatus {
     constructor(

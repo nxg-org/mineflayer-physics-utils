@@ -1,4 +1,4 @@
-import { AABB, AABBUtils } from "@nxg-org/mineflayer-util-plugin";
+import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import md from "minecraft-data";
 import type { Bot } from "mineflayer";
 import entityLoader, { Entity } from "prismarine-entity";
