@@ -520,15 +520,10 @@ micromatch@^4.0.4:
     braces "^3.0.2"
     picomatch "^2.3.1"
 
-minecraft-data@^2.106.0:
-  version "2.113.1"
-  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.113.1.tgz#150a9192abc7b39cbaef33e6fd84eac8ea079d8c"
-  integrity sha512-XM7JRFmeT7CIQYrzDtYU0FOGXtGAY2YBZZTfWAoOi80LUDljzCUwwYWzZM80rM/U+OfRNT4r2z6ok7BrcF1x0Q==
-
-minecraft-data@^2.62.1:
-  version "2.113.3"
-  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.113.3.tgz#2e2f2e5596036e6030fa30b5beca14d218dc5bf9"
-  integrity sha512-1JWkIlIx3aX80F93Ktt0lDuOLXOWgg42mET6zJkqrRDvhgp3kOzQb+4Ju6THqDkqZcwpuO7imvbuRX9VngFTdQ==
+minecraft-data@^2.106.0, minecraft-data@^2.62.1:
+  version "2.221.0"
+  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-2.221.0.tgz#b6a6629c9c33bc640e540de3ebe94a96d0e8b0bc"
+  integrity sha512-0AhqzbIKb6WqPSF6qBevaPryeWOz545hLxt6q+gfJF8YIQX/YfkyX/nXWhl+pSIS2rTBcQ0RJkRCtTeRzQwHDA==
 
 minecraft-data@^3.0.0, minecraft-data@^3.15.2, minecraft-data@^3.21.0:
   version "3.24.0"
