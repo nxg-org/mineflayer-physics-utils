@@ -9,7 +9,7 @@
     ],
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/nxg-org/mineflayer-physics-util.git"
+        "url": "git+https://github.com/nxg-org/mineflayer-physics-utils.git"
     },
     "license": "GPL-3.0",
     "author": "generel_schwerz",
