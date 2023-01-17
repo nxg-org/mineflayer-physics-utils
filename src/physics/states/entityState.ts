@@ -173,30 +173,35 @@ export class EntityState implements EntityStateBuilder {
     }
 
     public updateFromBot(bot: Bot): EntityState {
-        this.updateFromEntity(bot.entity);
+        this.updateFromEntity(bot.entity, true);
         this.controlState = ControlStateHandler.COPY_BOT(bot);
         this.jumpTicks = (bot as any).jumpTicks;
         this.jumpQueued = (bot as any).jumpQueued;
         return this;
     }
 
-    public updateFromEntity(entity: Entity) {
+    public updateFromEntity(entity: Entity, all: boolean = false) {
+
+        if (all) {
+            // most mobs don't have this defined, so ignore it (only self does).
+            this.velocity = entity.velocity.clone();
+            this.onGround = entity.onGround;
+            this.isInWater = (entity as any).isInWater;
+            this.isInLava = (entity as any).isInLava;
+            this.isInWeb = (entity as any).isInWeb;
+            this.isCollidedHorizontally = (entity as any).isCollidedHorizontally;
+            this.isCollidedVertically = (entity as any).isCollidedVertically;
+            this.sneakCollision = false; //TODO
+            this.attributes ||= (entity as any).attributes;
+        }
         this.position = entity.position.clone();
-        this.velocity = entity.velocity.clone();
-        this.onGround = entity.onGround;
-        this.isInWater = (entity as any).isInWater;
-        this.isInLava = (entity as any).isInLava;
-        this.isInWeb = (entity as any).isInWeb;
-        this.isCollidedHorizontally = (entity as any).isCollidedHorizontally;
-        this.isCollidedVertically = (entity as any).isCollidedVertically;
-        this.sneakCollision = false; //TODO
+
 
         //not sure what to do here, ngl.
         this.jumpTicks ||= 0;
         this.jumpQueued ||= false;
 
         // Input only (not modified)
-        this.attributes = (entity as any).attributes;
         this.yaw = entity.yaw;
         this.pitch = entity.pitch;
         this.controlState ||= ControlStateHandler.DEFAULT();
@@ -227,7 +232,7 @@ export class EntityState implements EntityStateBuilder {
             this.depthStrider = 0;
         }
 
-        this.pose = PlayerPoses.STANDING;
+        this.pose ||= PlayerPoses.STANDING;
         return this;
     }
 
