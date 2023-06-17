@@ -76,8 +76,8 @@ export class PlayerState implements EntityStateBuilder {
     public readonly bot: Bot; // needed to clone.
     public height: number = 1.62;
     public halfWidth: number = 0.3;
-    public position: Vec3;
-    public velocity: Vec3;
+    public pos: Vec3;
+    public vel: Vec3;
     public onGround: boolean;
     public isInWater: boolean;
     public isInLava: boolean;
@@ -92,7 +92,7 @@ export class PlayerState implements EntityStateBuilder {
     public attributes: any /* dunno yet */;
     public yaw: number;
     public pitch: number;
-    public controlState: ControlStateHandler;
+    public control: ControlStateHandler;
 
     public isUsingItem: boolean;
     public isUsingMainHand: boolean;
@@ -116,8 +116,8 @@ export class PlayerState implements EntityStateBuilder {
         this.supportFeature = makeSupportFeature(ctx.data);
         this.ctx = ctx;
         this.bot = bot;
-        this.position = bot.entity.position.clone();
-        this.velocity = bot.entity.velocity.clone();
+        this.pos = bot.entity.position.clone();
+        this.vel = bot.entity.velocity.clone();
         this.onGround = bot.entity.onGround;
         this.isInWater = (bot.entity as any).isInWater;
         this.isInLava = (bot.entity as any).isInLava;
@@ -134,7 +134,7 @@ export class PlayerState implements EntityStateBuilder {
         this.attributes = (bot.entity as any).attributes;
         this.yaw = bot.entity.yaw;
         this.pitch = bot.entity.pitch;
-        this.controlState = control ?? ControlStateHandler.DEFAULT();
+        this.control = control ?? ControlStateHandler.DEFAULT();
 
         this.isUsingItem = isEntityUsingItem(bot.entity);
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity) && this.isUsingItem;
@@ -176,8 +176,8 @@ export class PlayerState implements EntityStateBuilder {
     public update(bot: Bot, control?: ControlStateHandler): PlayerState {
         // const bot.entity = bot instanceof bot.entity ? bot : bot.entity;
         // Input / Outputs
-        this.position = bot.entity.position.clone();
-        this.velocity = bot.entity.velocity.clone();
+        this.pos = bot.entity.position.clone();
+        this.vel = bot.entity.velocity.clone();
         this.onGround = bot.entity.onGround;
         this.isInWater = (bot.entity as any).isInWater;
         this.isInLava = (bot.entity as any).isInLava;
@@ -193,7 +193,7 @@ export class PlayerState implements EntityStateBuilder {
         this.attributes = (bot.entity as any).attributes;
         this.yaw = bot.entity.yaw;
         this.pitch = bot.entity.pitch;
-        this.controlState = control ?? this.controlState;
+        this.control = control ?? this.control;
 
         this.isUsingItem = isEntityUsingItem(bot.entity);
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity) && this.isUsingItem;
@@ -227,8 +227,8 @@ export class PlayerState implements EntityStateBuilder {
 
     public apply(bot: Bot): void {
         // const bot.entity = bot instanceof bot.entity ? bot : bot.entity;
-        bot.entity.position = this.position;
-        bot.entity.velocity = this.velocity;
+        bot.entity.position = this.pos;
+        bot.entity.velocity = this.vel;
         bot.entity.onGround = this.onGround;
         (bot.entity as any).isInWater = this.isInWater;
         (bot.entity as any).isInLava = this.isInLava;
@@ -241,13 +241,13 @@ export class PlayerState implements EntityStateBuilder {
         (bot as any).jumpQueued = this.jumpQueued;
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;
-        bot.controlState = this.controlState;
+        bot.controlState = this.control;
     }
 
     public clone() {
-        const tmp = new PlayerState(this.ctx, this.bot, this.controlState);
-        tmp.position = this.position.clone();
-        tmp.velocity = this.velocity.clone();
+        const tmp = new PlayerState(this.ctx, this.bot, this.control);
+        tmp.pos = this.pos.clone();
+        tmp.vel = this.vel.clone();
         tmp.onGround = this.onGround;
         tmp.isInWater = this.isInWater;
         tmp.isInLava = this.isInLava;
@@ -264,7 +264,7 @@ export class PlayerState implements EntityStateBuilder {
         tmp.attributes = this.attributes;
         tmp.yaw = this.yaw;
         tmp.pitch = this.pitch;
-        tmp.controlState = this.controlState;
+        tmp.control = this.control;
 
         tmp.isUsingItem = this.isUsingItem;
         tmp.isUsingMainHand = this.isUsingMainHand;
@@ -287,8 +287,8 @@ export class PlayerState implements EntityStateBuilder {
 
 
     public merge(other: PlayerState) {
-        this.position = other.position.clone();
-        this.velocity = other.velocity.clone();
+        this.pos = other.pos.clone();
+        this.vel = other.vel.clone();
         this.onGround = other.onGround;
         this.isInWater = other.isInWater;
         this.isInLava = other.isInLava;
@@ -305,7 +305,7 @@ export class PlayerState implements EntityStateBuilder {
         this.attributes = other.attributes;
         this.yaw = other.yaw;
         this.pitch = other.pitch;
-        this.controlState = other.controlState.clone();
+        this.control = other.control.clone();
 
         this.isUsingItem = other.isUsingItem;
         this.isUsingMainHand = other.isUsingMainHand;
@@ -328,19 +328,19 @@ export class PlayerState implements EntityStateBuilder {
     }
 
     public clearControlStates(): PlayerState {
-        this.controlState = defaultMoves
+        this.control = defaultMoves
         return this
     }
 
     public getAABB(): AABB {
         const w = this.halfWidth;
         return new AABB(
-            this.position.x - w,
-            this.position.y,
-            this.position.z - w,
-            this.position.x + w,
-            this.position.y + this.height,
-            this.position.z + w
+            this.pos.x - w,
+            this.pos.y,
+            this.pos.z - w,
+            this.pos.x + w,
+            this.pos.y + this.height,
+            this.pos.z + w
         );
     }
 

@@ -9,7 +9,6 @@ import registry from "prismarine-registry"
 declare module "mineflayer" {
     interface Bot {
         physicsUtil: PhysicsUtilWrapper;
-        registry: IndexedData
     }
 }
 

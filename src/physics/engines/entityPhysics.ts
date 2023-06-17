@@ -98,7 +98,7 @@ export class EntityPhysics implements IPhysics {
 
     getEntityBB(entity: EPhysicsCtx, pos: { x: number; y: number; z: number }): AABB {
         const w = entity.getHalfWidth();
-        return new AABB(-w, 0, -w, w, entity.height, w).offset(pos.x, pos.y, pos.z);
+        return new AABB(-w, 0, -w, w, entity.height, w).translate(pos.x, pos.y, pos.z);
     }
 
     setPositionToBB(entity: EPhysicsCtx, bb: AABB, pos: { x: number; y: number; z: number }) {
@@ -125,7 +125,7 @@ export class EntityPhysics implements IPhysics {
                     const blockPos = block.position;
                     for (const shape of block.shapes) {
                         const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
-                        blockBB.offset(blockPos.x, blockPos.y, blockPos.z);
+                        blockBB.translate(blockPos.x, blockPos.y, blockPos.z);
                         surroundingBBs.push(blockBB);
                     }
                 }
@@ -145,7 +145,7 @@ export class EntityPhysics implements IPhysics {
                         const blockPos = block.position;
                         for (const shape of block.shapes) {
                             const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
-                            blockBB.offset(blockPos.x, blockPos.y, blockPos.z);
+                            blockBB.translate(blockPos.x, blockPos.y, blockPos.z);
                             surroundingBBs.push(blockBB);
                         }
                     }
@@ -191,23 +191,23 @@ export class EntityPhysics implements IPhysics {
         let oldVelZ = dz;
         const oldOldVelZ = dz;
 
-        if (entity.useControls && entity.state.controlState.sneak && entity.state.onGround) {
+        if (entity.useControls && entity.state.control.sneak && entity.state.onGround) {
             const step = 0.05;
 
             // In the 3 loops bellow, y offset should be -1, but that doesnt reproduce vanilla behavior.
-            for (; dx !== 0 && this.getSurroundingBBs(this.getEntityBB(entity, pos).offset(dx, 0, 0), world).length === 0; oldVelX = dx) {
+            for (; dx !== 0 && this.getSurroundingBBs(this.getEntityBB(entity, pos).translate(dx, 0, 0), world).length === 0; oldVelX = dx) {
                 if (dx < step && dx >= -step) dx = 0;
                 else if (dx > 0) dx -= step;
                 else dx += step;
             }
 
-            for (; dz !== 0 && this.getSurroundingBBs(this.getEntityBB(entity, pos).offset(0, 0, dz), world).length === 0; oldVelZ = dz) {
+            for (; dz !== 0 && this.getSurroundingBBs(this.getEntityBB(entity, pos).translate(0, 0, dz), world).length === 0; oldVelZ = dz) {
                 if (dz < step && dz >= -step) dz = 0;
                 else if (dz > 0) dz -= step;
                 else dz += step;
             }
 
-            while (dx !== 0 && dz !== 0 && this.getSurroundingBBs(this.getEntityBB(entity, pos).offset(dx, 0, dz), world).length === 0) {
+            while (dx !== 0 && dz !== 0 && this.getSurroundingBBs(this.getEntityBB(entity, pos).translate(dx, 0, dz), world).length === 0) {
                 if (dx < step && dx >= -step) dx = 0;
                 else if (dx > 0) dx -= step;
                 else dx += step;
@@ -229,17 +229,17 @@ export class EntityPhysics implements IPhysics {
         for (const blockBB of surroundingBBs) {
             dy = blockBB.computeOffsetY(playerBB, dy);
         }
-        playerBB.offset(0, dy, 0);
+        playerBB.translate(0, dy, 0);
 
         for (const blockBB of surroundingBBs) {
             dx = blockBB.computeOffsetX(playerBB, dx);
         }
-        playerBB.offset(dx, 0, 0);
+        playerBB.translate(dx, 0, 0);
 
         for (const blockBB of surroundingBBs) {
             dz = blockBB.computeOffsetZ(playerBB, dz);
         }
-        playerBB.offset(0, 0, dz);
+        playerBB.translate(0, 0, dz);
 
         // Step on block if height < stepHeight
         if (entity.stepHeight > 0 && (entity.state.onGround || (dy !== oldVelY && oldVelY < 0)) && (dx !== oldVelX || dz !== oldVelZ)) {
@@ -262,8 +262,8 @@ export class EntityPhysics implements IPhysics {
                 dy1 = blockBB.computeOffsetY(BB_XZ, dy1);
                 dy2 = blockBB.computeOffsetY(BB2, dy2);
             }
-            BB1.offset(0, dy1, 0);
-            BB2.offset(0, dy2, 0);
+            BB1.translate(0, dy1, 0);
+            BB2.translate(0, dy2, 0);
 
             let dx1 = oldVelX;
             let dx2 = oldVelX;
@@ -271,8 +271,8 @@ export class EntityPhysics implements IPhysics {
                 dx1 = blockBB.computeOffsetX(BB1, dx1);
                 dx2 = blockBB.computeOffsetX(BB2, dx2);
             }
-            BB1.offset(dx1, 0, 0);
-            BB2.offset(dx2, 0, 0);
+            BB1.translate(dx1, 0, 0);
+            BB2.translate(dx2, 0, 0);
 
             let dz1 = oldVelZ;
             let dz2 = oldVelZ;
@@ -280,8 +280,8 @@ export class EntityPhysics implements IPhysics {
                 dz1 = blockBB.computeOffsetZ(BB1, dz1);
                 dz2 = blockBB.computeOffsetZ(BB2, dz2);
             }
-            BB1.offset(0, 0, dz1);
-            BB2.offset(0, 0, dz2);
+            BB1.translate(0, 0, dz1);
+            BB2.translate(0, 0, dz2);
 
             const norm1 = dx1 * dx1 + dz1 * dz1;
             const norm2 = dx2 * dx2 + dz2 * dz2;
@@ -301,7 +301,7 @@ export class EntityPhysics implements IPhysics {
             for (const blockBB of surroundingBBs) {
                 dy = blockBB.computeOffsetY(playerBB, dy);
             }
-            playerBB.offset(0, dy, 0);
+            playerBB.translate(0, dy, 0);
 
             if (oldVelXCol * oldVelXCol + oldVelZCol * oldVelZCol >= dx * dx + dz * dz) {
                 dx = oldVelXCol;
@@ -327,7 +327,7 @@ export class EntityPhysics implements IPhysics {
                 entity.collisionBehavior.blockEffects &&
                 blockAtFeet &&
                 blockAtFeet.type === this.slimeBlockId &&
-                !entity.state.controlState.sneak
+                !entity.state.control.sneak
             ) {
                 vel.y = -vel.y;
             } else {
@@ -586,7 +586,7 @@ export class EntityPhysics implements IPhysics {
                 // setSprinting in LivingEntity.java
                 //TODO: Generalize to all entities.
                 playerSpeedAttribute = attributes.deleteAttributeModifier(playerSpeedAttribute, PhysicsSettings.sprintingUUID); // always delete sprinting (if it exists)
-                if (entity.state.controlState.sprint) {
+                if (entity.state.control.sprint) {
                     if (!attributes.checkAttributeModifier(playerSpeedAttribute, PhysicsSettings.sprintingUUID)) {
                         playerSpeedAttribute = attributes.addAttributeModifier(playerSpeedAttribute, {
                             uuid: PhysicsSettings.sprintingUUID,
@@ -607,7 +607,7 @@ export class EntityPhysics implements IPhysics {
             if (entity.collisionBehavior.blockEffects && this.isOnLadder(pos, world)) {
                 vel.x = math.clamp(-PhysicsSettings.ladderMaxSpeed, vel.x, PhysicsSettings.ladderMaxSpeed);
                 vel.z = math.clamp(-PhysicsSettings.ladderMaxSpeed, vel.z, PhysicsSettings.ladderMaxSpeed);
-                vel.y = Math.max(vel.y, entity.state.controlState.sneak ? 0 : -PhysicsSettings.ladderMaxSpeed);
+                vel.y = Math.max(vel.y, entity.state.control.sneak ? 0 : -PhysicsSettings.ladderMaxSpeed);
             }
 
             this.moveEntity(entity, vel.x, vel.y, vel.z, world);
@@ -615,7 +615,7 @@ export class EntityPhysics implements IPhysics {
             if (
                 entity.collisionBehavior.blockEffects &&
                 this.isOnLadder(pos, world) &&
-                (entity.state.isCollidedHorizontally || (this.supportFeature("climbUsingJump") && entity.state.controlState.jump))
+                (entity.state.isCollidedHorizontally || (this.supportFeature("climbUsingJump") && entity.state.control.jump))
             ) {
                 vel.y = PhysicsSettings.ladderClimbSpeed; // climb ladder
             }
@@ -702,7 +702,7 @@ export class EntityPhysics implements IPhysics {
         let forward = 0;
         // Handle inputs
         if (entity.useControls) {
-            if (entity.state.controlState.jump || entity.state.jumpQueued) {
+            if (entity.state.control.jump || entity.state.jumpQueued) {
                 if (entity.state.jumpTicks > 0) entity.state.jumpTicks--;
                 if (entity.state.isInWater || entity.state.isInLava) {
                     vel.y += Math.fround(0.4);
@@ -713,7 +713,7 @@ export class EntityPhysics implements IPhysics {
                     if (entity.state.jumpBoost > 0) {
                         vel.y += 0.1 * entity.state.jumpBoost;
                     }
-                    if (entity.state.controlState.sprint) {
+                    if (entity.state.control.sprint) {
                         const yaw = Math.PI - entity.state.yaw;
                         vel.x -= Math.sin(yaw) * 0.2;
                         vel.z += Math.cos(yaw) * 0.2;
@@ -726,20 +726,20 @@ export class EntityPhysics implements IPhysics {
             entity.state.jumpQueued = false;
 
             strafe =
-                ((entity.state.controlState.left as unknown as number) - (entity.state.controlState.right as unknown as number)) * 0.98;
+                ((entity.state.control.left as unknown as number) - (entity.state.control.right as unknown as number)) * 0.98;
             forward =
-                ((entity.state.controlState.forward as unknown as number) - (entity.state.controlState.back as unknown as number)) * 0.98;
+                ((entity.state.control.forward as unknown as number) - (entity.state.control.back as unknown as number)) * 0.98;
 
-            if (entity.state.controlState.sneak) {
+            if (entity.state.control.sneak) {
                 strafe *= PhysicsSettings.sneakSpeed;
                 forward *= PhysicsSettings.sneakSpeed;
-                entity.state.controlState.sprint = false;
+                entity.state.control.sprint = false;
             }
 
             if (entity.state.isUsingItem) {
                 strafe *= PhysicsSettings.usingItemSpeed;
                 forward *= PhysicsSettings.usingItemSpeed;
-                entity.state.controlState.sprint = false;
+                entity.state.control.sprint = false;
             }
         }
 

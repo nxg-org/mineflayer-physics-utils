@@ -13,7 +13,7 @@ export abstract class BaseSimulator {
     constructor(public readonly ctx: IPhysics) {}
 
     *predictGenerator(simCtx: EPhysicsCtx, world: any, ticks: number = 1, controls?: ControlStateHandler) {
-        simCtx.state.controlState = controls ?? simCtx.state.controlState;
+        simCtx.state.control = controls ?? simCtx.state.control;
         for (let current = 0; current < ticks; current++) {
             yield this.ctx.simulate(simCtx, world);
         }
@@ -22,7 +22,7 @@ export abstract class BaseSimulator {
 
     predictForward(target: Entity, world: any, ticks: number = 1, controls?: ControlStateHandler) {
         const simCtx = EPhysicsCtx.FROM_ENTITY(this.ctx, target);
-        simCtx.state.controlState = controls ?? simCtx.state.controlState;
+        simCtx.state.control = controls ?? simCtx.state.control;
         for (let current = 0; current < ticks; current++) {
             this.ctx.simulate(simCtx, world);
         }
@@ -30,7 +30,7 @@ export abstract class BaseSimulator {
     }
 
     predictForwardRaw(simCtx: EPhysicsCtx, world: any, ticks: number = 1, controls?: ControlStateHandler) {
-        simCtx.state.controlState = controls ?? simCtx.state.controlState;
+        simCtx.state.control = controls ?? simCtx.state.control;
         for (let current = 0; current < ticks; current++) {
             this.ctx.simulate(simCtx, world);
         }
@@ -60,7 +60,7 @@ export abstract class BaseSimulator {
 
     static getReached(...path: Vec3[]): SimulationGoal {
         return (state: EntityState) => {
-            const delta = path[0].minus(state.position);
+            const delta = path[0].minus(state.pos);
             return Math.abs(delta.x) <= 0.35 && Math.abs(delta.z) <= 0.35 && Math.abs(delta.y) < 1 && (state.onGround || state.isInWater);
         };
     }

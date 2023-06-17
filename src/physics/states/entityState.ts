@@ -16,11 +16,11 @@ import nbt from "prismarine-nbt";
 export interface EntityStateBuilder {
     height: number;
     halfWidth: number;
-    position: Vec3;
-    velocity: Vec3;
+    pos: Vec3;
+    vel: Vec3;
     pitch: number;
     yaw: number;
-    controlState: ControlStateHandler;
+    control: ControlStateHandler;
     onGround: boolean;
     isUsingItem?: boolean;
     isInWater?: boolean;
@@ -79,12 +79,12 @@ export class EntityState implements EntityStateBuilder {
         public ctx: IPhysics,
         public height: number,
         public halfWidth: number,
-        public position: Vec3,
-        public velocity: Vec3,
+        public pos: Vec3,
+        public vel: Vec3,
         public onGround: boolean,
-        public controlState: ControlStateHandler,
         public yaw: number,
-        public pitch: number
+        public pitch: number,
+        public control: ControlStateHandler = ControlStateHandler.DEFAULT()
     ) {
         this.isInWater = false;
         this.isInLava = false;
@@ -128,9 +128,9 @@ export class EntityState implements EntityStateBuilder {
             bot.entity.position.clone(),
             bot.entity.velocity.clone(),
             bot.entity.onGround,
-            ControlStateHandler.COPY_BOT(bot),
             bot.entity.yaw,
-            bot.entity.pitch
+            bot.entity.pitch,
+            ControlStateHandler.COPY_BOT(bot)
         ).updateFromBot(bot);
     }
 
@@ -142,9 +142,9 @@ export class EntityState implements EntityStateBuilder {
             entity.position.clone(),
             entity.velocity.clone(),
             entity.onGround,
-            ControlStateHandler.DEFAULT(),
             entity.yaw,
-            entity.pitch
+            entity.pitch,
+            ControlStateHandler.DEFAULT()
         ).updateFromEntity(entity);
     }
 
@@ -153,12 +153,12 @@ export class EntityState implements EntityStateBuilder {
             ctx,
             state.height,
             state.halfWidth,
-            state.position.clone(),
-            state.velocity.clone(),
+            state.pos.clone(),
+            state.vel.clone(),
             state.onGround,
-            state.controlState.clone(),
             state.yaw,
-            state.pitch
+            state.pitch,
+            state.control.clone()
         ).updateFromRaw(state);
     }
 
@@ -169,12 +169,12 @@ export class EntityState implements EntityStateBuilder {
      * @returns PhysicsState
      */
     public static CREATE_RAW(ctx: IPhysics, raw: EntityStateBuilder) {
-        return new EntityState(ctx, raw.height, raw.halfWidth, raw.position, raw.velocity, raw.onGround, raw.controlState, raw.yaw, raw.pitch);
+        return new EntityState(ctx, raw.height, raw.halfWidth, raw.pos, raw.vel, raw.onGround, raw.yaw, raw.pitch, raw.control);
     }
 
     public updateFromBot(bot: Bot): EntityState {
         this.updateFromEntity(bot.entity, true);
-        this.controlState = ControlStateHandler.COPY_BOT(bot);
+        this.control = ControlStateHandler.COPY_BOT(bot);
         this.jumpTicks = (bot as any).jumpTicks;
         this.jumpQueued = (bot as any).jumpQueued;
         return this;
@@ -184,7 +184,7 @@ export class EntityState implements EntityStateBuilder {
 
         if (all) {
             // most mobs don't have this defined, so ignore it (only self does).
-            this.velocity = entity.velocity.clone();
+            this.vel = entity.velocity.clone();
             this.onGround = entity.onGround;
             this.isInWater = (entity as any).isInWater;
             this.isInLava = (entity as any).isInLava;
@@ -194,7 +194,7 @@ export class EntityState implements EntityStateBuilder {
             this.sneakCollision = false; //TODO
             this.attributes ||= (entity as any).attributes;
         }
-        this.position = entity.position.clone();
+        this.pos = entity.position.clone();
 
 
         //not sure what to do here, ngl.
@@ -204,7 +204,7 @@ export class EntityState implements EntityStateBuilder {
         // Input only (not modified)
         this.yaw = entity.yaw;
         this.pitch = entity.pitch;
-        this.controlState ||= ControlStateHandler.DEFAULT();
+        this.control ||= ControlStateHandler.DEFAULT();
 
         this.isUsingItem = isEntityUsingItem(entity);
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(entity) && this.isUsingItem;
@@ -252,12 +252,12 @@ export class EntityState implements EntityStateBuilder {
     }
 
     public applyToBot(bot: Bot) {
-        bot.entity.position.set(this.position.x, this.position.y, this.position.z);
-        bot.entity.velocity.set(this.velocity.x, this.velocity.y, this.velocity.z);
+        bot.entity.position.set(this.pos.x, this.pos.y, this.pos.z);
+        bot.entity.velocity.set(this.vel.x, this.vel.y, this.vel.z);
         bot.entity.onGround = this.onGround;
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;
-        bot.controlState = this.controlState;
+        bot.controlState = this.control;
         return this;
     }
 
@@ -265,8 +265,8 @@ export class EntityState implements EntityStateBuilder {
      * No idea when you'd use this.
      */
     public applyToEntity(entity: Entity) {
-        entity.position = this.position
-        entity.velocity = this.velocity
+        entity.position = this.pos
+        entity.velocity = this.vel
         // entity.position.set(this.position.x, this.position.y, this.position.z);
         // entity.velocity.set(this.velocity.x, this.velocity.y, this.velocity.z);
         entity.onGround = this.onGround;
@@ -280,12 +280,12 @@ export class EntityState implements EntityStateBuilder {
             this.ctx,
             this.height,
             this.halfWidth,
-            this.position.clone(),
-            this.velocity.clone(),
+            this.pos.clone(),
+            this.vel.clone(),
             this.onGround,
-            this.controlState.clone(),
             this.yaw,
-            this.pitch
+            this.pitch,
+            this.control.clone(),
         );
         other.age = this.age;
         other.isCollidedHorizontally = this.isCollidedHorizontally;
@@ -314,8 +314,8 @@ export class EntityState implements EntityStateBuilder {
 
     public merge(other: EntityState) {
         this.age = other.age
-        this.position = other.position.clone();
-        this.velocity = other.velocity.clone();
+        this.pos = other.pos.clone();
+        this.vel = other.vel.clone();
         this.onGround = other.onGround;
         this.isCollidedHorizontally = other.isCollidedHorizontally;
         this.isCollidedVertically = other.isCollidedVertically;
@@ -342,7 +342,7 @@ export class EntityState implements EntityStateBuilder {
     }
 
     public clearControlStates(): EntityState {
-        this.controlState = ControlStateHandler.DEFAULT();
+        this.control = ControlStateHandler.DEFAULT();
         return this;
     }
 
@@ -353,12 +353,12 @@ export class EntityState implements EntityStateBuilder {
     public getAABB(): AABB {
         const w = this.halfWidth;
         return new AABB(
-            this.position.x - w,
-            this.position.y,
-            this.position.z - w,
-            this.position.x + w,
-            this.position.y + this.height,
-            this.position.z + w
+            this.pos.x - w,
+            this.pos.y,
+            this.pos.z - w,
+            this.pos.x + w,
+            this.pos.y + this.height,
+            this.pos.z + w
         );
     }
 

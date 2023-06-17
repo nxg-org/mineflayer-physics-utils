@@ -73,8 +73,8 @@ export class EPhysicsCtx {
     };
 
     constructor(public ctx: IPhysics, public pose: PlayerPoses, public readonly state: EntityState, public readonly entityType: md.Entity = DefaultPlayer) {
-        this.position = state.position;
-        this.velocity = state.velocity;
+        this.position = state.pos;
+        this.velocity = state.vel;
 
         if (entityType.type === "player" || !!EPhysicsCtx.mobData[entityType.id]) {
             // @ts-expect-error
@@ -183,14 +183,14 @@ export class EPhysicsCtx {
 
     public get height(): number {
         if (this.entityType.type === "player") {
-            return EPhysicsCtx.playerPoseContext[this.pose].height;
+            return EPhysicsCtx.playerPoseContext[this.pose ?? 0].height;
         }
         return this.entityType.height ?? 0;
     }
 
     public get width(): number {
         if (this.entityType.type === "player") {
-            return EPhysicsCtx.playerPoseContext[this.pose].width;
+            return EPhysicsCtx.playerPoseContext[this.pose ?? 0].width;
         }
         return this.entityType.width ?? 0;
     }

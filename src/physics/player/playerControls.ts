@@ -33,13 +33,13 @@ export class ControlStateHandler implements ControlStateStatus {
 
     public static COPY_STATE(state: EntityState | PlayerState) {
         return new ControlStateHandler(
-            state.controlState.forward,
-            state.controlState.back,
-            state.controlState.left,
-            state.controlState.right,
-            state.controlState.jump,
-            state.controlState.sprint,
-            state.controlState.sneak
+            state.control.forward,
+            state.control.back,
+            state.control.left,
+            state.control.right,
+            state.control.jump,
+            state.control.sprint,
+            state.control.sneak
         );
     }
 
@@ -139,13 +139,13 @@ export class PlayerControls extends ControlStateHandler {
 
     public static COPY_STATE(state: EntityState | PlayerState) {
         return new PlayerControls(
-            state.controlState.forward,
-            state.controlState.back,
-            state.controlState.left,
-            state.controlState.right,
-            state.controlState.jump,
-            state.controlState.sprint,
-            state.controlState.sneak,
+            state.control.forward,
+            state.control.back,
+            state.control.left,
+            state.control.right,
+            state.control.jump,
+            state.control.sprint,
+            state.control.sneak,
             state.isUsingMainHand,
             state.isUsingOffHand,
             state.yaw,
