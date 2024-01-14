@@ -9,7 +9,7 @@ export type SimulationGoal = (state: EntityState, ticks: number) => boolean | ((
 export type OnGoalReachFunction = (state: EntityState) => void;
 export type Controller = (state: EntityState, ticks: number) => void; // (...any: any[]) => void;
 
-export abstract class BaseSimulator {
+export class BaseSimulator {
     constructor(public readonly ctx: IPhysics) {}
 
     *predictGenerator(simCtx: EPhysicsCtx, world: any, ticks: number = 1, controls?: ControlStateHandler) {
@@ -50,7 +50,6 @@ export abstract class BaseSimulator {
                 onGoalReach(simCtx.state);
                 break;
             }
-            if (simCtx.state.isInLava) break;
             controller(simCtx.state, i);
             this.ctx.simulate(simCtx, world);
             simCtx.state.age++;
