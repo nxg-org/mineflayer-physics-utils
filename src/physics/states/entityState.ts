@@ -278,6 +278,20 @@ export class EntityState implements EntityStateBuilder {
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;
         bot.controlState = this.control;
+        (bot as any).jumpTicks = this.jumpTicks;
+        (bot as any).jumpQueued = this.jumpQueued;
+        bot.fireworkRocketDuration = this.fireworkRocketDuration;
+        (bot.entity as any).isInWater = this.isInWater;
+        (bot.entity as any).isInLava = this.isInLava;
+        (bot.entity as any).isInWeb = this.isInWeb;
+        bot.entity.elytraFlying = this.elytraFlying;
+        (bot.entity as any).elytraEquipped = this.elytraEquipped;
+        (bot.entity as any).isCollidedHorizontally = this.isCollidedHorizontally;
+        (bot.entity as any).isCollidedVertically = this.isCollidedVertically;
+        (bot.entity as any).sneakCollision = this.sneakCollision;
+        (bot.entity as any).pose = this.pose;
+        this.control.applyControls(bot);
+
         return this;
     }
 

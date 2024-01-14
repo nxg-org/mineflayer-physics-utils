@@ -254,7 +254,7 @@ export class PlayerState implements EntityStateBuilder {
         (bot as any).jumpQueued = this.jumpQueued;
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;
-        bot.controlState = this.control;
+        this.control.applyControls(bot);
     }
 
     public clone() {

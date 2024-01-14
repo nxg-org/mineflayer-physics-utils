@@ -21,13 +21,13 @@ export class ControlStateHandler implements ControlStateStatus {
 
     public static COPY_BOT(bot: Bot) {
         return new ControlStateHandler(
-            bot.controlState.forward,
-            bot.controlState.back,
-            bot.controlState.left,
-            bot.controlState.right,
-            bot.controlState.jump,
-            bot.controlState.sprint,
-            bot.controlState.sneak
+            bot.getControlState("forward"),
+            bot.getControlState("back"),
+            bot.getControlState("left"),
+            bot.getControlState("right"),
+            bot.getControlState("jump"),
+            bot.getControlState("sprint"),
+            bot.getControlState("sneak")
         );
     }
 
