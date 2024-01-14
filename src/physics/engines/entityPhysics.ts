@@ -8,7 +8,8 @@ import {
     CheapEnchantments,
     getEnchantmentNamesForVersion,
     getStatusEffectNamesForVersion,
-    makeSupportFeature
+    makeSupportFeature,
+    getLookingVector
 } from "../../util/physicsUtils";
 import * as attributes from "../info/attributes";
 import * as math from "../info/math";
@@ -635,7 +636,49 @@ export class EntityPhysics implements IPhysics {
 
             vel.x *= inertia;
             vel.z *= inertia;
-        } else {
+        }  else if (entity.state.elytraFlying) {
+            const {
+              pitch,
+              sinPitch,
+              cosPitch,
+              lookDir
+            } = getLookingVector(entity.state)
+            const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z)
+            const cosPitchSquared = cosPitch * cosPitch
+            vel.y += entity.gravity * gravityMultiplier * (-1.0 + cosPitchSquared * 0.75)
+            // cosPitch is in [0, 1], so cosPitch > 0.0 is just to protect against
+            // divide by zero errors
+            if (vel.y < 0.0 && cosPitch > 0.0) {
+              const movingDownSpeedModifier = vel.y * (-0.1) * cosPitchSquared
+              vel.x += lookDir.x * movingDownSpeedModifier / cosPitch
+              vel.y += movingDownSpeedModifier
+              vel.z += lookDir.z * movingDownSpeedModifier / cosPitch
+            }
+      
+            if (pitch < 0.0 && cosPitch > 0.0) {
+              const lookDownSpeedModifier = horizontalSpeed * (-sinPitch) * 0.04
+              vel.x += -lookDir.x * lookDownSpeedModifier / cosPitch
+              vel.y += lookDownSpeedModifier * 3.2
+              vel.z += -lookDir.z * lookDownSpeedModifier / cosPitch
+            }
+      
+            if (cosPitch > 0.0) {
+              vel.x += (lookDir.x / cosPitch * horizontalSpeed - vel.x) * 0.1
+              vel.z += (lookDir.z / cosPitch * horizontalSpeed - vel.z) * 0.1
+            }
+      
+            vel.x *= 0.99
+            vel.y *= 0.98
+            vel.z *= 0.99
+            this.moveEntity(entity, world, vel.x, vel.y, vel.z)
+      
+            if (entity.state.onGround) {
+              entity.state.elytraFlying = false
+            }
+          }
+        
+        
+        else {
             // Water / Lava movement
             const lastY = pos.y;
             let acceleration = entity.liquidAccel;
@@ -742,6 +785,22 @@ export class EntityPhysics implements IPhysics {
                 entity.state.control.sprint = false;
             }
         }
+
+        entity.state.elytraFlying = entity.state.elytraFlying && entity.state.elytraEquipped && !entity.state.onGround && !entity.state.levitation
+
+
+        if (entity.state.fireworkRocketDuration > 0) {
+            if (!entity.state.elytraFlying) {
+              entity.state.fireworkRocketDuration = 0
+            } else {
+              const { lookDir } = getLookingVector(entity.state)
+              vel.x += lookDir.x * 0.1 + (lookDir.x * 1.5 - vel.x) * 0.5
+              vel.y += lookDir.y * 0.1 + (lookDir.y * 1.5 - vel.y) * 0.5
+              vel.z += lookDir.z * 0.1 + (lookDir.z * 1.5 - vel.z) * 0.5
+              --entity.state.fireworkRocketDuration
+            }
+          }
+      
 
         this.moveEntityWithHeading(entity, strafe, forward, world);
 

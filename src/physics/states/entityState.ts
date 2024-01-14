@@ -1,6 +1,5 @@
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import { CheapEffects, CheapEnchantments, isEntityUsingItem, whichHandIsEntityUsingBoolean } from "../../util/physicsUtils";
-import type { Entity } from "prismarine-entity";
 import type { Bot, Effect } from "mineflayer";
 import { Vec3 } from "vec3";
 
@@ -11,6 +10,7 @@ import { PlayerPoses } from "./poses";
 
 import { IPhysics } from "../engines";
 import nbt from "prismarine-nbt";
+import {Entity} from "prismarine-entity";
 
 
 export interface EntityStateBuilder {
@@ -26,6 +26,9 @@ export interface EntityStateBuilder {
     isInWater?: boolean;
     isInLava?: boolean;
     isInWeb?: boolean;
+    elytraFlying?: boolean;
+    elytraEquipped?: boolean;
+    fireworkRocketDuration?: number;
     sneakCollision?: boolean;
     isCollidedHorizontally?: boolean;
     isCollidedVertically?: boolean;
@@ -48,6 +51,8 @@ export class EntityState implements EntityStateBuilder {
     public isInWater: boolean;
     public isInLava: boolean;
     public isInWeb: boolean;
+    public elytraFlying: boolean;
+    public elytraEquipped: boolean;
     public isCollidedHorizontally: boolean;
     public isCollidedVertically: boolean;
     public jumpTicks: number;
@@ -55,7 +60,7 @@ export class EntityState implements EntityStateBuilder {
 
     public sneakCollision: boolean;
 
-    public attributes: any /* dunno yet */;
+    public attributes: Entity["attributes"] /* dunno yet */;
 
     public isUsingItem: boolean;
     public isUsingMainHand: boolean;
@@ -71,6 +76,7 @@ export class EntityState implements EntityStateBuilder {
 
     public effects: Effect[];
     public pose: PlayerPoses;
+    public fireworkRocketDuration: number;
 
     // public effects: Effect[];
     // public statusEffectNames;
@@ -89,6 +95,8 @@ export class EntityState implements EntityStateBuilder {
         this.isInWater = false;
         this.isInLava = false;
         this.isInWeb = false;
+        this.elytraFlying = false;
+        this.elytraEquipped = false;
         this.isCollidedHorizontally = false;
         this.isCollidedVertically = false;
         this.sneakCollision = false; //TODO
@@ -96,6 +104,7 @@ export class EntityState implements EntityStateBuilder {
         //not sure what to do here, ngl.
         this.jumpTicks = 0;
         this.jumpQueued = false;
+        this.fireworkRocketDuration = 0;
 
         // Input only (not modified)
         this.attributes = {}; //TODO
@@ -177,6 +186,7 @@ export class EntityState implements EntityStateBuilder {
         this.control = ControlStateHandler.COPY_BOT(bot);
         this.jumpTicks = (bot as any).jumpTicks;
         this.jumpQueued = (bot as any).jumpQueued;
+        this.fireworkRocketDuration = bot.fireworkRocketDuration
         return this;
     }
 
@@ -189,10 +199,13 @@ export class EntityState implements EntityStateBuilder {
             this.isInWater = (entity as any).isInWater;
             this.isInLava = (entity as any).isInLava;
             this.isInWeb = (entity as any).isInWeb;
+            this.elytraFlying = (entity as any).elytraFlying;
             this.isCollidedHorizontally = (entity as any).isCollidedHorizontally;
             this.isCollidedVertically = (entity as any).isCollidedVertically;
             this.sneakCollision = false; //TODO
-            this.attributes ||= (entity as any).attributes;
+            this.attributes ||= entity.attributes;
+
+            this.elytraEquipped = entity.equipment[3] && entity.equipment[3]?.name.includes("elytra");
         }
         this.pos = entity.position.clone();
 
@@ -248,6 +261,13 @@ export class EntityState implements EntityStateBuilder {
         this.levitation = other.levitation ?? this.levitation;
         this.depthStrider = other.depthStrider ?? this.depthStrider;
         this.effects = other.effects ?? this.effects;
+        this.isCollidedHorizontally = other.isCollidedHorizontally ?? this.isCollidedHorizontally;
+        this.isCollidedVertically = other.isCollidedVertically ?? this.isCollidedVertically;
+        this.isInWater = other.isInWater ?? this.isInWater;
+        this.isInLava = other.isInLava ?? this.isInLava;
+        this.isInWeb = other.isInWeb ?? this.isInWeb;
+        this.elytraFlying = other.elytraFlying ?? this.elytraFlying;
+        this.elytraEquipped = other.elytraEquipped ?? this.elytraEquipped;
         return this;
     }
 
@@ -293,6 +313,9 @@ export class EntityState implements EntityStateBuilder {
         other.isInWater = this.isInWater;
         other.isInLava = this.isInLava;
         other.isInWeb = this.isInWeb;
+        other.elytraFlying = this.elytraFlying;
+        other.elytraEquipped = this.elytraEquipped;
+        other.fireworkRocketDuration = this.fireworkRocketDuration;
         other.jumpTicks = this.jumpTicks;
         other.jumpQueued = this.jumpQueued;
         other.sneakCollision = this.sneakCollision;
@@ -322,6 +345,9 @@ export class EntityState implements EntityStateBuilder {
         this.isInWater = other.isInWater;
         this.isInLava = other.isInLava;
         this.isInWeb = other.isInWeb;
+        this.elytraFlying = other.elytraFlying;
+        this.elytraEquipped = other.elytraEquipped;
+        this.fireworkRocketDuration = other.fireworkRocketDuration;
         this.jumpTicks = other.jumpTicks;
         this.jumpQueued = other.jumpQueued;
         this.sneakCollision = other.sneakCollision;

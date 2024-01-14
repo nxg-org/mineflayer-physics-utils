@@ -16,6 +16,7 @@ import md from "minecraft-data";
 import { ControlStateHandler } from "../player/playerControls";
 import { EntityStateBuilder } from "./entityState";
 import { IPhysics } from "../engines/IPhysics";
+import type { Entity } from "prismarine-entity";
 
 
 
@@ -82,6 +83,9 @@ export class PlayerState implements EntityStateBuilder {
     public isInWater: boolean;
     public isInLava: boolean;
     public isInWeb: boolean;
+    public elytraFlying: boolean;
+    public elytraEquipped: boolean;
+    public fireworkRocketDuration: number
     public isCollidedHorizontally: boolean;
     public isCollidedVertically: boolean;
     public jumpTicks: number;
@@ -89,7 +93,7 @@ export class PlayerState implements EntityStateBuilder {
 
     public sneakCollision: boolean;
 
-    public attributes: any /* dunno yet */;
+    public attributes: Entity["attributes"] /* dunno yet */;
     public yaw: number;
     public pitch: number;
     public control: ControlStateHandler;
@@ -122,6 +126,9 @@ export class PlayerState implements EntityStateBuilder {
         this.isInWater = (bot.entity as any).isInWater;
         this.isInLava = (bot.entity as any).isInLava;
         this.isInWeb = (bot.entity as any).isInWeb;
+        this.elytraFlying = (bot.entity as any).elytraFlying;
+        this.elytraEquipped = bot.inventory.slots[bot.getEquipmentDestSlot('torso')]?.name === 'elytra';
+        this.fireworkRocketDuration = bot.fireworkRocketDuration;
         this.isCollidedHorizontally = (bot.entity as any).isCollidedHorizontally;
         this.isCollidedVertically = (bot.entity as any).isCollidedVertically;
         this.sneakCollision = false; //TODO
@@ -131,7 +138,7 @@ export class PlayerState implements EntityStateBuilder {
         this.jumpQueued = (bot as any).jumpQueued ?? false;
 
         // Input only (not modified)
-        this.attributes = (bot.entity as any).attributes;
+        this.attributes = bot.entity.attributes;
         this.yaw = bot.entity.yaw;
         this.pitch = bot.entity.pitch;
         this.control = control ?? ControlStateHandler.DEFAULT();
@@ -182,6 +189,9 @@ export class PlayerState implements EntityStateBuilder {
         this.isInWater = (bot.entity as any).isInWater;
         this.isInLava = (bot.entity as any).isInLava;
         this.isInWeb = (bot.entity as any).isInWeb;
+        this.elytraFlying = (bot.entity as any).elytraFlying;
+        this.elytraEquipped = bot.inventory.slots[bot.getEquipmentDestSlot('torso')]?.name === 'elytra';
+        this.fireworkRocketDuration = bot.fireworkRocketDuration;
         this.isCollidedHorizontally = (bot.entity as any).isCollidedHorizontally;
         this.isCollidedVertically = (bot.entity as any).isCollidedVertically;
 
@@ -190,7 +200,7 @@ export class PlayerState implements EntityStateBuilder {
         this.jumpQueued = (bot as any).jumpQueued ?? false;
 
         // Input only (not modified)
-        this.attributes = (bot.entity as any).attributes;
+        this.attributes = bot.entity.attributes;
         this.yaw = bot.entity.yaw;
         this.pitch = bot.entity.pitch;
         this.control = control ?? this.control;
@@ -233,6 +243,9 @@ export class PlayerState implements EntityStateBuilder {
         (bot.entity as any).isInWater = this.isInWater;
         (bot.entity as any).isInLava = this.isInLava;
         (bot.entity as any).isInWeb = this.isInWeb;
+        (bot.entity as any).elytraFlying = this.elytraFlying;
+        (bot.entity as any).elytraEquipped = this.elytraEquipped;
+        bot.fireworkRocketDuration = this.fireworkRocketDuration;
         (bot.entity as any).isCollidedHorizontally = this.isCollidedHorizontally;
         (bot.entity as any).isCollidedVertically = this.isCollidedVertically;
 
@@ -252,6 +265,9 @@ export class PlayerState implements EntityStateBuilder {
         tmp.isInWater = this.isInWater;
         tmp.isInLava = this.isInLava;
         tmp.isInWeb = this.isInWeb;
+        tmp.elytraFlying = this.elytraFlying;
+        tmp.elytraEquipped = this.elytraEquipped;
+        tmp.fireworkRocketDuration = this.fireworkRocketDuration;
         tmp.isCollidedHorizontally = this.isCollidedHorizontally;
         tmp.isCollidedVertically = this.isCollidedVertically;
         tmp.sneakCollision = false; //TODO
@@ -293,6 +309,9 @@ export class PlayerState implements EntityStateBuilder {
         this.isInWater = other.isInWater;
         this.isInLava = other.isInLava;
         this.isInWeb = other.isInWeb;
+        this.elytraFlying = other.elytraFlying;
+        this.elytraEquipped = other.elytraEquipped;
+        this.fireworkRocketDuration = other.fireworkRocketDuration;
         this.isCollidedHorizontally = other.isCollidedHorizontally;
         this.isCollidedVertically = other.isCollidedVertically;
         this.sneakCollision = false; //TODO

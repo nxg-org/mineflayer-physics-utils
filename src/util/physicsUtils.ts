@@ -3,6 +3,8 @@ import { EPhysicsCtx } from "../physics/settings";
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import features from "../physics/info/features.json";
 import md from "minecraft-data";
+import { EntityState } from "../physics/states";
+import { Vec3 } from "vec3";
 
 export function makeSupportFeature(mcData: md.IndexedData) {
     return (feature: string) => features.some(({ name, versions }) => name === feature && versions.includes(mcData.version.majorVersion!));
@@ -119,3 +121,62 @@ export function getBetweenRectangle(src: AABB, dest: AABB) {
 
     return innerAABB;
 }
+
+
+export function getLookingVector (entity: EntityState) {
+    // given a yaw pitch, we need the looking vector
+
+    // yaw is right handed rotation about y (up) starting from -z (north)
+    // pitch is -90 looking down, 90 looking up, 0 looking at horizon
+    // lets get its coordinate system.
+    // let x' = -z (north)
+    // let y' = -x (west)
+    // let z' = y (up)
+
+    // the non normalized looking vector in x', y', z' space is
+    // x' is cos(yaw)
+    // y' is sin(yaw)
+    // z' is tan(pitch)
+
+    // substituting back in x, y, z, we get the looking vector in the normal x, y, z space
+    // -z = cos(yaw) => z = -cos(yaw)
+    // -x = sin(yaw) => x = -sin(yaw)
+    // y = tan(pitch)
+
+    // normalizing the vectors, we divide each by |sqrt(x*x + y*y + z*z)|
+    // x*x + z*z = sin^2 + cos^2 = 1
+    // so |sqrt(xx+yy+zz)| = |sqrt(1+tan^2(pitch))|
+    //     = |sqrt(1+sin^2(pitch)/cos^2(pitch))|
+    //     = |sqrt((cos^2+sin^2)/cos^2(pitch))|
+    //     = |sqrt(1/cos^2(pitch))|
+    //     = |+/- 1/cos(pitch)|
+    //     = 1/cos(pitch) since pitch in [-90, 90]
+
+    // the looking vector is therefore
+    // x = -sin(yaw) * cos(pitch)
+    // y = tan(pitch) * cos(pitch) = sin(pitch)
+    // z = -cos(yaw) * cos(pitch)
+
+    const yaw = entity.yaw
+    const pitch = entity.pitch
+    const sinYaw = Math.sin(yaw)
+    const cosYaw = Math.cos(yaw)
+    const sinPitch = Math.sin(pitch)
+    const cosPitch = Math.cos(pitch)
+    const lookX = -sinYaw * cosPitch
+    const lookY = sinPitch
+    const lookZ = -cosYaw * cosPitch
+    const lookDir = new Vec3(lookX, lookY, lookZ)
+    return {
+      yaw,
+      pitch,
+      sinYaw,
+      cosYaw,
+      sinPitch,
+      cosPitch,
+      lookX,
+      lookY,
+      lookZ,
+      lookDir
+    }
+  }
