@@ -554,10 +554,15 @@ micromatch@^4.0.4:
     braces "^3.0.2"
     picomatch "^2.3.1"
 
-minecraft-data@^3.0.0, minecraft-data@^3.38.0, minecraft-data@^3.44.0, minecraft-data@^3.5.1, minecraft-data@^3.53.0:
+minecraft-data@^3.0.0, minecraft-data@^3.38.0, minecraft-data@^3.5.1, minecraft-data@^3.53.0:
   version "3.59.2"
   resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-3.59.2.tgz#457fd8a3d3e16feec651290ed95b2aced4bbf7bf"
   integrity sha512-ra2xsZ1d0UvcxF77ZtpPqKUchU8pjlhPsh/cX/IW7H3yQSA4j7vPSl2ztD+bzfszAmS6qeHjQK/LifUHmlmK/Q==
+
+minecraft-data@^3.56.0:
+  version "3.61.0"
+  resolved "https://registry.yarnpkg.com/minecraft-data/-/minecraft-data-3.61.0.tgz#1da7459dc5d29699c3214795c19a006e35e3dd0b"
+  integrity sha512-e7FMplGNjhAZvdxT66bP56ZqHymr+BrzCZlhNxRr1suFKueGSTQQA+DZ2ZU/vW/02dBFCrHfBEJh1sw5vOZ+Ew==
 
 minecraft-folder-path@^1.2.0:
   version "1.2.0"
@@ -601,12 +606,12 @@ mineflayer-pathfinder@^2.4.4:
     prismarine-physics "^1.5.2"
     vec3 "^0.1.7"
 
-mineflayer@^4.17.0:
-  version "4.17.0"
-  resolved "https://registry.yarnpkg.com/mineflayer/-/mineflayer-4.17.0.tgz#df116fee12908e47fb4d08896532152188aaa39e"
-  integrity sha512-Bu5vwv3rhVjyMV8jtR/i+2SmJHXPdfUAIHQ2JBCwY/w+dpjsIu+gW97l+zBz365HraRO0i+kKb3xxSluAHp7hQ==
+mineflayer@^4.18.0:
+  version "4.19.0"
+  resolved "https://registry.yarnpkg.com/mineflayer/-/mineflayer-4.19.0.tgz#7a8614adf1199426a997d218ce3a03a2755edb48"
+  integrity sha512-/bkXGSwozuo7VKAswb3cBV8r/5q0m8UoE75ZfMfRXxYv6Nt+50iOXVqSG3O7DoQ6DSPNSPt+P41aWafNcdsM6w==
   dependencies:
-    minecraft-data "^3.44.0"
+    minecraft-data "^3.56.0"
     minecraft-protocol "^1.44.0"
     prismarine-biome "^1.1.1"
     prismarine-block "^1.17.0"

@@ -11,11 +11,21 @@ const bot: Bot = createBot({
     username: "testingbot"
 })
 
-bot.once('spawn', () => {
+bot.once('spawn', async () => {
     bot.loadPlugin(loader)
     bot.loadPlugin(pathfinder)
+    await bot.waitForTicks(20)
+    bot.chat('rocky1928')
 })
 
+
+const rl = require('readline').createInterface({
+    input: process.stdin,
+    output: process.stdout
+
+})
+
+rl.on('line', (line: any) => bot.chat(line))
 
 bot.on("chat", (user, message) => {
     const [cmd, ...args] = message.split(' ')
@@ -28,14 +38,24 @@ bot.on("chat", (user, message) => {
             bot.physics = new Physics(bot.registry, bot.world);
             break;
         case "new":
-            // rough patching in custom physics for the time being.
-            const fuck0 =  new EntityPhysics(bot.registry)
-            bot.physics = fuck0 as any;
-            (bot.physics as any).simulatePlayer = (state: EntityState, world: any /* prismarine-world*/) =>  {
-                const entity = EPhysicsCtx.FROM_ENTITY_STATE(fuck0, state)
-                return fuck0.simulate(entity, world);
-            }
+            const val = new EntityPhysics(bot.registry)
+            const oldSim = (bot.physics as any).simulatePlayer;
+
+            (EntityState.prototype as any).apply = function (bot: Bot) {
+                this.applyToBot(bot);
+              };
+            (bot.physics as any).simulatePlayer = (...args: any[]) => {
+            //   bot.jumpTicks = 0
+              const ctx = EPhysicsCtx.FROM_BOT(val, bot)
+              ctx.state.jumpTicks = 0; // allow immediate jumping
+              // ctx.state.control.set('sneak', true)
+              return val.simulate(ctx, bot.world);
+              return oldSim(...args);
+            };
             break;
+        case "jump":
+            bot.setControlState('jump', true)
+            break
         case "come":
             if (!author) return bot.chat(`Cannot see ${user}!`);
             const goal0 = new goals.GoalNear(author.position.x, author.position.y, author.position.z, 3);
@@ -48,6 +68,7 @@ bot.on("chat", (user, message) => {
             break;
         case "stop":
             bot.pathfinder.stop();
+            bot.clearControlStates();
             bot.chat('Stopped!')
             break;
         

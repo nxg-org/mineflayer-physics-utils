@@ -75,7 +75,8 @@ export class EntityDimensions {
  */
 export class PlayerState implements EntityStateBuilder {
     public readonly bot: Bot; // needed to clone.
-    public height: number = 1.62;
+    public height: number = 1.8;
+    public eyeHeight: number = 1.62;
     public halfWidth: number = 0.3;
     public pos: Vec3;
     public vel: Vec3;
