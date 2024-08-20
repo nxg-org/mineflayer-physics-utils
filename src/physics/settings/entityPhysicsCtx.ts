@@ -85,7 +85,6 @@ export class EPhysicsCtx {
         } else if (entityType.name.includes("spit")) {
             Object.assign(this, info.projectiles.default, info.projectiles.llama_spit);
         } else {
-            console.log(entityType.type)
             switch (entityType.type) {
                 case "water_creature":
                 case "animal":

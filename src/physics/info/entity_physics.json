@@ -7,7 +7,7 @@
             "stepHeight": 1,
             "gravity": 0.08,
             "airdrag": 0.9800000190734863,
-            "airborneInertia": 0.91,
+            "airborneInertia": 0.9800000190734863,
             "airborneAccel": 0.02,
             "waterInertia": 0.8,
             "lavaInertia": 0.5,

@@ -44,6 +44,8 @@ function createFakePlayer(pos: Vec3) {
         inventory: {
             slots: [],
         },
+
+        setControlState: (...args) => {}
     };
 }
 
