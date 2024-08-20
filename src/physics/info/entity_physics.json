@@ -28,8 +28,8 @@
             "useControls": false,
             "stepHeight": 0,
             "gravity": 0.03,
-            "airdrag": 0.9800000190734863,
-            "airborneInertia": 0.99,
+            "airdrag": 0.9900000095367432,
+            "airborneInertia":  0.9900000095367432,
             "airborneAccel": 0.02,
             "waterInertia": 0.6,
             "lavaInertia": 1,
@@ -39,24 +39,31 @@
                 "affectedAfterCollision": false
             }
         },
+        "egg": {
+            "gravity": 0.03
+      
+        },
         "arrow": {
-            "gravity": 0.05,
-            "airdrag": 0.9900000095367432
+            "gravity": 0.05
         },
         "trident": {
             "gravity": 0.05,
-            "airdrag": 0.9900000095367432,
             "waterInertia": 0.99
         },
         "llama_spit": {
-            "gravity": 0.06,
-            "airdrag": 0.9900000095367432
+            "gravity": 0.06
         },
         "experience_bottle": {
-            "gravity": 0.03
+            "gravity": 0.05,
+            "airdrag": 0.99
+        },
+        "potion": {
+            "gravity": 0.05
+           
         },
         "fishing_bobber": {
-            "airdrag": 0.9200000166893005
+            "airdrag": 0.9200000166893005,
+            "airborneInertia": 0.9200000166893005
         }
     },
     "dead_vehicles": {

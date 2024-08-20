@@ -459,14 +459,12 @@ export class EntityPhysics implements IPhysics {
   }
 
   getWaterInBB(bb: AABB, world: any /*prismarine-world*/) {
-    console.log(bb)
     const waterBlocks = [];
     const cursor = new Vec3(0, 0, 0);
     for (cursor.y = Math.floor(bb.minY); cursor.y <= Math.floor(bb.maxY); cursor.y++) {
       for (cursor.z = Math.floor(bb.minZ); cursor.z <= Math.floor(bb.maxZ); cursor.z++) {
         for (cursor.x = Math.floor(bb.minX); cursor.x <= Math.floor(bb.maxX); cursor.x++) {
           const block = world.getBlock(cursor);
-          console.log(cursor, block.type)
           if (block && (block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged)) {
             const waterLevel = cursor.y + 1 - this.getLiquidHeightPcent(block);
             if (Math.ceil(bb.maxY) >= waterLevel) waterBlocks.push(block);
@@ -566,9 +564,9 @@ export class EntityPhysics implements IPhysics {
     // Unsure how to handle this w/ other entities.
     if (!entity.state.isInWater && !entity.state.isInLava) {
       let acceleration = entity.airborneAccel;
-      let inertia = entity.airborneInertia;
+      let dragOrFriction = entity.airborneInertia; // equivalent to drag in the air. It is not actually inertia. Bad name.
       const blockUnder = world.getBlock(pos.offset(0, -1, 0));
-      if (entity.state.onGround && blockUnder) {
+      if (entity.state.onGround && blockUnder && blockUnder.type !== entity.ctx.data.blocksByName.air.id) {
         let playerSpeedAttribute;
         if (entity.state.attributes && entity.state.attributes[this.movementSpeedAttribute]) {
           // Use server-side player attributes
@@ -593,12 +591,14 @@ export class EntityPhysics implements IPhysics {
         }
         // Calculate what the speed is (0.1 if no modification)
         const attributeSpeed = attributes.getAttributeValue(playerSpeedAttribute);
-        inertia = (this.blockSlipperiness[blockUnder.type] || PhysicsSettings.defaultSlipperiness) * 0.91;
-        acceleration = attributeSpeed * (0.1627714 / (inertia * inertia * inertia));
+        dragOrFriction = (this.blockSlipperiness[blockUnder.type] || PhysicsSettings.defaultSlipperiness) * 0.91;
+        acceleration = attributeSpeed * (0.1627714 / (dragOrFriction * dragOrFriction * dragOrFriction));
         if (acceleration < 0) acceleration = 0; // acceleration should not be negative
       }
 
+      // console.log('vel!', vel)
       this.applyHeading(entity, strafe, forward, acceleration);
+      // console.log('vel 1!', vel)
 
       if (entity.collisionBehavior.blockEffects && this.isOnLadder(pos, world)) {
         vel.x = math.clamp(-PhysicsSettings.ladderMaxSpeed, vel.x, PhysicsSettings.ladderMaxSpeed);
@@ -628,10 +628,12 @@ export class EntityPhysics implements IPhysics {
         if (entity.state.levitation > 0) vel.y += (0.05 * entity.state.levitation - vel.y) * 0.2;
         else vel.y -= entity.gravity * gravityMultiplier;
       }
-
-      vel.x *= inertia;
-      vel.z *= inertia;
+      
+      vel.x *= dragOrFriction;
+      vel.z *= dragOrFriction;
     }
+
+
 
     // this is player-only.
     else if (entity.state.elytraFlying) {
@@ -718,7 +720,7 @@ export class EntityPhysics implements IPhysics {
     const vel = entity.velocity;
     const pos = entity.position;
 
-    const offset = vel.y < 0 ? 0.4 : 0
+    const offset = vel.y < 0 ? 0.4 : 0;
     const waterBB = this.getEntityBB(entity, pos).contract(0.001, offset + 0.001, 0.001);
     const lavaBB = this.getEntityBB(entity, pos).contract(0.1, offset, 0.1);
 
@@ -736,12 +738,10 @@ export class EntityPhysics implements IPhysics {
     let forward = 0;
     // Handle inputs
     if (entity.useControls) {
-      console.log(entity.state.control.jump, entity.state.pos.y, vel.y, entity.state.isInWater, entity.state.isInLava)
       if (entity.state.control.jump || entity.state.jumpQueued) {
         if (entity.state.jumpTicks > 0) entity.state.jumpTicks--;
         if (entity.state.isInWater || entity.state.isInLava) {
           vel.y += 0.04;
-          console.log(entity.state.pos, vel)
         } else if (entity.state.onGround && entity.state.jumpTicks === 0) {
           const blockBelow = world.getBlock(entity.position.floored().offset(0, -0.5, 0));
           vel.y = Math.fround(0.42) * (blockBelow && blockBelow.type === this.honeyblockId ? PhysicsSettings.honeyblockJumpSpeed : 1);
@@ -774,20 +774,20 @@ export class EntityPhysics implements IPhysics {
         forward *= PhysicsSettings.usingItemSpeed;
         entity.state.control.sprint = false;
       }
-    }
 
-    entity.state.elytraFlying =
-      entity.state.elytraFlying && entity.state.elytraEquipped && !entity.state.onGround && !entity.state.levitation;
+      entity.state.elytraFlying =
+        entity.state.elytraFlying && entity.state.elytraEquipped && !entity.state.onGround && !entity.state.levitation;
 
-    if (entity.state.fireworkRocketDuration > 0) {
-      if (!entity.state.elytraFlying) {
-        entity.state.fireworkRocketDuration = 0;
-      } else {
-        const { lookDir } = getLookingVector(entity.state);
-        vel.x += lookDir.x * 0.1 + (lookDir.x * 1.5 - vel.x) * 0.5;
-        vel.y += lookDir.y * 0.1 + (lookDir.y * 1.5 - vel.y) * 0.5;
-        vel.z += lookDir.z * 0.1 + (lookDir.z * 1.5 - vel.z) * 0.5;
-        --entity.state.fireworkRocketDuration;
+      if (entity.state.fireworkRocketDuration > 0) {
+        if (!entity.state.elytraFlying) {
+          entity.state.fireworkRocketDuration = 0;
+        } else {
+          const { lookDir } = getLookingVector(entity.state);
+          vel.x += lookDir.x * 0.1 + (lookDir.x * 1.5 - vel.x) * 0.5;
+          vel.y += lookDir.y * 0.1 + (lookDir.y * 1.5 - vel.y) * 0.5;
+          vel.z += lookDir.z * 0.1 + (lookDir.z * 1.5 - vel.z) * 0.5;
+          --entity.state.fireworkRocketDuration;
+        }
       }
     }
 

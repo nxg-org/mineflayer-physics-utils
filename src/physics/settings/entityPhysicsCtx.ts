@@ -85,6 +85,7 @@ export class EPhysicsCtx {
         } else if (entityType.name.includes("spit")) {
             Object.assign(this, info.projectiles.default, info.projectiles.llama_spit);
         } else {
+            console.log(entityType.type)
             switch (entityType.type) {
                 case "water_creature":
                 case "animal":
@@ -99,10 +100,11 @@ export class EPhysicsCtx {
                         blockEffects: true,
                         affectedAfterCollision: true,
                     };
+                    break
                 case "projectile":
                     this.gravity = 0.03;
                     this.airdrag = Math.fround(1 - 0.01);
-                    this.airborneInertia = 0.99;
+                    this.airborneInertia = this.airdrag;
                     this.airborneAccel = 0.06;
                     this.waterInertia = 0.25;
                     this.lavaInertia = 0;
@@ -111,6 +113,11 @@ export class EPhysicsCtx {
                         blockEffects: false,
                         affectedAfterCollision: false,
                     };
+
+                    if ((info.projectiles as any)[entityType.name]) {
+                        Object.assign(this, (info.projectiles as any)[entityType.name]);
+                    }
+                    break
                 case "orb":
                     this.gravity = 0.03;
                     this.airdrag = Math.fround(1 - 0.02);
@@ -118,6 +125,7 @@ export class EPhysicsCtx {
                         blockEffects: false,
                         affectedAfterCollision: true,
                     };
+                    break
                 case "other":
                     if (entityType.name.includes("minecart") || entityType.name.includes("boat")) {
                         Object.assign(this, info.dead_vehicles.default, entityType.name === "boat" ? info.dead_vehicles.boat : undefined);

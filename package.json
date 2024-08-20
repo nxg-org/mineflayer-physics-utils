@@ -1,6 +1,6 @@
 {
     "name": "@nxg-org/mineflayer-physics-util",
-    "version": "1.5.6",
+    "version": "1.5.8",
     "description": "Provides functionality for more accurate entity and projectile tracking.",
     "keywords": [
         "mineflayer",
@@ -17,7 +17,7 @@
     "types": "dist/index.d.ts",
     "scripts": {
         "build": "npx tsc",
-        "prepublish": "npm run build",
+        "prepublishOnly": "npm run build",
         "test": "ts-node -T tests/fakeWorld.ts"
     },
     "dependencies": {
