@@ -537,6 +537,7 @@ export class EntityPhysics implements IPhysics {
     const acceleration = new Vec3(0, 0, 0);
     const waterBlocks = this.getWaterInBB(bb, world);
     const isInWater = waterBlocks.length > 0;
+
     for (const block of waterBlocks) {
       const flow = this.getFlow(block, world);
       acceleration.add(flow);

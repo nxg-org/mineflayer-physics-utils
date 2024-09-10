@@ -67,6 +67,9 @@ export class EPhysicsCtx {
     public readonly gravityThenDrag: boolean = false;
     public readonly useControls: boolean = false;
 
+    public doSolidCollisions: boolean = true;
+    public doLiquidCollisions: boolean = true;
+
     public readonly collisionBehavior: CollisionContext = {
         blockEffects: false,
         affectedAfterCollision: true,

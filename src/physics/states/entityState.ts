@@ -205,7 +205,7 @@ export class EntityState implements EntityStateBuilder {
             this.sneakCollision = false; //TODO
             this.attributes ||= entity.attributes;
 
-            this.elytraEquipped = entity.equipment[3] && entity.equipment[3]?.name.includes("elytra");
+            this.elytraEquipped = entity.equipment[4] && entity.equipment[4]?.name.includes("elytra");
         }
         this.pos = entity.position.clone();
 
@@ -391,14 +391,14 @@ export class EntityState implements EntityStateBuilder {
      * @returns AABB
      */
     public getAABB(): AABB {
-        const w = this.halfWidth;
+        const hW = this.halfWidth;
         return new AABB(
-            this.pos.x - w,
+            this.pos.x - hW,
             this.pos.y,
-            this.pos.z - w,
-            this.pos.x + w,
+            this.pos.z - hW,
+            this.pos.x + hW,
             this.pos.y + this.height,
-            this.pos.z + w
+            this.pos.z + hW
         );
     }
 
