@@ -206,6 +206,7 @@ export class EntityState implements EntityStateBuilder {
             this.attributes ||= entity.attributes;
 
             this.elytraEquipped = entity.equipment[4] && entity.equipment[4]?.name.includes("elytra");
+            this.elytraFlying = this.elytraEquipped && this.elytraFlying
         }
         this.pos = entity.position.clone();
 

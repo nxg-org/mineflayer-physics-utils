@@ -563,7 +563,42 @@ export class EntityPhysics implements IPhysics {
     const gravityMultiplier = vel.y <= 0 && entity.state.slowFalling > 0 ? PhysicsSettings.slowFalling : 1;
 
     // Unsure how to handle this w/ other entities.
-    if (!entity.state.isInWater && !entity.state.isInLava) {
+    // this is player-only.
+    if (entity.state.elytraFlying) {
+      const { pitch, sinPitch, cosPitch, lookDir } = getLookingVector(entity.state);
+      const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+      const cosPitchSquared = cosPitch * cosPitch;
+      vel.y += entity.gravity * gravityMultiplier * (-1.0 + cosPitchSquared * 0.75);
+      // cosPitch is in [0, 1], so cosPitch > 0.0 is just to protect against
+      // divide by zero errors
+      if (vel.y < 0.0 && cosPitch > 0.0) {
+        const movingDownSpeedModifier = vel.y * -0.1 * cosPitchSquared;
+        vel.x += (lookDir.x * movingDownSpeedModifier) / cosPitch;
+        vel.y += movingDownSpeedModifier;
+        vel.z += (lookDir.z * movingDownSpeedModifier) / cosPitch;
+      }
+
+      if (pitch < 0.0 && cosPitch > 0.0) {
+        const lookDownSpeedModifier = horizontalSpeed * -sinPitch * 0.04;
+        vel.x += (-lookDir.x * lookDownSpeedModifier) / cosPitch;
+        vel.y += lookDownSpeedModifier * 3.2;
+        vel.z += (-lookDir.z * lookDownSpeedModifier) / cosPitch;
+      }
+
+      if (cosPitch > 0.0) {
+        vel.x += ((lookDir.x / cosPitch) * horizontalSpeed - vel.x) * 0.1;
+        vel.z += ((lookDir.z / cosPitch) * horizontalSpeed - vel.z) * 0.1;
+      }
+
+      vel.x *= 0.99;
+      vel.y *= 0.98;
+      vel.z *= 0.99;
+      this.moveEntity(entity, vel.x, vel.y, vel.z,  world);
+
+      if (entity.state.onGround) {
+        entity.state.elytraFlying = false;
+      } 
+    } else if (!entity.state.isInWater && !entity.state.isInLava) {
       let acceleration = entity.airborneAccel;
       let dragOrFriction = entity.airborneInertia; // equivalent to drag in the air. It is not actually inertia. Bad name.
       const blockUnder = world.getBlock(pos.offset(0, -1, 0));
@@ -632,45 +667,7 @@ export class EntityPhysics implements IPhysics {
       
       vel.x *= dragOrFriction;
       vel.z *= dragOrFriction;
-    }
-
-
-
-    // this is player-only.
-    else if (entity.state.elytraFlying) {
-      const { pitch, sinPitch, cosPitch, lookDir } = getLookingVector(entity.state);
-      const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
-      const cosPitchSquared = cosPitch * cosPitch;
-      vel.y += entity.gravity * gravityMultiplier * (-1.0 + cosPitchSquared * 0.75);
-      // cosPitch is in [0, 1], so cosPitch > 0.0 is just to protect against
-      // divide by zero errors
-      if (vel.y < 0.0 && cosPitch > 0.0) {
-        const movingDownSpeedModifier = vel.y * -0.1 * cosPitchSquared;
-        vel.x += (lookDir.x * movingDownSpeedModifier) / cosPitch;
-        vel.y += movingDownSpeedModifier;
-        vel.z += (lookDir.z * movingDownSpeedModifier) / cosPitch;
-      }
-
-      if (pitch < 0.0 && cosPitch > 0.0) {
-        const lookDownSpeedModifier = horizontalSpeed * -sinPitch * 0.04;
-        vel.x += (-lookDir.x * lookDownSpeedModifier) / cosPitch;
-        vel.y += lookDownSpeedModifier * 3.2;
-        vel.z += (-lookDir.z * lookDownSpeedModifier) / cosPitch;
-      }
-
-      if (cosPitch > 0.0) {
-        vel.x += ((lookDir.x / cosPitch) * horizontalSpeed - vel.x) * 0.1;
-        vel.z += ((lookDir.z / cosPitch) * horizontalSpeed - vel.z) * 0.1;
-      }
-
-      vel.x *= 0.99;
-      vel.y *= 0.98;
-      vel.z *= 0.99;
-      this.moveEntity(entity, world, vel.x, vel.y, vel.z);
-
-      if (entity.state.onGround) {
-        entity.state.elytraFlying = false;
-      }
+  
     } else {
       // Water / Lava movement
       const lastY = pos.y;
