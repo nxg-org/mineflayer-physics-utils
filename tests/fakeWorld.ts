@@ -69,8 +69,23 @@ const playerCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, playerState, playerType
 
 // set control state.
 playerState.control = ControlStateHandler.DEFAULT(); // specific to players and mobs, specify control scheme to apply.
-playerState.control.forward = true;
 
+const orgGravity = playerCtx.worldSettings.gravity;
+// modify gravity to be 0.
+playerCtx.worldSettings.gravity = 0;
+
+for (let i = 0; i < 20; i++) {
+    physics.simulate(playerCtx, fakeWorld).applyToBot(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
+    // console.log(fakePlayer.entity.position, fakePlayer.entity.velocity);
+}
+
+expect(fakePlayer.entity.position).toEqual(new Vec3(0, groundLevel + 20, 0)); // it works.
+
+// now, reset gravity.
+playerCtx.worldSettings.gravity = orgGravity;
+
+// set control for forward movement test.
+playerState.control.forward = true;
 
 // simulate until on ground.
 while (!playerCtx.state.onGround) {
@@ -95,6 +110,7 @@ if (playerState.control.forward) {
 } else {
     expect(fakePlayer.entity.position).toEqual(new Vec3(0, groundLevel, 0)); // it works.
 }
+
 
 
 console.log(fakePlayer.entity.position); //manual run.
