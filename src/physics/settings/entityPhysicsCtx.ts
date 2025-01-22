@@ -9,7 +9,7 @@ import { EntityState } from "../states/entityState";
 import { PlayerPoses } from "../states/poses";
 
 import info from "../info/entity_physics.json";
-import { PhysicsSettings } from "./physicsSettings";
+import { PhysicsWorldSettings } from "./physicsSettings";
 
 function getPose(entity: Entity) {
     const pose = entity.metadata.find((e) => (e as any)?.type === 18);
@@ -55,8 +55,6 @@ export class EPhysicsCtx {
     public readonly velocity: Vec3;
 
     public readonly stepHeight: number = 0;
-
-    public readonly gravity: number = 0.0;
     public readonly waterGravity: number;
     public readonly lavaGravity: number;
 
@@ -79,9 +77,18 @@ export class EPhysicsCtx {
         affectedAfterCollision: true,
     };
 
+    // since this can dynamically change, this needs to be accessed via the passed-in settings object.
+    public get gravity(): number {
+        return this.worldSettings.gravity;
+    }
+
+    public set gravity(value: number) {
+        this.worldSettings.gravity = value;
+    }
+
     constructor(
         public readonly ctx: IPhysics, 
-        public readonly settings: PhysicsSettings, 
+        public readonly worldSettings: PhysicsWorldSettings, 
         public pose: PlayerPoses, 
         public readonly state: EntityState, 
         public readonly entityType: md.Entity = DefaultPlayer
@@ -181,30 +188,30 @@ export class EPhysicsCtx {
         }
     }
 
-    public static FROM_BOT(ctx: IPhysics, bot: Bot, settings?: PhysicsSettings) {
-        settings ??= new PhysicsSettings(bot.registry);
+    public static FROM_BOT(ctx: IPhysics, bot: Bot, settings?: PhysicsWorldSettings) {
+        settings ??= new PhysicsWorldSettings(bot.registry);
         return new EPhysicsCtx(ctx, settings, getPose(bot.entity), EntityState.CREATE_FROM_BOT(ctx, bot));
     }
 
-    public static FROM_ENTITY(ctx: IPhysics, entity: Entity, settings?: PhysicsSettings) {
-        settings ??= new PhysicsSettings(ctx.data);
+    public static FROM_ENTITY(ctx: IPhysics, entity: Entity, settings?: PhysicsWorldSettings) {
+        settings ??= new PhysicsWorldSettings(ctx.data);
         return new EPhysicsCtx(ctx,settings, getPose(entity), EntityState.CREATE_FROM_ENTITY(ctx, entity), EPhysicsCtx.entityData[entity.name!]);
     }
 
-    public static FROM_ENTITY_TYPE(ctx: IPhysics, entityType: md.Entity, options: Partial<Entity> = {}, settings?: PhysicsSettings) {
+    public static FROM_ENTITY_TYPE(ctx: IPhysics, entityType: md.Entity, options: Partial<Entity> = {}, settings?: PhysicsWorldSettings) {
         // unneeded for most entities, use a default.
-        settings ??= new PhysicsSettings(ctx.data);
+        settings ??= new PhysicsWorldSettings(ctx.data);
         const newE = applyMdToNewEntity(EPhysicsCtx, entityType, options);
         return new EPhysicsCtx(ctx, settings, PlayerPoses.STANDING, EntityState.CREATE_FROM_ENTITY(ctx, newE), entityType);
     }
 
-    public static FROM_ENTITY_STATE(ctx: IPhysics, entityState: EntityState, entityType?: md.Entity, settings?: PhysicsSettings) {
-        settings ??= new PhysicsSettings(ctx.data);
+    public static FROM_ENTITY_STATE(ctx: IPhysics, entityState: EntityState, entityType?: md.Entity, settings?: PhysicsWorldSettings) {
+        settings ??= new PhysicsWorldSettings(ctx.data);
         return new EPhysicsCtx(ctx, settings, entityState.pose, entityState, entityType);
     }
 
     public clone() {
-        return new EPhysicsCtx(this.ctx, this.settings, this.state.pose, this.state.clone(), this.entityType);
+        return new EPhysicsCtx(this.ctx, this.worldSettings, this.state.pose, this.state.clone(), this.entityType);
     }
 
     public get height(): number {

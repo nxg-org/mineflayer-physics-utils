@@ -1,6 +1,6 @@
 
 import { EntityPhysics, IPhysics } from "./physics/engines";
-import { EPhysicsCtx, PhysicsSettings } from "./physics/settings";
+import { EPhysicsCtx, PhysicsWorldSettings } from "./physics/settings";
 import { BaseSimulator, BasicSim } from "./simulators";
 import { Vec3 } from "vec3";
 

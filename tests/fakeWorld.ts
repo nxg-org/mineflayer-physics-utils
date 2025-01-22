@@ -2,7 +2,7 @@ import type { Entity } from "prismarine-entity";
 import type { Effect } from "mineflayer";
 import { EntityPhysics } from "../src/physics/engines";
 import { EntityState } from "../src/physics/states";
-import { EPhysicsCtx, PhysicsSettings } from "../src/physics/settings";
+import { EPhysicsCtx, PhysicsWorldSettings } from "../src/physics/settings";
 import { applyMdToNewEntity } from "../src/util/physicsUtils";
 import { ControlStateHandler } from "../src/physics/player";
 import { Vec3 } from "vec3";
