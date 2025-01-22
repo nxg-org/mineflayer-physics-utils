@@ -5,16 +5,14 @@ import entityLoader, { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
 import { applyMdToNewEntity, DefaultPlayer } from "../../util/physicsUtils";
 import { IPhysics } from "../engines/IPhysics";
-import { EntityState } from "../states/entityState";
-import { PlayerPoses } from "../states/poses";
+import { EntityState, IEntityState } from "../states/entityState";
+import { playerPoseCtx, PlayerPoses } from "../states/poses";
 
 import info from "../info/entity_physics.json";
 import { PhysicsWorldSettings } from "./physicsSettings";
+import { getPose, PlayerState } from "../states";
 
-function getPose(entity: Entity) {
-    const pose = entity.metadata.find((e) => (e as any)?.type === 18);
-    return pose ? ((pose as any).value as number) : PlayerPoses.STANDING;
-}
+
 
 function load(data: md.IndexedData) {
     EPhysicsCtx.mcData = data;
@@ -25,7 +23,6 @@ function load(data: md.IndexedData) {
 
 export const emptyVec = new Vec3(0, 0, 0);
 
-type PlayerPoseContext = { [key in PlayerPoses]: { width: number; height: number } };
 type CollisionContext = { blockEffects: boolean; affectedAfterCollision: boolean };
 export class EPhysicsCtx {
     public static loadData: (data: md.IndexedData) => void = load;
@@ -37,19 +34,6 @@ export class EPhysicsCtx {
 
     // public static globalSettings = PhysicsSettings
 
-    /**
-     * From minecraft's Player.java file.
-     */
-    public static readonly playerPoseContext: PlayerPoseContext = {
-        0: { width: 0.6, height: 1.8 },
-        1: { width: 0.2, height: 0.2 },
-        2: { width: 0.6, height: 0.6 },
-        3: { width: 0.6, height: 0.6 },
-        4: { width: 0.6, height: 0.6 },
-        5: { width: 0.6, height: 0.6 },
-        6: { width: 0.6, height: 1.5 },
-        7: { width: 0.2, height: 0.2 },
-    };
 
     public readonly position: Vec3;
     public readonly velocity: Vec3;
@@ -82,7 +66,7 @@ export class EPhysicsCtx {
         public readonly ctx: IPhysics, 
         public readonly worldSettings: PhysicsWorldSettings, 
         public pose: PlayerPoses, 
-        public readonly state: EntityState, 
+        public readonly state: IEntityState, 
         public readonly entityType: md.Entity = DefaultPlayer
     ) {
         this.position = state.pos;
@@ -182,7 +166,7 @@ export class EPhysicsCtx {
 
     public static FROM_BOT(ctx: IPhysics, bot: Bot, settings?: PhysicsWorldSettings) {
         settings ??= new PhysicsWorldSettings(bot.registry);
-        return new EPhysicsCtx(ctx, settings, getPose(bot.entity), EntityState.CREATE_FROM_BOT(ctx, bot));
+        return new EPhysicsCtx(ctx, settings, getPose(bot.entity), new PlayerState(ctx, bot));
     }
 
     public static FROM_ENTITY(ctx: IPhysics, entity: Entity, settings?: PhysicsWorldSettings) {
@@ -197,7 +181,7 @@ export class EPhysicsCtx {
         return new EPhysicsCtx(ctx, settings, PlayerPoses.STANDING, EntityState.CREATE_FROM_ENTITY(ctx, newE), entityType);
     }
 
-    public static FROM_ENTITY_STATE(ctx: IPhysics, entityState: EntityState, entityType?: md.Entity, settings?: PhysicsWorldSettings) {
+    public static FROM_ENTITY_STATE(ctx: IPhysics, entityState: IEntityState, entityType?: md.Entity, settings?: PhysicsWorldSettings) {
         settings ??= new PhysicsWorldSettings(ctx.data);
         return new EPhysicsCtx(ctx, settings, entityState.pose, entityState, entityType);
     }
@@ -208,14 +192,14 @@ export class EPhysicsCtx {
 
     public get height(): number {
         if (this.entityType.type === "player") {
-            return EPhysicsCtx.playerPoseContext[this.pose ?? 0].height;
+            return playerPoseCtx[this.pose ?? 0].height;
         }
         return this.entityType.height ?? 0;
     }
 
     public get width(): number {
         if (this.entityType.type === "player") {
-            return EPhysicsCtx.playerPoseContext[this.pose ?? 0].width;
+            return playerPoseCtx[this.pose ?? 0].width;
         }
         return this.entityType.width ?? 0;
     }
@@ -258,20 +242,5 @@ export class EPhysicsCtx {
             position.y + (this.entityType.height ?? 0),
             position.z + halfWidth
         );
-    }
-
-    public updateFromBot(bot: Bot) {
-        this.state.updateFromBot(bot);
-        this.pose = getPose(bot.entity);
-
-        switch (bot.game.gameMode) {
-            case "survival":
-            case "creative":
-            case "adventure":
-            case "spectator":
-        }
-        
-        
-
     }
 }

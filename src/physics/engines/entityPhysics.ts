@@ -14,8 +14,9 @@ import {
 import * as attributes from "../info/attributes";
 import * as math from "../info/math";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
-import { EntityState } from "../states/entityState";
+import { EntityState, IEntityState } from "../states/entityState";
 import { IPhysics } from "./IPhysics";
+import { PlayerState } from "../states";
 
 type CheapEffectNames = keyof ReturnType<typeof getStatusEffectNamesForVersion>;
 type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersion>;
@@ -709,7 +710,7 @@ export class EntityPhysics implements IPhysics {
     }
   }
 
-  simulate(entity: EPhysicsCtx, world: any /*prismarine-world*/): EntityState {
+  simulate(entity: EPhysicsCtx, world: any /*prismarine-world*/): IEntityState {
     if (!this.shouldMoveEntity(entity)) {
       entity.velocity.set(0, 0, 0);
       return entity.state;
@@ -736,6 +737,7 @@ export class EntityPhysics implements IPhysics {
     let forward = 0;
     // Handle inputs
     if (entity.useControls) {
+      // we assume player.
       if (entity.state.control.jump || entity.state.jumpQueued) {
         if (entity.state.jumpTicks > 0) entity.state.jumpTicks--;
         if (entity.state.isInWater || entity.state.isInLava) {
@@ -776,17 +778,21 @@ export class EntityPhysics implements IPhysics {
       entity.state.elytraFlying =
         entity.state.elytraFlying && entity.state.elytraEquipped && !entity.state.onGround && !entity.state.levitation;
 
-      if (entity.state.fireworkRocketDuration > 0) {
-        if (!entity.state.elytraFlying) {
-          entity.state.fireworkRocketDuration = 0;
-        } else {
-          const { lookDir } = getLookingVector(entity.state);
-          vel.x += lookDir.x * 0.1 + (lookDir.x * 1.5 - vel.x) * 0.5;
-          vel.y += lookDir.y * 0.1 + (lookDir.y * 1.5 - vel.y) * 0.5;
-          vel.z += lookDir.z * 0.1 + (lookDir.z * 1.5 - vel.z) * 0.5;
-          --entity.state.fireworkRocketDuration;
+      // for now, only check if this is a player.
+      if (entity.state instanceof PlayerState) {
+        if (entity.state.fireworkRocketDuration > 0) {
+          if (!entity.state.elytraFlying) {
+            entity.state.fireworkRocketDuration = 0;
+          } else {
+            const { lookDir } = getLookingVector(entity.state);
+            vel.x += lookDir.x * 0.1 + (lookDir.x * 1.5 - vel.x) * 0.5;
+            vel.y += lookDir.y * 0.1 + (lookDir.y * 1.5 - vel.y) * 0.5;
+            vel.z += lookDir.z * 0.1 + (lookDir.z * 1.5 - vel.z) * 0.5;
+            --entity.state.fireworkRocketDuration;
+          }
         }
       }
+      
     }
 
     this.moveEntityWithHeading(entity, strafe, forward, world);

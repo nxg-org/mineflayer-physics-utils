@@ -14,11 +14,14 @@ import {
 import * as attributes from "../info/attributes";
 import * as math from "../info/math";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
-import { EntityState } from "../states/entityState";
+import { EntityState, IEntityState } from "../states/entityState";
 import { IPhysics } from "./IPhysics";
+import { PlayerPoses, PlayerState, getCollider } from "../states";
 
 type CheapEffectNames = keyof ReturnType<typeof getStatusEffectNamesForVersion>;
 type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersion>;
+
+type Heading = { forward: number; strafe: number };
 
 /**
  * Looking at this code, it's too specified towards players.
@@ -148,9 +151,6 @@ export class BotcraftPhysics implements IPhysics {
     return surroundingBBs;
   }
 
-
-
-
   getEffectLevel(wantedEffect: CheapEffects, effects: Effect[]) {
     const effectDescriptor = this.data.effectsByName[this.statusEffectNames[wantedEffect]];
     if (!effectDescriptor) {
@@ -182,21 +182,179 @@ export class BotcraftPhysics implements IPhysics {
     return 0;
   }
 
-
   private verGreaterThan(ver: string) {
     return this.data.version[">"](ver);
   }
 
-
-
-  private physicsTick(entity: EPhysicsCtx, world: any /*prismarine-world*/) {
-    // Check for rocket boosting if currently in elytra flying mode
+  private verLessThan(ver: string) {
+    return this.data.version["<"](ver);
   }
 
+  private worldIsFree(world: any /* prismarine-world */, bb: AABB, ignoreLiquid: boolean) {
+    return this.getSurroundingBBs(bb, world).length === 0;
+  }
 
+  /**
+   * 1:1 copy of the original physicsTick function from botcraft
+   * https://github.com/adepierre/Botcraft/blob/6c572071b0237c27a85211a246ce10565ef4d80f/botcraft/src/Game/Physics/PhysicsManager.cpp#L277
+   *
+   *
+   * @param ectx
+   * @param world
+   */
+  private physicsTick(ectx: EPhysicsCtx, world: any /*prismarine-world*/) {
+    // Check for rocket boosting if currently in elytra flying mode
+    if (ectx.state.elytraFlying) {
+      // TODO: entity check for fireworks
+      // TODO: check if firework is attached to player
+      if (false) {
+        // player->speed += player->front_vector * 0.1 + (player->front_vector * 1.5 - player->speed) * 0.5;
+      }
+    }
 
+    const playerFlag = ectx.entityType.type === "player";
+
+    // if world is currently loaded at player position
+    if (playerFlag) {
+      // TODO: check if spectator mode
+    }
+
+    this.fluidPhysics(true);
+    this.fluidPhysics(false);
+    this.updateSwimming();
+
+    // separation into a new function
+    // originally: https://github.com/adepierre/Botcraft/blob/6c572071b0237c27a85211a246ce10565ef4d80f/botcraft/src/Game/Physics/PhysicsManager.cpp#L325
+    if (playerFlag) {
+      this.localPlayerAIStep(ectx.state as PlayerState, world);
+    }
+
+    // If sneaking in water, add downward speed
+    if ()
+  }
+
+  private fluidPhysics(val: boolean) {}
+
+  private updateSwimming() {}
+
+  private isFallFlying(pState: PlayerState): boolean {
+    return pState.flying && pState.pose === PlayerPoses.FALL_FLYING;
+  }
+
+  private localPlayerAIStep(pState: PlayerState, world: any /*prismarine-world*/) {
+    const heading = this.convInpToAxes(pState);
+    this.inputsToCrouch(pState, heading, world);
+    this.inputsToSprint(pState, heading, world);
+    this.inputsToFly(pState, heading, world);
+
+    // If sneaking in water, add downward speed
+    if (pState.isInWater && pState.control.sneak /* TODO: flying check */) {
+    }
+  }
+
+  private inputsToCrouch(pState: PlayerState, heading: Heading, world: any /*prismarine-world*/) {
+    if (this.verGreaterThan("1.13.2")) {
+      const sneakBb = getCollider(PlayerPoses.SNEAKING, pState.pos);
+      const standBb = getCollider(PlayerPoses.STANDING, pState.pos);
+      sneakBb.expand(-1e-7, -1e-7, -1e-7);
+      standBb.expand(-1e-7, -1e-7, -1e-7);
+
+      pState.crouching =
+        !this.isSwimmingAndNotFlying(pState, world) &&
+        this.worldIsFree(world, sneakBb, false) &&
+         ( pState.prevControl.sneak || !this.worldIsFree(world, standBb, false));
+    } else {
+      pState.crouching = !this.isSwimmingAndNotFlying(pState, world) && pState.prevControl.sneak
+    }
+
+    // Determine if moving slowly
+    let isMovingSlowly: boolean;
+    if (this.verGreaterThan("1.13.2")) {
+      isMovingSlowly = pState.crouching || (pState.pose === PlayerPoses.SWIMMING && !pState.isInWater);
+    } else {
+      isMovingSlowly = pState.crouching;
+    }
+
+    // Handle post-1.21.3 sprinting conditions
+    if (this.verGreaterThan("1.21.3")) {
+      // TODO: just use stored blindness effect.
+      const hasBlindness = this.getEffectLevel(CheapEffects.BLINDNESS, pState.effects) > 0;
+
+      // Stop sprinting when crouching fix in 1.21.4+
+      if (this.isFallFlying(pState) || hasBlindness || isMovingSlowly) {
+        this.setSprinting(false);
+      }
+    }
+
+    // Apply slow down to player inputs when moving slowly
+    if (isMovingSlowly) {
+      let sneakCoefficient: number;
+
+      if (this.verLessThan("1.19")) {
+        sneakCoefficient = 0.3;
+      } else if (this.verLessThan("1.21")) {
+        sneakCoefficient = 0.3 + pState.swiftSneak * 0.15;
+        sneakCoefficient = Math.min(Math.max(0.0, sneakCoefficient), 1.0);
+      } else {
+        sneakCoefficient = pState.attributes?.sneakingSpeed.value ?? 0.3;
+      }
+
+      heading.forward *= sneakCoefficient;
+      heading.strafe *= sneakCoefficient;
+    }
+  }
+
+  private isSwimmingAndNotFlying(pState: PlayerState, world: any /*prismarine-world*/): boolean {
+    //  return !player->flying &&
+    // player->game_mode != GameType::Spectator &&
+    // player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::Swimming);
+    return !pState.flying && pState.gameMode !== "spectator" && pState.swimming;
+  }
+
+  private inputsToSprint(pState: PlayerState, heading: Heading, world: any /*prismarine-world*/) {
+    const canStartSprinting =
+      /* !player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::Sprinting) */ true &&
+      heading.forward >= (pState.isInWater ? 1e-5 : 0.8) &&
+      /* player->may_fly || */ pState.food > 6 &&
+      !this.isFallFlying(pState) &&
+      !pState.blindness;
+
+    // TODO: keep track of previous movement values?
+    const couldSprintPrevious = true; /*  player->previous_forward >= (player->under_water ? 1e-5f : 0.8f); */
+
+    // start sprinting if possible
+    if (
+      canStartSprinting &&
+      pState.control.sprint &&
+      (!pState.isInWater /*|| pState.isUnderWater*/ ||
+        pState.onGround /* || pState.isUnderWater*/) /* && !player->previous_sneak &&  !couldSprintPrevious */
+    ) {
+      this.setSprinting(true);
+    }
+
+    // stop sprinting if necessary
+    if (/* pState.sprinting */ false) {
+      const stopSprintCond = heading.forward <= 1e-5 || pState.food <= 6 /* && player->may_fly */;
+      if (this.isSwimmingAndNotFlying(pState, world)) {
+        if ((!pState.onGround && !pState.control.sneak && stopSprintCond) || !pState.isInWater) {
+          this.setSprinting(false);
+        }
+      } else if (stopSprintCond /* || player->horizontal_collision */ || pState.isInWater /* && !player.isUnderWater */) {
+        this.setSprinting(false);
+      }
+    }
+  }
+
+  setSprinting(value: boolean) {
+    throw new Error("Method not implemented.");
+  }
+
+  private inputsToFly(pState: PlayerState, heading: Heading, world: any /*prismarine-world*/) {
+    let flyChanged = false;
+    if (pState.m)
+  }
 
   simulate(entity: EPhysicsCtx, world: any /*prismarine-world*/): EntityState {
-    return entity.state
+    return entity.state;
   }
 }

@@ -13,38 +13,48 @@ import nbt from "prismarine-nbt";
 import {Entity} from "prismarine-entity";
 
 
-export interface EntityStateBuilder {
+export interface IEntityState {
+    age: number;
     height: number;
     halfWidth: number;
     pos: Vec3;
     vel: Vec3;
     pitch: number;
     yaw: number;
+    pose: PlayerPoses;
     control: ControlStateHandler;
     onGround: boolean;
-    isUsingItem?: boolean;
-    isInWater?: boolean;
-    isInLava?: boolean;
-    isInWeb?: boolean;
-    elytraFlying?: boolean;
-    elytraEquipped?: boolean;
-    fireworkRocketDuration?: number;
-    sneakCollision?: boolean;
-    isCollidedHorizontally?: boolean;
-    isCollidedVertically?: boolean;
 
-    effects?: Effect[];
-    jumpBoost?: number;
-    speed?: number;
-    slowness?: number;
-    dolphinsGrace?: number;
-    slowFalling?: number;
-    levitation?: number;
-    depthStrider?: number;
+    attributes: Entity["attributes"];
+
+    isUsingItem: boolean;
+    isInWater: boolean;
+    isInLava: boolean;
+    isInWeb: boolean;
+    elytraFlying: boolean;
+    elytraEquipped: boolean;
+    fireworkRocketDuration: number;
+    sneakCollision: boolean;
+    isCollidedHorizontally: boolean;
+    isCollidedVertically: boolean;
+
+    effects: Effect[];
+    jumpBoost: number;
+    speed: number;
+    slowness: number;
+    dolphinsGrace: number;
+    slowFalling: number;
+    levitation: number;
+    depthStrider: number;
+
+    jumpTicks: number;
+    jumpQueued: boolean;
+
+    clone(): IEntityState;
 }
 
 const emptyVec = new Vec3(0, 0, 0);
-export class EntityState implements EntityStateBuilder {
+export class EntityState implements IEntityState {
     // may keep this, may not. Who knows?
     public age: number = 0;
 
@@ -177,7 +187,7 @@ export class EntityState implements EntityStateBuilder {
      * @param raw CONSUMEABLE, build this with clones.
      * @returns PhysicsState
      */
-    public static CREATE_RAW(ctx: IPhysics, raw: EntityStateBuilder) {
+    public static CREATE_RAW(ctx: IPhysics, raw: IEntityState) {
         return new EntityState(ctx, raw.height, raw.halfWidth, raw.pos, raw.vel, raw.onGround, raw.yaw, raw.pitch, raw.control);
     }
 
@@ -250,7 +260,7 @@ export class EntityState implements EntityStateBuilder {
         return this;
     }
 
-    public updateFromRaw(other: EntityStateBuilder) {
+    public updateFromRaw(other: IEntityState) {
         this.onGround = other.onGround ?? this.onGround;
         this.sneakCollision = other.sneakCollision ?? this.sneakCollision;
         this.isUsingItem = other.isUsingItem ?? this.isUsingItem;

@@ -1,4 +1,4 @@
-import { Bot, ControlState, ControlStateStatus, Effect } from "mineflayer";
+import { Bot, ControlState, ControlStateStatus, Effect, GameMode } from "mineflayer";
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import * as nbt from "prismarine-nbt";
 import { Vec3 } from "vec3";
@@ -14,9 +14,11 @@ import {
 // import { bot.entity } from "prismarine-entity";
 import md from "minecraft-data";
 import { ControlStateHandler } from "../player/playerControls";
-import { EntityStateBuilder } from "./entityState";
+import { IEntityState } from "./entityState";
 import { IPhysics } from "../engines/IPhysics";
 import type { Entity } from "prismarine-entity";
+import { PlayerPoses } from "./poses";
+import { getPose } from ".";
 
 
 
@@ -73,13 +75,15 @@ export class EntityDimensions {
  *
  * I will eventually split this code into PlayerState and bot.entityState, where bot.entityState contains fewer controls.
  */
-export class PlayerState implements EntityStateBuilder {
+export class PlayerState implements IEntityState {
     public readonly bot: Bot; // needed to clone.
+    public age: number = 0;
     public height: number = 1.8;
     public eyeHeight: number = 1.62;
     public halfWidth: number = 0.3;
     public pos: Vec3;
     public vel: Vec3;
+
     public onGround: boolean;
     public isInWater: boolean;
     public isInLava: boolean;
@@ -92,12 +96,27 @@ export class PlayerState implements EntityStateBuilder {
     public jumpTicks: number;
     public jumpQueued: boolean;
 
+    /**
+     * TODO: proper impl.
+     */
+    public flying: boolean;
+
+    /**
+     * TODO: proper impl.
+     */
+    public swimming: boolean;
+
+    public sprinting: boolean;
+    public crouching: boolean;
+
+
     public sneakCollision: boolean;
 
     public attributes: Entity["attributes"] /* dunno yet */;
     public yaw: number;
     public pitch: number;
     public control: ControlStateHandler;
+    public prevControl: ControlStateHandler;
 
     public isUsingItem: boolean;
     public isUsingMainHand: boolean;
@@ -110,9 +129,18 @@ export class PlayerState implements EntityStateBuilder {
     public slowFalling: number;
     public levitation: number;
     public depthStrider: number;
+    public swiftSneak: number;
+    public blindness: number;
 
     public effects: Effect[];
     public statusEffectNames;
+
+    public pose: PlayerPoses;
+    public gameMode: GameMode;
+
+    public food: number;
+
+
 
     public readonly ctx: IPhysics;
     private readonly supportFeature: ReturnType<typeof makeSupportFeature>;
@@ -143,6 +171,7 @@ export class PlayerState implements EntityStateBuilder {
         this.yaw = bot.entity.yaw;
         this.pitch = bot.entity.pitch;
         this.control = control ?? ControlStateHandler.DEFAULT();
+        this.prevControl = ControlStateHandler.DEFAULT();
 
         this.isUsingItem = isEntityUsingItem(bot.entity, this.ctx.supportFeature);
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
@@ -159,6 +188,8 @@ export class PlayerState implements EntityStateBuilder {
         this.dolphinsGrace = this.ctx.getEffectLevel(CheapEffects.DOLPHINS_GRACE, this.effects);
         this.slowFalling = this.ctx.getEffectLevel(CheapEffects.SLOW_FALLING, this.effects);
         this.levitation = this.ctx.getEffectLevel(CheapEffects.LEVITATION, this.effects);
+
+        this.blindness = this.ctx.getEffectLevel(CheapEffects.BLINDNESS, this.effects);
 
         
         // this.jumpBoost = ctx.getEffectLevel(this.statusEffectNames.jumpBoostEffectName, this.effects);
@@ -179,13 +210,33 @@ export class PlayerState implements EntityStateBuilder {
         } else {
             this.depthStrider = 0;
         }
+
+        const leggings = bot.entity.equipment[3];
+        if (leggings && leggings.nbt) {
+            const simplifiedNbt = nbt.simplify(leggings.nbt);
+            const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
+            this.swiftSneak = this.ctx.getEnchantmentLevel(CheapEnchantments.SWIFT_SNEAK, enchantments);
+        } else {
+            this.swiftSneak = 0;
+        }
+
+        this.pose = PlayerPoses.STANDING;
+        this.gameMode = bot.game.gameMode;
+
+        this.food = bot.food;
+
+        // TODO: impl
+        this.flying = false;
+        this.swimming = false;
+        this.sprinting = false;
+        this.crouching = false;
     }
 
     public update(bot: Bot, control?: ControlStateHandler): PlayerState {
         // const bot.entity = bot instanceof bot.entity ? bot : bot.entity;
         // Input / Outputs
-        this.pos = bot.entity.position.clone();
-        this.vel = bot.entity.velocity.clone();
+        this.pos.set(bot.entity.position.x, bot.entity.position.y, bot.entity.position.z);
+        this.vel.set(bot.entity.velocity.x, bot.entity.velocity.y, bot.entity.velocity.z);
         this.onGround = bot.entity.onGround;
         this.isInWater = (bot.entity as any).isInWater;
         this.isInLava = (bot.entity as any).isInLava;
@@ -204,7 +255,7 @@ export class PlayerState implements EntityStateBuilder {
         this.attributes = bot.entity.attributes;
         this.yaw = bot.entity.yaw;
         this.pitch = bot.entity.pitch;
-        this.control = control ?? this.control;
+        this.control = control ?? this.control; // prevControl only updated internally.
 
         this.isUsingItem = isEntityUsingItem(bot.entity, this.ctx.supportFeature);
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
@@ -233,13 +284,33 @@ export class PlayerState implements EntityStateBuilder {
             this.depthStrider = 0;
         }
 
+        const leggings = bot.entity.equipment[3];
+        if (leggings && leggings.nbt) {
+            const simplifiedNbt = nbt.simplify(leggings.nbt);
+            const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
+            this.swiftSneak = this.ctx.getEnchantmentLevel(CheapEnchantments.SWIFT_SNEAK, enchantments);
+        } else {
+            this.swiftSneak = 0;
+        }
+
+        this.pose = getPose(bot.entity);
+        this.gameMode = bot.game.gameMode;
+
+        // TODO:
+        this.flying = false;
+        this.swimming = false;
+        this.sprinting = false;
+        this.crouching = false;
+
+        this.food = bot.food;
+
         return this;
     }
 
     public apply(bot: Bot): void {
         // const bot.entity = bot instanceof bot.entity ? bot : bot.entity;
-        bot.entity.position = this.pos;
-        bot.entity.velocity = this.vel;
+        bot.entity.position.set(this.pos.x, this.pos.y, this.pos.z);
+        bot.entity.velocity.set(this.vel.x, this.vel.y, this.vel.z);
         bot.entity.onGround = this.onGround;
         (bot.entity as any).isInWater = this.isInWater;
         (bot.entity as any).isInLava = this.isInLava;
@@ -255,13 +326,18 @@ export class PlayerState implements EntityStateBuilder {
         (bot as any).jumpQueued = this.jumpQueued;
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;
+
+        Object.assign(bot.entity, this.pose)
+        bot.game.gameMode = this.gameMode; // this should never actually be in charge.
+        bot.food = this.food; // this should also never actually be in charge.
+
         this.control.applyControls(bot);
     }
 
     public clone() {
         const tmp = new PlayerState(this.ctx, this.bot, this.control);
-        tmp.pos = this.pos.clone();
-        tmp.vel = this.vel.clone();
+        tmp.pos.set(this.pos.x, this.pos.y, this.pos.z);
+        tmp.vel.set(this.vel.x, this.vel.y, this.vel.z);
         tmp.onGround = this.onGround;
         tmp.isInWater = this.isInWater;
         tmp.isInLava = this.isInLava;
@@ -281,7 +357,8 @@ export class PlayerState implements EntityStateBuilder {
         tmp.attributes = this.attributes;
         tmp.yaw = this.yaw;
         tmp.pitch = this.pitch;
-        tmp.control = this.control;
+        tmp.control = this.control.clone();
+        tmp.prevControl = this.prevControl.clone();
 
         tmp.isUsingItem = this.isUsingItem;
         tmp.isUsingMainHand = this.isUsingMainHand;
@@ -299,13 +376,25 @@ export class PlayerState implements EntityStateBuilder {
         tmp.slowFalling = this.slowFalling;
         tmp.levitation = this.levitation;
         tmp.depthStrider = this.depthStrider;
+
+        tmp.pose = this.pose;
+        tmp.gameMode = this.gameMode;
+
+        tmp.flying = this.flying;
+        tmp.swimming = this.swimming;
+        tmp.sprinting = this.sprinting;
+        tmp.crouching = this.crouching;
+
+        tmp.food = this.food;
+
+
         return tmp;
     }
 
 
     public merge(other: PlayerState) {
-        this.pos = other.pos.clone();
-        this.vel = other.vel.clone();
+        this.pos.set(other.pos.x, other.pos.y, other.pos.z);
+        this.vel.set(other.vel.x, other.vel.y, other.vel.z);
         this.onGround = other.onGround;
         this.isInWater = other.isInWater;
         this.isInLava = other.isInLava;
@@ -343,6 +432,17 @@ export class PlayerState implements EntityStateBuilder {
         this.slowFalling = other.slowFalling;
         this.levitation = other.levitation;
         this.depthStrider = other.depthStrider;
+
+        this.pose = other.pose;
+        this.gameMode = other.gameMode;
+
+        this.flying = other.flying;
+        this.swimming = other.swimming;
+        this.sprinting = other.sprinting;
+        this.crouching = other.crouching;
+
+        this.food = other.food;
+
         return this;
 
     }
@@ -365,7 +465,7 @@ export class PlayerState implements EntityStateBuilder {
     }
 
     
-    public getUnderlyingBlockBBs(world:any /*prismarine-world*/) {
+    public getUnderlyingBlockBBs(world:any /*prismarine-world*/): AABB[] {
         const queryBB = this.getAABB();
         return this.ctx.getUnderlyingBlockBBs(queryBB, world)
     }

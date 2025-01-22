@@ -3,7 +3,7 @@ import { EPhysicsCtx } from "../physics/settings";
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import features from "../physics/info/features.json";
 import md from "minecraft-data";
-import { EntityState } from "../physics/states";
+import { EntityState, IEntityState } from "../physics/states";
 import { Vec3 } from "vec3";
 
 export function makeSupportFeature(mcData: md.IndexedData) {
@@ -44,10 +44,12 @@ export enum CheapEffects {
     DOLPHINS_GRACE,
     SLOW_FALLING,
     LEVITATION,
+    BLINDNESS
 }
 
 export enum CheapEnchantments {
     DEPTH_STRIDER,
+    SWIFT_SNEAK
 }
 
 function getMetadataIndex(supportFeature: SupportFeature) {
@@ -76,6 +78,8 @@ export function getStatusEffectNamesForVersion(supportFeature: SupportFeature) {
             dolphinsGraceEffectName: "DolphinsGrace",
             slowFallingEffectName: "SlowFalling",
             levitationEffectName: "Levitation",
+            blindnessEffectName: "Blindnesss"
+
         };
     } else {
         return {
@@ -85,6 +89,7 @@ export function getStatusEffectNamesForVersion(supportFeature: SupportFeature) {
             dolphinsGraceEffectName: "DolphinsGrace",
             slowFallingEffectName: "SlowFalling",
             levitationEffectName: "Levitation",
+            blindnessEffectName: "Blindnesss"
         };
     }
 }
@@ -93,6 +98,7 @@ export function getStatusEffectNamesForVersion(supportFeature: SupportFeature) {
 export function getEnchantmentNamesForVersion(supportFeature: ReturnType<typeof makeSupportFeature>) {
     return {
         depthStriderEnchantmentName: "depth_strider",
+        swiftSneakEnchantmentName: "swift_sneak"
     };
 }
 
@@ -129,7 +135,7 @@ export function getBetweenRectangle(src: AABB, dest: AABB) {
 }
 
 
-export function getLookingVector (entity: EntityState) {
+export function getLookingVector (entity: {yaw: number, pitch: number}) {
     // given a yaw pitch, we need the looking vector
 
     // yaw is right handed rotation about y (up) starting from -z (north)

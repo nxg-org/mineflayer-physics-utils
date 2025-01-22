@@ -4,7 +4,7 @@ import { Effect } from "mineflayer";
 import { Entity } from "prismarine-entity";
 import { CheapEffects, CheapEnchantments, makeSupportFeature } from "../../util/physicsUtils";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
-import { EntityState } from "../states";
+import { EntityState, IEntityState } from "../states";
 
 export type MobsByName = { [mobName: string]: Entity };
 export interface IPhysics {
@@ -14,7 +14,7 @@ export interface IPhysics {
     getEnchantmentLevel: (effect: CheapEnchantments, enchantments: any[]) => number;
     getUnderlyingBlockBBs(queryBB: AABB, world: any): AABB[];
     getSurroundingBBs(queryBB: AABB, world: any): AABB[];
-    simulate(simCtx: EPhysicsCtx, world: any): EntityState;
+    simulate(simCtx: EPhysicsCtx, world: any): IEntityState;
 
     readonly statusEffectNames: { [type in CheapEffects]: string };
     readonly enchantmentNames: { [type in CheapEnchantments]: string };

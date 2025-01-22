@@ -20,7 +20,7 @@ export class PhysicsWorldSettings {
     // public yawSpeed: number = 3.0;
     // public pitchSpeed: number = 3.0;
     public playerSpeed: number = 0.1;
-    public stepHeight: number = 0.6; // how much height can the bot step on without jump
+
     public negligeableVelocity: number = 0.003; // actually 0.005 for 1.8; but seems fine
     public soulsandSpeed: number = 0.4;
     public honeyblockSpeed: number = 0.4;
@@ -49,7 +49,7 @@ export class PhysicsWorldSettings {
     };
     public slowFalling: number = 0.125;
     public sprintingUUID: string = "662a6b8d-da3e-4c1c-8813-96ea6097278d"; // SPEED_MODIFIER_SPRINTING_UUID is from LivingEntity.java
-    public jumpHeight: number = Math.fround(0.42);
+    public jumpHeight: number = Math.fround(0.42); 
 
     public sprintSpeed: number = Math.fround(0.3);
     public sneakSpeed: number = 0.3;

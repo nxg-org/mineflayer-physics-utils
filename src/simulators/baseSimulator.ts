@@ -1,13 +1,13 @@
 import { ControlStateHandler } from "../physics/player";
 import { EPhysicsCtx } from "../physics/settings";
-import { EntityState } from "../physics/states";
+import { EntityState, IEntityState } from "../physics/states";
 import { IPhysics } from "../physics/engines";
 import { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
 
-export type SimulationGoal = (state: EntityState, ticks: number) => boolean | ((state: EntityState) => boolean);
-export type OnGoalReachFunction = (state: EntityState) => void;
-export type Controller = (state: EntityState, ticks: number) => void; // (...any: any[]) => void;
+export type SimulationGoal = (state: IEntityState, ticks: number) => boolean | ((state: IEntityState) => boolean);
+export type OnGoalReachFunction = (state: IEntityState) => void;
+export type Controller = (state: IEntityState, ticks: number) => void; // (...any: any[]) => void;
 
 export class BaseSimulator {
     constructor(public readonly ctx: IPhysics) {}
@@ -44,7 +44,7 @@ export class BaseSimulator {
         simCtx: EPhysicsCtx,
         world: any,
         ticks = 1
-    ): EntityState {
+    ): IEntityState {
         for (let i = 0; i < ticks; i++) {
             if (goal(simCtx.state, i)) {
                 onGoalReach(simCtx.state);
@@ -58,20 +58,20 @@ export class BaseSimulator {
     }
 
     static getReached(...path: Vec3[]): SimulationGoal {
-        return (state: EntityState) => {
+        return (state: IEntityState) => {
             const delta = path[0].minus(state.pos);
             return Math.abs(delta.x) <= 0.35 && Math.abs(delta.z) <= 0.35 && Math.abs(delta.y) < 1 && (state.onGround || state.isInWater);
         };
     }
 
     static getCleanupPosition(...path: Vec3[]): OnGoalReachFunction {
-        return (state: EntityState) => {
-            state.clearControlStates();
+        return (state: IEntityState) => {
+            state.control.reset();
         };
     }
 
     static buildFullController(...controllers: Controller[]): Controller {
-        return (state: EntityState, ticks: number) => {
+        return (state: IEntityState, ticks: number) => {
             controllers.forEach((control) => control(state, ticks));
         };
     }

@@ -57,6 +57,17 @@ export class ControlStateHandler implements ControlStateStatus {
         return this;
     }
 
+    public reset() {
+        this.forward = false;
+        this.back = false;
+        this.left = false;
+        this.right = false;
+        this.jump = false;
+        this.sprint = false;
+        this.sneak = false;
+        return this;
+    }
+
     public clone(): ControlStateHandler {
         return new ControlStateHandler(this.forward, this.back, this.left, this.right, this.jump, this.sprint, this.sneak);
     }

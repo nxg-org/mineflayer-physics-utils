@@ -1,7 +1,7 @@
 import type { Entity } from "prismarine-entity";
 import type { Effect } from "mineflayer";
 import { EntityPhysics } from "../src/physics/engines";
-import { EntityState } from "../src/physics/states";
+import { EntityState, PlayerState } from "../src/physics/states";
 import { EPhysicsCtx, PhysicsWorldSettings } from "../src/physics/settings";
 import { applyMdToNewEntity } from "../src/util/physicsUtils";
 import { ControlStateHandler } from "../src/physics/player";
@@ -12,8 +12,9 @@ import expect from "expect";
 
 import { initSetup } from "../src/index";
 
-const mcData = md("1.12.2");
-const Block = (block as any)("1.12.2");
+const version = "1.12.2";
+const mcData = md(version);
+const Block = (block as any)(version);
 
 const groundLevel = 4;
 
@@ -42,12 +43,18 @@ function createFakePlayer(pos: Vec3) {
         } as unknown as Entity,
         jumpTicks: 0,
         jumpQueued: false,
-        version: "1.17.1",
+        version: version,
         inventory: {
             slots: [],
         },
+        equipment: [],
+        game: {
+            gameMode: "survival"
+        },
+        registry: mcData,
 
-        setControlState: (...args: any) => {}
+        setControlState: (...args: any) => {},
+        getEquipmentDestSlot: (...args: any) => {}
     };
 }
 
@@ -64,8 +71,11 @@ fakePlayer.entity = applyMdToNewEntity(EPhysicsCtx, playerType, fakePlayer.entit
 const physics = new EntityPhysics(mcData); // creates entity physics w/ environments specific to this entity.
 
 // create entity-specific physics context.
-const playerState = EntityState.CREATE_FROM_ENTITY(physics, fakePlayer.entity); // creates a simulation-compatible state.
-const playerCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, playerState, playerType); // create wrapper context (supplies AABB, pose info, etc).
+// const playerState = EntityState.CREATE_FROM_ENTITY(physics, fakePlayer.entity); // creates a simulation-compatible state.
+// const playerCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, playerState, playerType); // create wrapper context (supplies AABB, pose info, etc).
+
+const playerCtx = EPhysicsCtx.FROM_BOT(physics, fakePlayer as any)
+const playerState = playerCtx.state as PlayerState;
 const orgGravity = playerCtx.gravity;
 
 // first test: verify that changing world gravity works.
@@ -77,7 +87,9 @@ playerState.control = ControlStateHandler.DEFAULT(); // specific to players and 
 playerCtx.gravity = 0;
 
 for (let i = 0; i < 20; i++) {
-    physics.simulate(playerCtx, fakeWorld).applyToBot(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
+    playerState.update(fakePlayer as any); // (updateBot since fakePlayer is supposed to be a bot
+    physics.simulate(playerCtx, fakeWorld)
+    playerState.apply(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
     // console.log(fakePlayer.entity.position, fakePlayer.entity.velocity);
 }
 
@@ -93,8 +105,8 @@ playerState.control.forward = true;
 
 // simulate until on ground.
 while (!playerCtx.state.onGround) {
-    physics.simulate(playerCtx, fakeWorld).applyToBot(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
-    // console.log(fakePlayer.entity.position, fakePlayer.entity.velocity);
+    const state = physics.simulate(playerCtx, fakeWorld)
+    playerState.apply(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
 }
 
 if (playerState.control.forward) {
@@ -105,7 +117,8 @@ if (playerState.control.forward) {
 
 playerCtx.state.control.set("jump", true);
 for (let i = 0; i < 12; i++) {
-    physics.simulate(playerCtx, fakeWorld).applyToBot(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
+    physics.simulate(playerCtx, fakeWorld)
+    playerState.apply(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
     // console.log(fakePlayer.entity.position, fakePlayer.entity.velocity);
 }
 
