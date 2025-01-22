@@ -19,7 +19,7 @@
         },
         "player": {
             "stepHeight": 0.6,
-            "airborneInertia": 0.91
+            "airborneInertia": 0.91 
         }
     },
     "projectiles": {

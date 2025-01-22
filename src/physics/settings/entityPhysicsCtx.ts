@@ -33,7 +33,9 @@ export class EPhysicsCtx {
     public static mcData: md.IndexedData;
     public static entityData: md.IndexedData["entitiesByName"];
     public static mobData: md.IndexedData["mobs"];
-    public static globalSettings = PhysicsSettings
+
+
+    // public static globalSettings = PhysicsSettings
 
     /**
      * From minecraft's Player.java file.
@@ -77,7 +79,13 @@ export class EPhysicsCtx {
         affectedAfterCollision: true,
     };
 
-    constructor(public ctx: IPhysics, public pose: PlayerPoses, public readonly state: EntityState, public readonly entityType: md.Entity = DefaultPlayer) {
+    constructor(
+        public readonly ctx: IPhysics, 
+        public readonly settings: PhysicsSettings, 
+        public pose: PlayerPoses, 
+        public readonly state: EntityState, 
+        public readonly entityType: md.Entity = DefaultPlayer
+    ) {
         this.position = state.pos;
         this.velocity = state.vel;
 
@@ -173,25 +181,30 @@ export class EPhysicsCtx {
         }
     }
 
-    public static FROM_BOT(ctx: IPhysics, bot: Bot) {
-        return new EPhysicsCtx(ctx, getPose(bot.entity), EntityState.CREATE_FROM_BOT(ctx, bot));
+    public static FROM_BOT(ctx: IPhysics, bot: Bot, settings?: PhysicsSettings) {
+        settings ??= new PhysicsSettings(bot.registry);
+        return new EPhysicsCtx(ctx, settings, getPose(bot.entity), EntityState.CREATE_FROM_BOT(ctx, bot));
     }
 
-    public static FROM_ENTITY(ctx: IPhysics, entity: Entity) {
-        return new EPhysicsCtx(ctx, getPose(entity), EntityState.CREATE_FROM_ENTITY(ctx, entity), EPhysicsCtx.entityData[entity.name!]);
+    public static FROM_ENTITY(ctx: IPhysics, entity: Entity, settings?: PhysicsSettings) {
+        settings ??= new PhysicsSettings(ctx.data);
+        return new EPhysicsCtx(ctx,settings, getPose(entity), EntityState.CREATE_FROM_ENTITY(ctx, entity), EPhysicsCtx.entityData[entity.name!]);
     }
 
-    public static FROM_ENTITY_TYPE(ctx: IPhysics, entityType: md.Entity, options: Partial<Entity> = {}) {
+    public static FROM_ENTITY_TYPE(ctx: IPhysics, entityType: md.Entity, options: Partial<Entity> = {}, settings?: PhysicsSettings) {
+        // unneeded for most entities, use a default.
+        settings ??= new PhysicsSettings(ctx.data);
         const newE = applyMdToNewEntity(EPhysicsCtx, entityType, options);
-        return new EPhysicsCtx(ctx, PlayerPoses.STANDING, EntityState.CREATE_FROM_ENTITY(ctx, newE), entityType);
+        return new EPhysicsCtx(ctx, settings, PlayerPoses.STANDING, EntityState.CREATE_FROM_ENTITY(ctx, newE), entityType);
     }
 
-    public static FROM_ENTITY_STATE(ctx: IPhysics, entityState: EntityState, entityType?: md.Entity) {
-        return new EPhysicsCtx(ctx, entityState.pose, entityState, entityType);
+    public static FROM_ENTITY_STATE(ctx: IPhysics, entityState: EntityState, entityType?: md.Entity, settings?: PhysicsSettings) {
+        settings ??= new PhysicsSettings(ctx.data);
+        return new EPhysicsCtx(ctx, settings, entityState.pose, entityState, entityType);
     }
 
     public clone() {
-        return new EPhysicsCtx(this.ctx, this.state.pose, this.state.clone(), this.entityType);
+        return new EPhysicsCtx(this.ctx, this.settings, this.state.pose, this.state.clone(), this.entityType);
     }
 
     public get height(): number {
