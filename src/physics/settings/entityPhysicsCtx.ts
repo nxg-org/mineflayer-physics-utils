@@ -73,7 +73,7 @@ export class EPhysicsCtx {
     public doSolidCollisions: boolean = true;
     public doLiquidCollisions: boolean = true;
 
-    public readonly collisionBehavior: CollisionContext = {
+    public collisionBehavior: CollisionContext = {
         blockEffects: false,
         affectedAfterCollision: true,
     };
