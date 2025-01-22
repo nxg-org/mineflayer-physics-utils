@@ -54,20 +54,21 @@ export class EPhysicsCtx {
     public readonly position: Vec3;
     public readonly velocity: Vec3;
 
-    public readonly stepHeight: number = 0;
-    public readonly waterGravity: number;
-    public readonly lavaGravity: number;
+    public stepHeight: number = 0;
+    public gravity: number = 0.08;
+    public waterGravity: number;
+    public lavaGravity: number;
 
-    public readonly airdrag: number = Math.fround(1 - 0.0);
-    public readonly airborneInertia: number = 0.91;
-    public readonly airborneAccel: number = 0.02;
+    public airdrag: number = Math.fround(1 - 0.0);
+    public airborneInertia: number = 0.91;
+    public airborneAccel: number = 0.02;
 
-    public readonly waterInertia: number = 0.8;
-    public readonly lavaInertia: number = 0.5;
-    public readonly liquidAccel: number = 0.02;
+    public waterInertia: number = 0.8;
+    public lavaInertia: number = 0.5;
+    public liquidAccel: number = 0.02;
 
-    public readonly gravityThenDrag: boolean = false;
-    public readonly useControls: boolean = false;
+    public gravityThenDrag: boolean = false;
+    public useControls: boolean = false;
 
     public doSolidCollisions: boolean = true;
     public doLiquidCollisions: boolean = true;
@@ -76,15 +77,6 @@ export class EPhysicsCtx {
         blockEffects: false,
         affectedAfterCollision: true,
     };
-
-    // since this can dynamically change, this needs to be accessed via the passed-in settings object.
-    public get gravity(): number {
-        return this.worldSettings.gravity;
-    }
-
-    public set gravity(value: number) {
-        this.worldSettings.gravity = value;
-    }
 
     constructor(
         public readonly ctx: IPhysics, 

@@ -17,9 +17,8 @@ export class PhysicsWorldSettings {
     public entityData: md.IndexedData["entitiesByName"];
     public mobData:  md.IndexedData["mobs"];
 
-    public yawSpeed: number = 3.0;
-    public pitchSpeed: number = 3.0;
-    public gravity: number = 0.08;
+    // public yawSpeed: number = 3.0;
+    // public pitchSpeed: number = 3.0;
     public playerSpeed: number = 0.1;
     public stepHeight: number = 0.6; // how much height can the bot step on without jump
     public negligeableVelocity: number = 0.003; // actually 0.005 for 1.8; but seems fine
@@ -28,9 +27,11 @@ export class PhysicsWorldSettings {
     public honeyblockJumpSpeed: number = 0.4;
     public ladderMaxSpeed: number = 0.15;
     public ladderClimbSpeed: number = 0.2;
-    public waterInertia: number = 0.8;
-    public lavaInertia: number = 0.5;
-    public liquidAcceleration: number = 0.02;
+
+    // public gravity: number = 0.08;
+    // public waterInertia: number = 0.8;
+    // public lavaInertia: number = 0.5;
+    // public liquidAcceleration: number = 0.02;
     public defaultSlipperiness: number = 0.6;
     public outOfLiquidImpulse: number = 0.3;
     public autojumpCooldown: number = 10; // ticks (0.5s)
