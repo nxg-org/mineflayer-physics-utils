@@ -220,9 +220,9 @@ export class EntityState implements EntityStateBuilder {
         this.pitch = entity.pitch;
         this.control ||= ControlStateHandler.DEFAULT();
 
-        this.isUsingItem = isEntityUsingItem(entity);
-        this.isUsingMainHand = !whichHandIsEntityUsingBoolean(entity) && this.isUsingItem;
-        this.isUsingOffHand = whichHandIsEntityUsingBoolean(entity) && this.isUsingItem;
+        this.isUsingItem = isEntityUsingItem(entity, this.ctx.supportFeature);
+        this.isUsingMainHand = !whichHandIsEntityUsingBoolean(entity, this.ctx.supportFeature) && this.isUsingItem;
+        this.isUsingOffHand = whichHandIsEntityUsingBoolean(entity, this.ctx.supportFeature) && this.isUsingItem;
 
         // effects
         this.effects = entity.effects;

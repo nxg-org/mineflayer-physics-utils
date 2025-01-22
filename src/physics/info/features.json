@@ -28,5 +28,10 @@
       "name": "effectNamesAreRegistryNames",
       "description": "Status effect names equal to their registry names",
       "versions": ["1.17", "1.18"]
+    },
+    {
+      "name": "itemUsageMetadata6",
+      "description": "Item usage metadata is the 6th slot.",
+      "versions": ["1.12"]
     }
   ]

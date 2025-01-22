@@ -55,9 +55,18 @@ bot.on("chat", (user, message) => {
   const author = bot.nearestEntity((e) => e.username === user);
 
   switch (cmd) {
+    case "use":
+      if (bot.usingHeldItem) bot.deactivateItem();
+      else bot.activateItem();
+      break;
+    case "useoff":
+      bot.deactivateItem()
+      bot.activateItem(true)
+      break
     case "control":
-      if (args.length !== 2) return bot.chat("Invalid control command!");
+     
       if (args[0] === "clear") return bot.clearControlStates();
+      if (args.length !== 2) return bot.chat("Invalid control command!");
       bot.setControlState(args[0] as any, args[1] === "true");
       break;
     case "original":
@@ -69,7 +78,7 @@ bot.on("chat", (user, message) => {
       const oldSim = (bot.physics as any).simulatePlayer;
 
       (EntityState.prototype as any).apply = function (this: EntityState, bot: Bot) {
-        console.log(this.control);
+        // console.log(this.control, this.isUsingItem);
         this.applyToBot(bot);
       };
 
@@ -102,6 +111,7 @@ bot.on("chat", (user, message) => {
       bot.pathfinder.setGoal(goal1);
       break;
     case "stop":
+      bot.deactivateItem();
       bot.pathfinder.stop();
       bot.clearControlStates();
       bot.chat("Stopped!");

@@ -144,9 +144,9 @@ export class PlayerState implements EntityStateBuilder {
         this.pitch = bot.entity.pitch;
         this.control = control ?? ControlStateHandler.DEFAULT();
 
-        this.isUsingItem = isEntityUsingItem(bot.entity);
-        this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity) && this.isUsingItem;
-        this.isUsingOffHand = whichHandIsEntityUsingBoolean(bot.entity) && this.isUsingItem;
+        this.isUsingItem = isEntityUsingItem(bot.entity, this.ctx.supportFeature);
+        this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
+        this.isUsingOffHand = whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
 
         // effects
         this.effects = bot.entity.effects;
@@ -206,9 +206,9 @@ export class PlayerState implements EntityStateBuilder {
         this.pitch = bot.entity.pitch;
         this.control = control ?? this.control;
 
-        this.isUsingItem = isEntityUsingItem(bot.entity);
-        this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity) && this.isUsingItem;
-        this.isUsingOffHand = whichHandIsEntityUsingBoolean(bot.entity) && this.isUsingItem;
+        this.isUsingItem = isEntityUsingItem(bot.entity, this.ctx.supportFeature);
+        this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
+        this.isUsingOffHand = whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
 
         // effects
         this.effects = bot.entity.effects;

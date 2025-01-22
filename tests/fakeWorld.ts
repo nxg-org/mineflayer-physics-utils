@@ -66,11 +66,13 @@ const physics = new EntityPhysics(mcData); // creates entity physics w/ environm
 // create entity-specific physics context.
 const playerState = EntityState.CREATE_FROM_ENTITY(physics, fakePlayer.entity); // creates a simulation-compatible state.
 const playerCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, playerState, playerType); // create wrapper context (supplies AABB, pose info, etc).
+const orgGravity = playerCtx.gravity;
+
+// first test: verify that changing world gravity works.
 
 // set control state.
 playerState.control = ControlStateHandler.DEFAULT(); // specific to players and mobs, specify control scheme to apply.
 
-const orgGravity = playerCtx.gravity;
 // modify gravity to be 0.
 playerCtx.gravity = 0;
 
@@ -80,6 +82,8 @@ for (let i = 0; i < 20; i++) {
 }
 
 expect(fakePlayer.entity.position).toEqual(new Vec3(0, groundLevel + 20, 0)); // it works.
+
+// second test: verify that changing gravity back to normal works, and forward motion moves as far as we expect.
 
 // now, reset gravity.
 playerCtx.gravity = orgGravity;
@@ -110,7 +114,5 @@ if (playerState.control.forward) {
 } else {
     expect(fakePlayer.entity.position).toEqual(new Vec3(0, groundLevel, 0)); // it works.
 }
-
-
 
 console.log(fakePlayer.entity.position); //manual run.

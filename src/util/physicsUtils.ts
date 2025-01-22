@@ -10,6 +10,8 @@ export function makeSupportFeature(mcData: md.IndexedData) {
     return (feature: string) => features.some(({ name, versions }) => name === feature && versions.includes(mcData.version.majorVersion!));
 }
 
+type SupportFeature = ReturnType<typeof makeSupportFeature>
+
 export const DefaultPlayer: md.Entity = {
     displayName: "Player",
     height: 1.8,
@@ -48,19 +50,23 @@ export enum CheapEnchantments {
     DEPTH_STRIDER,
 }
 
-export function isEntityUsingItem(entity: Entity): boolean {
-    return ((entity.metadata[8] as any) & 1) > 0;
+function getMetadataIndex(supportFeature: SupportFeature) {
+    return supportFeature("itemUsageMetadata6") ? 6 : 8;
 }
 
-export function whichHandIsEntityUsing(entity: Entity): "hand" | "off-hand" {
-    return ((entity.metadata[8] as any) & 2) > 0 ? "off-hand" : "hand";
+export function isEntityUsingItem(entity: Entity, supportFeature: SupportFeature): boolean {
+    return (entity.metadata[getMetadataIndex(supportFeature)] as any) > 1;
 }
 
-export function whichHandIsEntityUsingBoolean(entity: Entity): boolean {
-    return ((entity.metadata[8] as any) & 2) > 0; // true = offhand, false = hand
+export function whichHandIsEntityUsing(entity: Entity, supportFeature: SupportFeature): "hand" | "off-hand" {
+    return (entity.metadata[getMetadataIndex(supportFeature)] as any) > 2 ? "off-hand" : "hand";
 }
 
-export function getStatusEffectNamesForVersion(supportFeature: ReturnType<typeof makeSupportFeature>) {
+export function whichHandIsEntityUsingBoolean(entity: Entity, supportFeature: SupportFeature): boolean {
+    return (entity.metadata[getMetadataIndex(supportFeature)] as any) > 2;
+}
+
+export function getStatusEffectNamesForVersion(supportFeature: SupportFeature) {
     if (supportFeature("effectNamesAreRegistryNames")) {
         // seems to not matter right now.
         return {
