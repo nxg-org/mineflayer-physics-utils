@@ -8,6 +8,7 @@ const bot: Bot = createBot({
   host: process.argv[2],
   port: Number(process.argv[3]),
   username: "testingbot",
+  version: process.argv[4],
 });
 
 bot.once("spawn", async () => {
@@ -24,13 +25,44 @@ const rl = require("readline").createInterface({
 
 rl.on("line", (line: any) => bot.chat(line));
 
+// print whenever bot hits the ground
+
+let wasOnGround = false;
+let printNextPos = false;
+bot.on("move", (pos) => {
+  if (bot.entity.onGround && !wasOnGround) {
+    bot.chat("Hit the ground! " + bot.entity.position.toString());
+  }
+  wasOnGround = bot.entity.onGround;
+});
+
+// print whenever another player hits the ground
+let lastPositions: Record<string, boolean> = {};
+bot.on("entityMoved", (entity) => {
+  console.log(entity.username)
+  if (entity.username && entity.username !== bot.username) {
+    // check by seeing is y value is an integer
+    if (Math.floor(entity.position.y) === entity.position.y && !lastPositions[entity.username]) {
+      bot.chat(`${entity.username} hit the ground! ${entity.position.toString()}`);
+      lastPositions[entity.username] = true;
+    } else if (Math.floor(entity.position.y) !== entity.position.y) {
+      lastPositions[entity.username] = false;
+    }}
+});
+
 bot.on("chat", (user, message) => {
   const [cmd, ...args] = message.split(" ");
   const author = bot.nearestEntity((e) => e.username === user);
 
   switch (cmd) {
+    case "control":
+      if (args.length !== 2) return bot.chat("Invalid control command!");
+      if (args[0] === "clear") return bot.clearControlStates();
+      bot.setControlState(args[0] as any, args[1] === "true");
+      break;
     case "original":
       bot.physics = new Physics(bot.registry, bot.world);
+      bot.chat("Switched to original physics!");
       break;
     case "new":
       const val = new EntityPhysics(bot.registry);
@@ -54,6 +86,7 @@ bot.on("chat", (user, message) => {
         return val.simulate(ctx, bot.world);
         return oldSim(...args);
       };
+      bot.chat("Switched to new physics!");
       break;
     case "jump":
       bot.setControlState("jump", true);

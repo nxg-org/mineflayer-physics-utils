@@ -25,7 +25,8 @@
     },
     "devDependencies": {
         "expect": "^29.5.0",
-        "mineflayer": "^4.18.0",
+        "mineflayer": "^4.22.0",
+        "minecraft-data": "^3.83.1",
         "mineflayer-pathfinder": "^2.4.4",
         "prismarine-entity": "^2.4.0",
         "typescript": "^4.5.5"

@@ -12,12 +12,14 @@ import expect from "expect";
 
 import { initSetup } from "../src/index";
 
-const mcData = md("1.17.1");
-const Block = (block as any)("1.17.1");
+const mcData = md("1.12.2");
+const Block = (block as any)("1.12.2");
+
+const groundLevel = 4;
 
 const fakeWorld = {
     getBlock: (pos: { x: number; y: number; z: number }) => {
-        const type = pos.y < 60 ? mcData.blocksByName.stone.id : mcData.blocksByName.air.id;
+        const type = pos.y < groundLevel ? mcData.blocksByName.stone.id : mcData.blocksByName.air.id;
         const b = new Block(type, 0, 0);
         b.position = pos;
         return b;
@@ -45,7 +47,7 @@ function createFakePlayer(pos: Vec3) {
             slots: [],
         },
 
-        setControlState: (...args) => {}
+        setControlState: (...args: any) => {}
     };
 }
 
@@ -55,7 +57,7 @@ initSetup(mcData);
 
 //create fake bot
 const playerType = mcData.entitiesByName["player"]; // specify type we will be simulating.
-const fakePlayer = createFakePlayer(new Vec3(0, 80, 0)); // call function supplied by prismarine-physics
+const fakePlayer = createFakePlayer(new Vec3(0, groundLevel + 20, 0)); // call function supplied by prismarine-physics
 fakePlayer.entity = applyMdToNewEntity(EPhysicsCtx, playerType, fakePlayer.entity); // ensure compatibility.
 
 // create physics context.
@@ -69,6 +71,7 @@ const playerCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, playerState, playerType
 playerState.control = ControlStateHandler.DEFAULT(); // specific to players and mobs, specify control scheme to apply.
 playerState.control.forward = true;
 
+
 // simulate until on ground.
 while (!playerCtx.state.onGround) {
     physics.simulate(playerCtx, fakeWorld).applyToBot(fakePlayer as any); // (applyToBot since fakePlayer is supposed to be a bot)
@@ -76,9 +79,9 @@ while (!playerCtx.state.onGround) {
 }
 
 if (playerState.control.forward) {
-    expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, -3.4508449226731694)); // it works.
+    expect(fakePlayer.entity.position).toEqual(new Vec3(0, groundLevel, -3.4508449226731694)); // it works.
 } else {
-    expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, 0)); // it works.
+    expect(fakePlayer.entity.position).toEqual(new Vec3(0, groundLevel, 0)); // it works.
 }
 
 playerCtx.state.control.set("jump", true);
@@ -88,9 +91,9 @@ for (let i = 0; i < 12; i++) {
 }
 
 if (playerState.control.forward) {
-    expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, -5.788782872583908)); // it works.
+    expect(fakePlayer.entity.position).toEqual(new Vec3(0, groundLevel, -5.788782872583908)); // it works.
 } else {
-    expect(fakePlayer.entity.position).toEqual(new Vec3(0, 60, 0)); // it works.
+    expect(fakePlayer.entity.position).toEqual(new Vec3(0, groundLevel, 0)); // it works.
 }
 
 

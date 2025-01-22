@@ -23,7 +23,7 @@ export function initSetup(data: IndexedData) {
     EPhysicsCtx.loadData(data);
 }
 
-export { EPhysicsCtx, PhysicsSettings } from "./physics/settings";
+export { EPhysicsCtx, PhysicsSettings as PhysicsSettings } from "./physics/settings";
 export { BaseSimulator } from "./simulators";
 export { EntityPhysics } from "./physics/engines";
 export { EntityState } from "./physics/states";
