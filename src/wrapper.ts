@@ -21,13 +21,11 @@ export enum SimulationTypes {
 
 export class PhysicsUtilWrapper {
     public engine!: IPhysics;
-    public readonly physicsSettings = PhysicsSettings;
     public readonly ePhysicsCtx = EPhysicsCtx;
     public readonly data: md.IndexedData;
 
     constructor(private bot: Bot) {
         this.data = bot.registry;
-        PhysicsSettings.loadData(this.data);
         EPhysicsCtx.loadData(this.data);
         this.engine = new EntityPhysics(this.data);
     }

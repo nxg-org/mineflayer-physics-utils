@@ -14,7 +14,6 @@ import {
 import * as attributes from "../info/attributes";
 import * as math from "../info/math";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
-import { PhysicsSettings } from "../settings/physicsSettings";
 import { EntityState } from "../states/entityState";
 import { IPhysics } from "./IPhysics";
 
@@ -341,11 +340,11 @@ export class EntityPhysics implements IPhysics {
           if (block) {
             if (entity.collisionBehavior.blockEffects && this.supportFeature("velocityBlocksOnCollision")) {
               if (block.type === this.soulsandId) {
-                vel.x *= PhysicsSettings.soulsandSpeed;
-                vel.z *= PhysicsSettings.soulsandSpeed;
+                vel.x *= entity.settings.soulsandSpeed;
+                vel.z *= entity.settings.soulsandSpeed;
               } else if (block.type === this.honeyblockId) {
-                vel.x *= PhysicsSettings.honeyblockSpeed;
-                vel.z *= PhysicsSettings.honeyblockSpeed;
+                vel.x *= entity.settings.honeyblockSpeed;
+                vel.z *= entity.settings.honeyblockSpeed;
               }
             }
             if (block.type === this.webId) {
@@ -357,7 +356,7 @@ export class EntityPhysics implements IPhysics {
               const down = !block.metadata;
               const aboveBlock = world.getBlock(cursor.offset(0, 1, 0));
               const bubbleDrag =
-                aboveBlock && aboveBlock.type === 0 /* air */ ? PhysicsSettings.bubbleColumnSurfaceDrag : PhysicsSettings.bubbleColumnDrag;
+                aboveBlock && aboveBlock.type === 0 /* air */ ? entity.settings.bubbleColumnSurfaceDrag : entity.settings.bubbleColumnDrag;
               if (down) {
                 vel.y = Math.max(bubbleDrag.maxDown, vel.y - bubbleDrag.down);
               } else {
@@ -372,11 +371,11 @@ export class EntityPhysics implements IPhysics {
       const blockBelow = world.getBlock(entity.position.floored().offset(0, -0.5, 0));
       if (blockBelow) {
         if (blockBelow.type === this.soulsandId) {
-          vel.x *= PhysicsSettings.soulsandSpeed;
-          vel.z *= PhysicsSettings.soulsandSpeed;
+          vel.x *= entity.settings.soulsandSpeed;
+          vel.z *= entity.settings.soulsandSpeed;
         } else if (blockBelow.type === this.honeyblockId) {
-          vel.x *= PhysicsSettings.honeyblockSpeed;
-          vel.z *= PhysicsSettings.honeyblockSpeed;
+          vel.x *= entity.settings.honeyblockSpeed;
+          vel.z *= entity.settings.honeyblockSpeed;
         }
       }
     }
@@ -560,7 +559,7 @@ export class EntityPhysics implements IPhysics {
     const vel = entity.velocity;
     const pos = entity.position;
 
-    const gravityMultiplier = vel.y <= 0 && entity.state.slowFalling > 0 ? PhysicsSettings.slowFalling : 1;
+    const gravityMultiplier = vel.y <= 0 && entity.state.slowFalling > 0 ? entity.settings.slowFalling : 1;
 
     // Unsure how to handle this w/ other entities.
     // this is player-only.
@@ -610,24 +609,24 @@ export class EntityPhysics implements IPhysics {
         } else {
           // Create an attribute if the player does not have it
           //TODO: Generalize to all entities.
-          playerSpeedAttribute = attributes.createAttributeValue(PhysicsSettings.playerSpeed);
+          playerSpeedAttribute = attributes.createAttributeValue(entity.settings.playerSpeed);
         }
         // Client-side sprinting (don't rely on server-side sprinting)
         // setSprinting in LivingEntity.java
         //TODO: Generalize to all entities.
-        playerSpeedAttribute = attributes.deleteAttributeModifier(playerSpeedAttribute, PhysicsSettings.sprintingUUID); // always delete sprinting (if it exists)
+        playerSpeedAttribute = attributes.deleteAttributeModifier(playerSpeedAttribute, entity.settings.sprintingUUID); // always delete sprinting (if it exists)
         if (entity.state.control.sprint) {
-          if (!attributes.checkAttributeModifier(playerSpeedAttribute, PhysicsSettings.sprintingUUID)) {
+          if (!attributes.checkAttributeModifier(playerSpeedAttribute, entity.settings.sprintingUUID)) {
             playerSpeedAttribute = attributes.addAttributeModifier(playerSpeedAttribute, {
-              uuid: PhysicsSettings.sprintingUUID,
-              amount: PhysicsSettings.sprintSpeed,
+              uuid: entity.settings.sprintingUUID,
+              amount: entity.settings.sprintSpeed,
               operation: 2,
             });
           }
         }
         // Calculate what the speed is (0.1 if no modification)
         const attributeSpeed = attributes.getAttributeValue(playerSpeedAttribute);
-        dragOrFriction = (this.blockSlipperiness[blockUnder.type] || PhysicsSettings.defaultSlipperiness) * 0.91;
+        dragOrFriction = (this.blockSlipperiness[blockUnder.type] || entity.settings.defaultSlipperiness) * 0.91;
         acceleration = attributeSpeed * (0.1627714 / (dragOrFriction * dragOrFriction * dragOrFriction));
         if (acceleration < 0) acceleration = 0; // acceleration should not be negative
       }
@@ -637,9 +636,9 @@ export class EntityPhysics implements IPhysics {
       // console.log('vel 1!', vel)
 
       if (entity.collisionBehavior.blockEffects && this.isOnLadder(pos, world)) {
-        vel.x = math.clamp(-PhysicsSettings.ladderMaxSpeed, vel.x, PhysicsSettings.ladderMaxSpeed);
-        vel.z = math.clamp(-PhysicsSettings.ladderMaxSpeed, vel.z, PhysicsSettings.ladderMaxSpeed);
-        vel.y = Math.max(vel.y, entity.state.control.sneak ? 0 : -PhysicsSettings.ladderMaxSpeed);
+        vel.x = math.clamp(-entity.settings.ladderMaxSpeed, vel.x, entity.settings.ladderMaxSpeed);
+        vel.z = math.clamp(-entity.settings.ladderMaxSpeed, vel.z, entity.settings.ladderMaxSpeed);
+        vel.y = Math.max(vel.y, entity.state.control.sneak ? 0 : -entity.settings.ladderMaxSpeed);
       }
 
       this.moveEntity(entity, vel.x, vel.y, vel.z, world);
@@ -649,7 +648,7 @@ export class EntityPhysics implements IPhysics {
         this.isOnLadder(pos, world) &&
         (entity.state.isCollidedHorizontally || (this.supportFeature("climbUsingJump") && entity.state.control.jump))
       ) {
-        vel.y = PhysicsSettings.ladderClimbSpeed; // climb ladder
+        vel.y = entity.settings.ladderClimbSpeed; // climb ladder
       }
 
       // Not adding an additional function call. No point.
@@ -704,7 +703,7 @@ export class EntityPhysics implements IPhysics {
         entity.state.isCollidedHorizontally &&
         this.doesNotCollide(entity, pos.offset(vel.x, vel.y + 0.6 - pos.y + lastY, vel.z), world)
       ) {
-        vel.y = PhysicsSettings.outOfLiquidImpulse; // jump out of liquid
+        vel.y = entity.settings.outOfLiquidImpulse; // jump out of liquid
       }
     }
   }
@@ -728,9 +727,9 @@ export class EntityPhysics implements IPhysics {
     entity.state.isInLava = this.isMaterialInBB(lavaBB, this.lavaId, world);
 
     // Reset velocity component if it falls under the threshold
-    if (Math.abs(vel.x) < PhysicsSettings.negligeableVelocity) vel.x = 0;
-    if (Math.abs(vel.y) < PhysicsSettings.negligeableVelocity) vel.y = 0;
-    if (Math.abs(vel.z) < PhysicsSettings.negligeableVelocity) vel.z = 0;
+    if (Math.abs(vel.x) < entity.settings.negligeableVelocity) vel.x = 0;
+    if (Math.abs(vel.y) < entity.settings.negligeableVelocity) vel.y = 0;
+    if (Math.abs(vel.z) < entity.settings.negligeableVelocity) vel.z = 0;
 
     let strafe = 0;
     let forward = 0;
@@ -742,7 +741,7 @@ export class EntityPhysics implements IPhysics {
           vel.y += 0.04;
         } else if (entity.state.onGround && entity.state.jumpTicks === 0) {
           const blockBelow = world.getBlock(entity.position.floored().offset(0, -0.5, 0));
-          vel.y = Math.fround(0.42) * (blockBelow && blockBelow.type === this.honeyblockId ? PhysicsSettings.honeyblockJumpSpeed : 1);
+          vel.y = Math.fround(0.42) * (blockBelow && blockBelow.type === this.honeyblockId ? entity.settings.honeyblockJumpSpeed : 1);
           if (entity.state.jumpBoost > 0) {
             vel.y += 0.1 * entity.state.jumpBoost;
           }
@@ -751,7 +750,7 @@ export class EntityPhysics implements IPhysics {
             vel.x -= Math.sin(yaw) * 0.2;
             vel.z += Math.cos(yaw) * 0.2;
           }
-          entity.state.jumpTicks = PhysicsSettings.autojumpCooldown;
+          entity.state.jumpTicks = entity.settings.autojumpCooldown;
         }
       } else {
         entity.state.jumpTicks = 0; // reset autojump cooldown
@@ -762,14 +761,14 @@ export class EntityPhysics implements IPhysics {
       forward = ((entity.state.control.forward as unknown as number) - (entity.state.control.back as unknown as number)) * 0.98;
 
       if (entity.state.control.sneak) {
-        strafe *= PhysicsSettings.sneakSpeed;
-        forward *= PhysicsSettings.sneakSpeed;
+        strafe *= entity.settings.sneakSpeed;
+        forward *= entity.settings.sneakSpeed;
         entity.state.control.sprint = false;
       }
 
       if (entity.state.isUsingItem) {
-        strafe *= PhysicsSettings.usingItemSpeed;
-        forward *= PhysicsSettings.usingItemSpeed;
+        strafe *= entity.settings.usingItemSpeed;
+        forward *= entity.settings.usingItemSpeed;
         entity.state.control.sprint = false;
       }
 

@@ -1,7 +1,7 @@
 import type { IndexedData } from "minecraft-data";
 import type { Bot } from "mineflayer";
 
-import { EPhysicsCtx, PhysicsSettings } from "./physics/settings";
+import { EPhysicsCtx } from "./physics/settings";
 import { PhysicsUtilWrapper } from "./wrapper";
 
 import registry from "prismarine-registry"
@@ -21,7 +21,6 @@ export default function loader(bot: Bot): void {
 
 export function initSetup(data: IndexedData) {
     EPhysicsCtx.loadData(data);
-    PhysicsSettings.loadData(data);
 }
 
 export { EPhysicsCtx, PhysicsSettings } from "./physics/settings";
