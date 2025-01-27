@@ -38,6 +38,7 @@ export class BotcraftPhysics implements IPhysics {
   public movementSpeedAttribute: string;
   public jumpStrengthAttribute: string;
   public waterMovementEfficiencyAttribute: string;
+  public stepHeightAttribute: string;
   public supportFeature: ReturnType<typeof makeSupportFeature>;
   public blockSlipperiness: { [name: string]: number };
 
@@ -49,6 +50,7 @@ export class BotcraftPhysics implements IPhysics {
   protected lavaId: number;
   protected ladderId: number;
   protected vineId: number;
+  protected scaffoldId: number;
   protected bubblecolumnId: number;
   protected waterLike: Set<number>;
 
@@ -62,6 +64,7 @@ export class BotcraftPhysics implements IPhysics {
     this.movementSpeedAttribute = (this.data.attributesByName.movementSpeed as any).resource;
     this.jumpStrengthAttribute = (this.data.attributesByName.jumpStrength as any).resource;
     this.waterMovementEfficiencyAttribute = (this.data.attributesByName.waterMovementEfficiency as any).resource;
+    this.stepHeightAttribute = (this.data.attributesByName.stepHeight as any).resource;
 
     this.blockSlipperiness = {};
     this.slimeBlockId = blocksByName.slime_block ? blocksByName.slime_block.id : blocksByName.slime.id;
@@ -82,6 +85,7 @@ export class BotcraftPhysics implements IPhysics {
     this.lavaId = blocksByName.lava.id;
     this.ladderId = blocksByName.ladder.id;
     this.vineId = blocksByName.vine.id;
+    this.scaffoldId = blocksByName.scaffolding.id; // 1.14+
     this.waterLike = new Set();
     if (blocksByName.seagrass) this.waterLike.add(blocksByName.seagrass.id); // 1.13+
     if (blocksByName.tall_seagrass) this.waterLike.add(blocksByName.tall_seagrass.id); // 1.13+
@@ -269,22 +273,21 @@ export class BotcraftPhysics implements IPhysics {
       // player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying)
       if (player.fallFlying) {
         currentPose = PlayerPoses.FALL_FLYING;
-      } 
-      // (player->GetSleepingPosIdImpl() 
+      }
+      // (player->GetSleepingPosIdImpl()
       // this is based on metadata which I currently do not have access to.
       else if (player.pose === PlayerPoses.SLEEPING) {
         currentPose = PlayerPoses.SLEEPING;
       } else if (this.isSwimmingAndNotFlying(player, world)) {
         currentPose = PlayerPoses.SWIMMING;
-      } 
-      // player->GetDataLivingEntityFlagsImpl() & 0x04 
+      }
+      // player->GetDataLivingEntityFlagsImpl() & 0x04
       // no clue.
       else if (false) {
-        currentPose = PlayerPoses.SPIN_ATTACK
+        currentPose = PlayerPoses.SPIN_ATTACK;
       } else if (player.control.sneak && !player.flying) {
         currentPose = PlayerPoses.SNEAKING;
-      }
-      else {
+      } else {
         currentPose = PlayerPoses.STANDING;
       }
 
@@ -359,7 +362,7 @@ export class BotcraftPhysics implements IPhysics {
       const velY = player.vel.y;
       this.movePlayer(ctx, world); // TODO: should be in player-specific logic??
       if (player.flying) {
-        player.vel.y = 0.6 * velY
+        player.vel.y = 0.6 * velY;
         /* player->SetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying, false); */ player.fallFlying = false;
       }
 
@@ -379,8 +382,6 @@ export class BotcraftPhysics implements IPhysics {
       this.updatePoses(player, world);
     }
   }
-
-
 
   private inputsToCrouch(player: PlayerState, heading: Heading, world: World) {
     if (this.verGreaterThan("1.13.2")) {
@@ -602,30 +603,31 @@ export class BotcraftPhysics implements IPhysics {
 
   /**
    * Assume EPhysicsCtx is wrapping a PlayerState.
-   * @param ectx 
-   * @param world 
+   * @param ctx
+   * @param world
    */
-  movePlayer(ectx: EPhysicsCtx, world: World) {
-    const player = ectx.state as PlayerState;
-    { // LivingEntity::travel
+  movePlayer(ctx: EPhysicsCtx, world: World) {
+    const player = ctx.state as PlayerState;
+    {
+      // LivingEntity::travel
       const goingDown = player.vel.y <= 0.0;
       const hasSlowFalling = player.slowFalling > 0;
 
       // named drag in botcraft. That seems incorrect. Not sure yet.
-      let gravity;
+      let gravity: number;
       if (this.verLessThan("1.20.5")) {
-        gravity = (goingDown && hasSlowFalling) ? 0.01 : ectx.gravity;
+        gravity = goingDown && hasSlowFalling ? 0.01 : ctx.gravity;
       } else {
-        gravity = (goingDown && hasSlowFalling) ? Math.min(0.01, ectx.gravity) : ectx.gravity;
+        gravity = goingDown && hasSlowFalling ? Math.min(0.01, ctx.gravity) : ctx.gravity;
       }
 
       if (player.isInWater && !player.flying) {
         const initY = player.pos.y;
-        let waterSlowDown = player.sprinting ? ectx.sprintWaterInertia : ectx.waterInertia;
+        let waterSlowDown = player.sprinting ? ctx.sprintWaterInertia : ctx.waterInertia;
         let inputStrength = 0.02;
         let depthStriderMult;
         if (this.verLessThan("1.21")) {
-          const depthStrider = player.depthStrider
+          const depthStrider = player.depthStrider;
           depthStriderMult = Math.min(depthStrider, 3) / 3;
         } else {
           depthStriderMult = player.attributes[this.waterMovementEfficiencyAttribute].value;
@@ -634,7 +636,7 @@ export class BotcraftPhysics implements IPhysics {
         if (!player.onGround) {
           waterSlowDown += (0.54600006 - waterSlowDown) * depthStriderMult; // magic number
           const movementSpeed = player.attributes[this.movementSpeedAttribute].value;
-          inputStrength += (Math.fround(movementSpeed - inputStrength)) * depthStriderMult;
+          inputStrength += Math.fround(movementSpeed - inputStrength) * depthStriderMult;
         }
 
         if (this.verGreaterThan("1.12.2")) {
@@ -643,15 +645,15 @@ export class BotcraftPhysics implements IPhysics {
           }
         }
 
-        this.applyInputs(inputStrength)
-        this.applyMovement()
+        this.applyInputs(inputStrength, player);
+        this.applyMovement(ctx, world);
 
         if (player.isCollidedHorizontally && player.onClimbable) {
           player.vel.y = 0.2;
         }
-        player.vel.x *= waterSlowDown
-        player.vel.y *= 0.800000011920929 // magic number, pretty sure this is wrong.
-        player.vel.z *= waterSlowDown
+        player.vel.x *= waterSlowDown;
+        player.vel.y *= 0.800000011920929; // magic number, pretty sure this is wrong.
+        player.vel.z *= waterSlowDown;
 
         if (!player.sprinting) {
           // this logic does not look entirely correct. I believe this is an attempt at version-agnostic water gravity.
@@ -663,28 +665,284 @@ export class BotcraftPhysics implements IPhysics {
           //   } else {
           //     player.vel.y -= gravity / 16
           //   }
-          
+
           // because of this, I will implement my own version.
           if (goingDown) {
-            player.vel.y -= ectx.waterGravity;
+            player.vel.y -= ctx.waterGravity;
           }
-        } 
+        }
 
         const bb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
-        bb.translate(0, 0.6000000238418579 - player.pos.y + initY, 0)
-        bb.translateVec(player.vel)
+        bb.translate(0, 0.6000000238418579 - player.pos.y + initY, 0);
+        bb.translateVec(player.vel);
         if (player.isCollidedHorizontally && this.worldIsFree(world, bb, true)) {
-          player.vel.y = ectx.worldSettings.outOfLiquidImpulse;
+          player.vel.y = ctx.worldSettings.outOfLiquidImpulse;
+        }
+      } else if (player.isInLava && !player.flying) {
+        const initY = player.pos.y;
+        this.applyInputs(0.02, player);
+        this.applyMovement(ctx, world);
+        player.vel.scale(0.5);
+        player.vel.y -= ctx.lavaGravity;
+
+        const bb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
+        bb.translate(0, 0.6000000238418579 - player.pos.y + initY, 0);
+        bb.translateVec(player.vel);
+        if (player.isCollidedHorizontally && this.worldIsFree(world, bb, true)) {
+          player.vel.y = ctx.worldSettings.outOfLiquidImpulse;
+        }
+      }
+      // elytra flying.
+      else if (player.fallFlying) {
+        // slight deviation
+        // sqrt(front_vector.x² + front_vector.z²) to follow vanilla code
+        const { pitch, sinPitch, cosPitch, lookDir } = getLookingVector(player);
+
+        const cosPitchFromLength = Math.sqrt(lookDir.x * lookDir.x + lookDir.z * lookDir.z);
+        const cosPitchSqr = cosPitch * cosPitch;
+        const hVel = Math.sqrt(player.vel.x * player.vel.x + player.vel.z * player.vel.z);
+        player.vel.y += gravity * (-1 + 0.75 * cosPitchSqr);
+
+        if (player.vel.y < 0.0 && cosPitchFromLength > 0.0) {
+          const deltaSpeed = -player.vel.y * 0.1 * cosPitchSqr;
+          player.vel.x += (lookDir.x * deltaSpeed) / cosPitchFromLength;
+          player.vel.z += (lookDir.z * deltaSpeed) / cosPitchFromLength;
+          player.vel.y += deltaSpeed;
+        }
+
+        if (player.pitch < 0.0 && cosPitchFromLength > 0.0) {
+          const deltaSpeed = hVel * -lookDir.y * 0.04;
+          player.vel.x += (lookDir.x * deltaSpeed) / cosPitchFromLength;
+          player.vel.z += (lookDir.z * deltaSpeed) / cosPitchFromLength;
+          player.vel.y += deltaSpeed * 3.2;
+        }
+
+        if (cosPitchFromLength > 0.0) {
+          player.vel.x += ((lookDir.x / cosPitchFromLength) * hVel - player.vel.x) * 0.1;
+          player.vel.z += ((lookDir.z / cosPitchFromLength) * hVel - player.vel.z) * 0.1;
+        }
+        player.vel.x *= Math.fround(0.99); // magic number, this DEFINITELY should be replaced by a drag value.
+        player.vel.z *= Math.fround(0.99); // magic number, this DEFINITELY should be replaced by a drag value.
+        player.vel.y *= Math.fround(0.98); // magic number, this DEFINITELY should be replaced by a drag value.
+        this.applyMovement(ctx, world);
+
+        if (player.onGround) {
+          player.fallFlying = false;
+        }
+      } else {
+        const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
+        // deviation. using our stores slipperiness values.
+        const friction = this.blockSlipperiness[blockBelow.type] ?? ctx.worldSettings.defaultSlipperiness;
+        const inertia = player.onGround ? friction * ctx.airborneInertia : ctx.airborneInertia;
+
+        const inputStrength = player.onGround
+          ? player.attributes[this.movementSpeedAttribute].value * ((0.21600002 / friction) * friction * friction)
+          : 0.02;
+
+        this.applyInputs(inputStrength, player);
+
+        if (player.onClimbable) {
+          // LivingEntity::handleOnClimbable
+          player.vel.x = math.clamp(-0.15000000596046448, player.vel.x, 0.15000000596046448); // Math.fround(0.15)
+          player.vel.z = math.clamp(-0.15000000596046448, player.vel.z, 0.15000000596046448); // Math.fround(0.15)
+          player.vel.y = Math.max(-0.15000000596046448, player.vel.y); // Math.fround(0.15)
+          const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
+          if (feetBlock && (this.scaffoldId === feetBlock.type) !== player.control.sneak) {
+            player.vel.y = 0.0;
+          }
+        }
+
+        this.applyMovement(ctx, world);
+
+        // if colliding and in climbable, go up.
+        if ((player.isCollidedHorizontally || player.control.jump) && player.onClimbable) {
+          // TODO: or in powder with leather boots.
+          player.vel.y = 0.2;
+        }
+
+        if (player.levitation > 0) {
+          player.vel.y += (0.05 * player.levitation - player.vel.y) * 0.2;
+        } else {
+          player.vel.y -= gravity;
+        }
+        player.vel.x *= inertia;
+        player.vel.z *= inertia;
+        // another magic number that I'm pretty sure is random/hardcoded.
+        // this can be generalized.
+        player.vel.y *= 0.9800000190734863;
+      }
+    }
+  }
+  applyMovement(ctx: EPhysicsCtx, world: World) {
+    const player = ctx.state as PlayerState;
+    if (player.gameMode === "spectator") {
+      player.pos.translate(player.vel.x, player.vel.y, player.vel.z);
+      return;
+    }
+
+    // this might be a clone.
+    let movement = player.vel.clone();
+    // if a player is stuck, reset stuck multiplier and set velocity to 0.
+    if (player.stuckSpeedMultiplier.norm() ** 2 > 1e-7) {
+      movement.x *= player.stuckSpeedMultiplier.x;
+      movement.y *= player.stuckSpeedMultiplier.y;
+      movement.z *= player.stuckSpeedMultiplier.z;
+      player.stuckSpeedMultiplier.set(0, 0, 0);
+      player.vel.set(0, 0, 0);
+    }
+
+    let maxStepUp = ctx.stepHeight;
+    if (!this.verLessThan("1.20.5")) {
+      maxStepUp = player.attributes[this.stepHeightAttribute].value;
+    }
+
+    // const playerAABB = player.getBB();
+    if (!player.flying && movement.y <= 0.0 && player.control.sneak && player.onGround) {
+      // Player::maybeBackOffFromEdge
+      const step = 0.05;
+
+      // for readability.
+      const prepare = (x: number, y: number, z: number) => {
+        const bb = player.getBB().translate(x, y, z);
+        bb.expand(-1e-7, -1e-7, -1e-7);
+        return bb;
+      };
+
+      while (movement.x != 0.0 && this.worldIsFree(world, prepare(movement.x, -maxStepUp, 0), false)) {
+        movement.x = movement.x < step && movement.x >= -step ? 0.0 : movement.x > 0.0 ? movement.x - step : movement.x + step;
+      }
+
+      while (movement.z != 0.0 && this.worldIsFree(world, prepare(0, -maxStepUp, movement.z), false)) {
+        movement.z = movement.z < step && movement.z >= -step ? 0.0 : movement.z > 0.0 ? movement.z - step : movement.z + step;
+      }
+
+      while ((movement.x != 0.0 && movement.z != 0.0 && prepare(movement.x, -maxStepUp, movement.z), false)) {
+        movement.x = movement.x < step && movement.x >= -step ? 0.0 : movement.x > 0.0 ? movement.x - step : movement.x + step;
+        movement.z = movement.z < step && movement.z >= -step ? 0.0 : movement.z > 0.0 ? movement.z - step : movement.z + step;
+      }
+    }
+
+    const movementBeforeCollisions = movement.clone();
+    {
+      // Entity::collide
+      if (movement.norm() ** 2 != 0.0) {
+        const playerAABB = player.getBB();
+        movement = this.collideBoundingBox(world, playerAABB, movement);
+      }
+
+      // Step up if block height delta is < max_up_step
+      // If already on ground (or collided with the ground while moving down) and horizontal collision
+      // TODO: changed in 1.21, check if this is still accurate
+
+      if (
+        (player.onGround || (movement.y != movementBeforeCollisions.y && movementBeforeCollisions.y < 0.0)) &&
+        (movement.x != movementBeforeCollisions.x || movement.z != movementBeforeCollisions.z)
+      ) {
+        let movementWithStepUp = this.collideBoundingBox(world, player.getBB(), new Vec3(movementBeforeCollisions.x, maxStepUp, movementBeforeCollisions.z))
+        const horizontalMovement = new Vec3(movementBeforeCollisions.x, 0, movementBeforeCollisions.z);
+
+        // TODO: this code might straight up be wrong. It looks wrong. But the way they wrote it is so awkward.
+        // update: is he trying to offset a change with these 0.5s?
+        // const stepUpBB = player.getBB();
+        // stepUpBB.translate(horizontalMovement.x * 0.5, 0, horizontalMovement.z * 0.5);
+        // stepUpBB.expand(horizontalMovement.x, 0, horizontalMovement.z);
+        // stepUpBB.translate(0, maxStepUp, 0);
+        // const movementStepUpOnly = this.collideBoundingBox(world, stepUpBB, horizontalMovement);
+
+        const movementStepUpOnly = this.collideBoundingBox(world, player.getBB(), new Vec3(0, maxStepUp, 0));
+
+        if (movementStepUpOnly.y < maxStepUp) {
+          const check = this.collideBoundingBox(world, player.getBB().translateVec(movementStepUpOnly), horizontalMovement).plus(movementStepUpOnly)
+          if (check.x * check.x + check.z * check.z > movementWithStepUp.x * movementWithStepUp.x + movementWithStepUp.z * movementWithStepUp.z) {
+            movementWithStepUp = check;
+          }
+        }
+        if (movementWithStepUp.x * movementWithStepUp.x + movementWithStepUp.z * movementWithStepUp.z > movement.x * movement.x + movement.z * movement.z) {
+            movement = movementWithStepUp.plus(this.collideBoundingBox(world, player.getBB().translateVec(movementWithStepUp), new Vec3(0.0, -movementWithStepUp.y + movementBeforeCollisions.y, 0.0)));
+          }
+      }
+    }
+  }
+  collideBoundingBox(world: World, bb: AABB, movement: Vec3): Vec3 {
+    // BIG DEVIATION.
+    const newBB = bb.clone();
+    newBB.translateVec(movement);
+
+    const colliders = this.getSurroundingBBs(newBB, world);
+    if (colliders.length === 0) {
+      return movement;
+    }
+
+    let collidedMovement = movement.clone();
+    let movedAABB = newBB;
+    this.collideOneAxis(world, movedAABB, collidedMovement, 1, colliders);
+    // collision on X before Z
+    if (Math.abs(collidedMovement.x) > Math.abs(collidedMovement.z)) {
+      this.collideOneAxis(world, movedAABB, collidedMovement, 0, colliders);
+      this.collideOneAxis(world, movedAABB, collidedMovement, 2, colliders);
+    } else {
+      this.collideOneAxis(world, movedAABB, collidedMovement, 2, colliders);
+      this.collideOneAxis(world, movedAABB, collidedMovement, 0, colliders);
+    }
+
+    return collidedMovement;
+  }
+  collideOneAxis(world: World, movedAABB: AABB, movement: Vec3, axis: number, colliders: AABB[]) {
+    const minAABB = movedAABB.minPoint().toArray();
+    const maxAABB = movedAABB.maxPoint().toArray();
+    const movementLst = movement.toArray();
+
+    const thisAxis = axis % 3;
+    const axis1 = (axis + 1) % 3;
+    const axis2 = (axis + 2) % 3;
+
+    for (const collider of colliders) {
+      if (Math.abs(movementLst[thisAxis]) < 1e-7) {
+        movementLst[thisAxis] = 0;
+      }
+      const minCollider = collider.minPoint().toArray();
+      const maxCollider = collider.maxPoint().toArray();
+
+      if (
+        maxAABB[axis1] - 1e-7 > minCollider[axis1] &&
+        minAABB[axis1] + 1e-7 < maxCollider[axis1] &&
+        maxAABB[axis2] - 1e-7 > minCollider[axis2] &&
+        minAABB[axis2] + 1e-7 < maxCollider[axis2]
+      ) {
+        if (movementLst[thisAxis] > 0.0 && maxAABB[thisAxis] - 1e-7 <= minCollider[thisAxis]) {
+          movementLst[thisAxis] = Math.min(minCollider[thisAxis] - maxAABB[thisAxis], movementLst[thisAxis]);
+        } else if (movementLst[thisAxis] < 0.0 && minAABB[thisAxis] + 1e-7 >= maxCollider[thisAxis]) {
+          movementLst[thisAxis] = Math.max(maxCollider[thisAxis] - minAABB[thisAxis], movementLst[thisAxis]);
         }
       }
 
+      // deviation. pretty bad code but its accurate.
+      movedAABB.translate(thisAxis == 0 ? movementLst[0] : 0, thisAxis == 1 ? movementLst[1] : 0, thisAxis == 2 ? movementLst[2] : 0);
     }
+  }
+
+  applyInputs(inputStrength: number, player: PlayerState) {
+    const inputVector = new Vec3(player.heading.strafe, 0, player.heading.forward);
+    const sqrNorm = inputVector.norm() ** 2;
+    if (sqrNorm < 1e-7) {
+      return;
+    }
+    if (sqrNorm > 1) {
+      inputVector.normalize();
+    }
+    inputVector.scale(inputStrength);
+
+    const sinYaw = Math.sin(player.yaw);
+    const cosYaw = Math.cos(player.yaw);
+
+    player.vel.x += inputVector.x * cosYaw - inputVector.z * sinYaw;
+    player.vel.z += inputVector.x * sinYaw + inputVector.z * cosYaw;
+    player.vel.y += inputVector.y;
   }
 
   isInClimbable(player: PlayerState, world: World): boolean {
     throw new Error("Method not implemented.");
   }
-  
 
   simulate(entity: EPhysicsCtx, world: World): IEntityState {
     this.physicsTick(entity, world);

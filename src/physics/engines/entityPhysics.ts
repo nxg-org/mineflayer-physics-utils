@@ -195,7 +195,7 @@ export class EntityPhysics implements IPhysics {
     if (entity.useControls && entity.state.control.sneak && entity.state.onGround) {
       const step = 0.05;
 
-      // In the 3 loops bellow, y offset should be -1, but that doesnt reproduce vanilla behavior.
+      // In the 3 loops below, y offset should be -1, but that doesn't reproduce vanilla behavior.
       for (; dx !== 0 && this.getSurroundingBBs(this.getEntityBB(entity, pos).translate(dx, 0, 0), world).length === 0; oldVelX = dx) {
         if (dx < step && dx >= -step) dx = 0;
         else if (dx > 0) dx -= step;
