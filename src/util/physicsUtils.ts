@@ -49,7 +49,8 @@ export enum CheapEffects {
 
 export enum CheapEnchantments {
     DEPTH_STRIDER,
-    SWIFT_SNEAK
+    SWIFT_SNEAK,
+    SOUL_SPEED
 }
 
 function getMetadataIndex(supportFeature: SupportFeature) {
@@ -98,7 +99,8 @@ export function getStatusEffectNamesForVersion(supportFeature: SupportFeature) {
 export function getEnchantmentNamesForVersion(supportFeature: ReturnType<typeof makeSupportFeature>) {
     return {
         depthStriderEnchantmentName: "depth_strider",
-        swiftSneakEnchantmentName: "swift_sneak"
+        swiftSneakEnchantmentName: "swift_sneak",
+        soulSpeedEnchantmentName: "soul_speed"
     };
 }
 

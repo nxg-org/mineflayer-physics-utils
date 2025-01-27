@@ -103,6 +103,7 @@ export class PlayerState implements IEntityState {
     public isCollidedHorizontally: boolean = false;
     public isCollidedVertically: boolean = false;
     public supportingBlockPos: Vec3 | null = null;
+    public stuckSpeedMultiplier: Vec3 = new Vec3(0, 0, 0);
 
     public jumpTicks: number = 0;
     public jumpQueued: boolean = false;
@@ -128,9 +129,11 @@ export class PlayerState implements IEntityState {
     public dolphinsGrace: number = 0;
     public slowFalling: number = 0;
     public levitation: number = 0;
+    public blindness: number = 0;
+    
     public depthStrider: number = 0;
     public swiftSneak: number = 0;
-    public blindness: number = 0;
+    public soulSpeed: number = 0;
 
     public effects: Effect[] = [];
     public statusEffectNames: ReturnType<typeof  getStatusEffectNamesForVersion>;
@@ -177,6 +180,10 @@ export class PlayerState implements IEntityState {
      * TODO: proper impl.
      */
     public flySpeed: number = 0;
+
+    public get onGroundWithoutSupportingBlock(): boolean {
+        return this.onGround && !this.supportingBlockPos;
+    }
 
     public get height(): number {
         return playerPoseCtx[this.pose].height;
@@ -267,8 +274,10 @@ export class PlayerState implements IEntityState {
             const simplifiedNbt = nbt.simplify(boots.nbt);
             const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
             this.depthStrider = this.ctx.getEnchantmentLevel(CheapEnchantments.DEPTH_STRIDER, enchantments);
+            this.soulSpeed = this.ctx.getEnchantmentLevel(CheapEnchantments.SOUL_SPEED, enchantments);
         } else {
             this.depthStrider = 0;
+            this.soulSpeed = 0;
         }
 
         const leggings = bot.entity.equipment[3];
@@ -393,6 +402,9 @@ export class PlayerState implements IEntityState {
         tmp.dolphinsGrace = this.dolphinsGrace;
         tmp.slowFalling = this.slowFalling;
         tmp.levitation = this.levitation;
+        tmp.blindness = this.blindness;
+        tmp.soulSpeed = this.soulSpeed;
+        tmp.swiftSneak = this.swiftSneak;
         tmp.depthStrider = this.depthStrider;
 
         tmp.pose = this.pose;
@@ -455,6 +467,8 @@ export class PlayerState implements IEntityState {
 
         this.dolphinsGrace = other.dolphinsGrace;
         this.slowFalling = other.slowFalling;
+        this.swiftSneak = other.swiftSneak;
+        this.soulSpeed = other.soulSpeed;
         this.levitation = other.levitation;
         this.depthStrider = other.depthStrider;
 

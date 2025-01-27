@@ -37,13 +37,17 @@ export class BotcraftPhysics implements IPhysics {
   public data: md.IndexedData;
   public movementSpeedAttribute: string;
   public jumpStrengthAttribute: string;
+  public movementEfficiencyAttribute: string;
   public waterMovementEfficiencyAttribute: string;
   public stepHeightAttribute: string;
   public supportFeature: ReturnType<typeof makeSupportFeature>;
   public blockSlipperiness: { [name: string]: number };
 
+  protected bedId: number;
   protected slimeBlockId: number;
   protected soulsandId: number;
+  protected berryBushId: number;
+  protected powderSnowId: number;
   protected honeyblockId: number;
   protected webId: number;
   protected waterId: number;
@@ -62,6 +66,7 @@ export class BotcraftPhysics implements IPhysics {
     const blocksByName = mcData.blocksByName;
     this.supportFeature = makeSupportFeature(mcData);
     this.movementSpeedAttribute = (this.data.attributesByName.movementSpeed as any).resource;
+    this.movementEfficiencyAttribute = (this.data.attributesByName.movement as any).resource;
     this.jumpStrengthAttribute = (this.data.attributesByName.jumpStrength as any).resource;
     this.waterMovementEfficiencyAttribute = (this.data.attributesByName.waterMovementEfficiency as any).resource;
     this.stepHeightAttribute = (this.data.attributesByName.stepHeight as any).resource;
@@ -78,7 +83,10 @@ export class BotcraftPhysics implements IPhysics {
     // 1.13+
     if (blocksByName.blue_ice) this.blockSlipperiness[blocksByName.blue_ice.id] = 0.989;
 
+    this.bedId = blocksByName.bed.id;
     this.soulsandId = blocksByName.soul_sand.id;
+    this.berryBushId = blocksByName.sweet_berry_bush.id;
+    this.powderSnowId = blocksByName.powder_snow.id;
     this.honeyblockId = blocksByName.honey_block ? blocksByName.honey_block.id : -1; // 1.15+
     this.webId = blocksByName.cobweb ? blocksByName.cobweb.id : blocksByName.web.id;
     this.waterId = blocksByName.water.id;
@@ -838,7 +846,11 @@ export class BotcraftPhysics implements IPhysics {
         (player.onGround || (movement.y != movementBeforeCollisions.y && movementBeforeCollisions.y < 0.0)) &&
         (movement.x != movementBeforeCollisions.x || movement.z != movementBeforeCollisions.z)
       ) {
-        let movementWithStepUp = this.collideBoundingBox(world, player.getBB(), new Vec3(movementBeforeCollisions.x, maxStepUp, movementBeforeCollisions.z))
+        let movementWithStepUp = this.collideBoundingBox(
+          world,
+          player.getBB(),
+          new Vec3(movementBeforeCollisions.x, maxStepUp, movementBeforeCollisions.z)
+        );
         const horizontalMovement = new Vec3(movementBeforeCollisions.x, 0, movementBeforeCollisions.z);
 
         // TODO: this code might straight up be wrong. It looks wrong. But the way they wrote it is so awkward.
@@ -852,16 +864,174 @@ export class BotcraftPhysics implements IPhysics {
         const movementStepUpOnly = this.collideBoundingBox(world, player.getBB(), new Vec3(0, maxStepUp, 0));
 
         if (movementStepUpOnly.y < maxStepUp) {
-          const check = this.collideBoundingBox(world, player.getBB().translateVec(movementStepUpOnly), horizontalMovement).plus(movementStepUpOnly)
-          if (check.x * check.x + check.z * check.z > movementWithStepUp.x * movementWithStepUp.x + movementWithStepUp.z * movementWithStepUp.z) {
+          const check = this.collideBoundingBox(world, player.getBB().translateVec(movementStepUpOnly), horizontalMovement).plus(
+            movementStepUpOnly
+          );
+          if (
+            check.x * check.x + check.z * check.z >
+            movementWithStepUp.x * movementWithStepUp.x + movementWithStepUp.z * movementWithStepUp.z
+          ) {
             movementWithStepUp = check;
           }
         }
-        if (movementWithStepUp.x * movementWithStepUp.x + movementWithStepUp.z * movementWithStepUp.z > movement.x * movement.x + movement.z * movement.z) {
-            movement = movementWithStepUp.plus(this.collideBoundingBox(world, player.getBB().translateVec(movementWithStepUp), new Vec3(0.0, -movementWithStepUp.y + movementBeforeCollisions.y, 0.0)));
-          }
+        if (
+          movementWithStepUp.x * movementWithStepUp.x + movementWithStepUp.z * movementWithStepUp.z >
+          movement.x * movement.x + movement.z * movement.z
+        ) {
+          movement = movementWithStepUp.plus(
+            this.collideBoundingBox(
+              world,
+              player.getBB().translateVec(movementWithStepUp),
+              new Vec3(0.0, -movementWithStepUp.y + movementBeforeCollisions.y, 0.0)
+            )
+          );
+        }
       }
     }
+
+    if (movement.norm() ** 2 > 1e-7) {
+      player.pos.add(movement);
+    }
+
+    const collisionX = movement.x != movementBeforeCollisions.x;
+    const collisionY = movement.y != movementBeforeCollisions.y;
+    const collisionZ = movement.z != movementBeforeCollisions.z;
+
+    player.isCollidedHorizontally = collisionX || collisionZ;
+    player.isCollidedVertically = collisionY;
+
+    // TODO: add minor horizontal collision check
+    {
+      // Entity::setOnGroundWithKnownMovement
+      player.onGround = movementBeforeCollisions.y < 0.0 && collisionY;
+      if (player.onGround) {
+        const halfWidth = player.halfWidth;
+        const feetSliceAABB = new AABB(
+          player.pos.x - halfWidth,
+          player.pos.y,
+          player.pos.z - halfWidth,
+          player.pos.x + halfWidth,
+          player.pos.y + 1,
+          player.pos.z + halfWidth
+        );
+        const supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB);
+        if (supportingBlockPos != null || player.onGroundWithoutSupportingBlock) {
+          player.supportingBlockPos = supportingBlockPos;
+        } else {
+          player.supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB.translate(-movement.x, 0.0, -movement.z));
+        }
+        // unnecessary due to it being a getter.
+        //  player->on_ground_without_supporting_block = !player->supporting_block_pos.has_value();
+      } else {
+        // player->on_ground_without_supporting_block = false;
+        // player->supporting_block_pos = std::optional<Position>();
+        player.supportingBlockPos = null;
+      }
+    }
+
+    // update speeds
+    if (collisionX) {
+      player.vel.x = 0.0;
+    }
+    if (collisionZ) {
+      player.vel.z = 0.0;
+    }
+    if (collisionY) {
+      if (player.control.sneak) {
+        player.vel.y = 0.0;
+      } else {
+        const blockBelow = world.getBlock(player.pos.offset(0, -0.2, 0));
+        let newSpeed = 0.0;
+        if (blockBelow != null) {
+          if (this.slimeBlockId === blockBelow.type) {
+            newSpeed = -player.vel.y;
+          } else if (this.bedId === blockBelow.type) {
+            newSpeed = player.vel.y * -0.66;
+          }
+        }
+        player.vel.y = newSpeed;
+      }
+    }
+
+    this.checkInsideBlocks(player, world);
+
+    let blockSpeedFactor = 1.0;
+    if (this.verGreaterThan("1.15.2") && this.verLessThan("1.21")) {
+      const soulSpeed = player.soulSpeed;
+      const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
+      if (feetBlock && (this.honeyblockId === feetBlock.type || (this.soulsandId === feetBlock.type && soulSpeed === 0))) {
+        blockSpeedFactor = 0.4;
+      }
+      if (blockSpeedFactor === 1.0) {
+        const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
+        if (blockBelow && (this.honeyblockId === blockBelow.type || (this.soulsandId === blockBelow.type && soulSpeed === 0))) {
+          blockSpeedFactor = 0.4;
+        }
+      }
+    }
+
+    if (this.verGreaterThan("1.20.6")) {
+      blockSpeedFactor = blockSpeedFactor + player.attributes[this.movementEfficiencyAttribute].value * (1 - blockSpeedFactor);
+    }
+
+    player.vel.x *= blockSpeedFactor;
+    player.vel.z *= blockSpeedFactor;
+  }
+  checkInsideBlocks(player: PlayerState, world: World) {
+    const aabb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
+    const [minAABB, maxAABB] = aabb.minAndMaxArrays();
+    const blockPos = new Vec3(0, 0, 0);
+    for (blockPos.y = Math.floor(minAABB[1]); blockPos.y <= Math.floor(maxAABB[1]); ++blockPos.y) {
+      for (blockPos.x = Math.floor(minAABB[0]); blockPos.x <= Math.floor(maxAABB[0]); ++blockPos.x) {
+        for (blockPos.z = Math.floor(minAABB[2]); blockPos.z <= Math.floor(maxAABB[2]); ++blockPos.z) {
+          const block = world.getBlock(blockPos);
+          if (block == null) continue;
+          if (this.webId === block.type) {
+            // WebBlock::entityInside
+            player.stuckSpeedMultiplier = new Vec3(0.25, 0.05000000074505806, 0.25);
+          } else if (this.bubblecolumnId === block.type) {
+            const aboveBlock = world.getBlock(blockPos.offset(0, 1, 0));
+            if (aboveBlock == null || aboveBlock.boundingBox === "empty") {
+              // Entity::onAboveBubbleColumn
+              player.vel.y = 0.04;
+            } else {
+              // Entity::onInsideBubbleColumn
+            }
+          } else if (this.honeyblockId === block.type) {
+            // Check if sliding down on the side of the block
+            if (
+              !player.onGround &&
+              player.pos.y <= blockPos.y + 0.9375 - 1e-7 &&
+              player.vel.y < -0.08 &&
+              (Math.abs(blockPos.x + 0.5 - player.pos.x) + 1e-7 > 0.4375 + player.halfWidth ||
+                Math.abs(blockPos.z + 0.5 - player.pos.z) + 1e-7 > 0.4375 + player.halfWidth)
+            ) {
+              if (player.vel.y < -0.13) {
+                const factor = -0.05 / player.vel.y; // magic number.
+                player.vel.x *= factor;
+                player.vel.z *= factor;
+                player.vel.y = -0.05; // magic number.
+              } else {
+                player.vel.y = -0.05; // magic number.
+              }
+            }
+          } else if (this.berryBushId === block.type) {
+            // BerryBushBlock::entityInside
+            player.stuckSpeedMultiplier = new Vec3(.800000011920929, 0.75, 0.800000011920929); // magic number
+          } else if (this.powderSnowId === block.type) {
+            // PowderSnowBlock::entityInside
+            const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
+            if (feetBlock && this.powderSnowId === feetBlock.type) {
+              player.stuckSpeedMultiplier = new Vec3(0.8999999761581421, 1.5, 0.8999999761581421);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  getSupportingBlockPos(world: World, feetSliceAABB: AABB): Vec3 | null {
+    throw new Error("Method not implemented.");
   }
   collideBoundingBox(world: World, bb: AABB, movement: Vec3): Vec3 {
     // BIG DEVIATION.
@@ -875,19 +1045,19 @@ export class BotcraftPhysics implements IPhysics {
 
     let collidedMovement = movement.clone();
     let movedAABB = newBB;
-    this.collideOneAxis(world, movedAABB, collidedMovement, 1, colliders);
+    this.collideOneAxis(movedAABB, collidedMovement, 1, colliders);
     // collision on X before Z
     if (Math.abs(collidedMovement.x) > Math.abs(collidedMovement.z)) {
-      this.collideOneAxis(world, movedAABB, collidedMovement, 0, colliders);
-      this.collideOneAxis(world, movedAABB, collidedMovement, 2, colliders);
+      this.collideOneAxis(movedAABB, collidedMovement, 0, colliders);
+      this.collideOneAxis(movedAABB, collidedMovement, 2, colliders);
     } else {
-      this.collideOneAxis(world, movedAABB, collidedMovement, 2, colliders);
-      this.collideOneAxis(world, movedAABB, collidedMovement, 0, colliders);
+      this.collideOneAxis(movedAABB, collidedMovement, 2, colliders);
+      this.collideOneAxis(movedAABB, collidedMovement, 0, colliders);
     }
 
     return collidedMovement;
   }
-  collideOneAxis(world: World, movedAABB: AABB, movement: Vec3, axis: number, colliders: AABB[]) {
+  collideOneAxis(movedAABB: AABB, movement: Vec3, axis: number, colliders: AABB[]) {
     const minAABB = movedAABB.minPoint().toArray();
     const maxAABB = movedAABB.maxPoint().toArray();
     const movementLst = movement.toArray();
