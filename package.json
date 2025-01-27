@@ -27,6 +27,7 @@
         "expect": "^29.5.0",
         "minecraft-data": "^3.83.1",
         "mineflayer": "^4.22.0",
+        "prismarine-registry" : "^1.11.0",
         "mineflayer-pathfinder": "^2.4.4",
         "prismarine-entity": "^2.4.0",
         "typescript": "^4.5.5"

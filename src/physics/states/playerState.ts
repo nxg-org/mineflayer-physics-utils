@@ -14,13 +14,19 @@ import {
 // import { bot.entity } from "prismarine-entity";
 import md from "minecraft-data";
 import { ControlStateHandler } from "../player/playerControls";
-import { IEntityState } from "./entityState";
+import { IEntityState } from ".";
 import { IPhysics } from "../engines/IPhysics";
 import type { Entity } from "prismarine-entity";
-import { PlayerPoses } from "./poses";
-import { getPose } from ".";
+import { PlayerPoses, getCollider, playerPoseCtx } from "./poses";
+import { Heading, getPose } from ".";
 
 
+export function convInpToAxes(player: PlayerState): Heading {
+    return {
+      forward: (player.control.forward as unknown as number) - (player.control.back as unknown as number),
+      strafe: (player.control.forward as unknown as number) - (player.control.back as unknown as number),
+    };
+  }
 
 const defaultMoves: ControlStateHandler = ControlStateHandler.DEFAULT();
 
@@ -78,69 +84,122 @@ export class EntityDimensions {
 export class PlayerState implements IEntityState {
     public readonly bot: Bot; // needed to clone.
     public age: number = 0;
-    public height: number = 1.8;
-    public eyeHeight: number = 1.62;
-    public halfWidth: number = 0.3;
+    // public height: number = 1.8;
+    // public eyeHeight: number = 1.62;
+    // public halfWidth: number = 0.3;
     public pos: Vec3;
     public vel: Vec3;
 
-    public onGround: boolean;
-    public isInWater: boolean;
-    public isInLava: boolean;
-    public isInWeb: boolean;
-    public elytraFlying: boolean;
-    public elytraEquipped: boolean;
-    public fireworkRocketDuration: number
-    public isCollidedHorizontally: boolean;
-    public isCollidedVertically: boolean;
-    public jumpTicks: number;
-    public jumpQueued: boolean;
+    public onGround: boolean = false;
+    public onClimbable: boolean = false;
+    public isInWater: boolean = false;
+    public isUnderWater: boolean = false;
+    public isInLava: boolean = false;
+    public isUnderLava: boolean = false;
+    public isInWeb: boolean = false;
+    public elytraFlying: boolean = false;
+    public elytraEquipped: boolean = false;
+    public fireworkRocketDuration: number = 0;
+    public isCollidedHorizontally: boolean = false;
+    public isCollidedVertically: boolean = false;
+    public supportingBlockPos: Vec3 | null = null;
+
+    public jumpTicks: number = 0;
+    public jumpQueued: boolean = false;
+    public flyJumpTriggerTime: number = 0;
+
+    public sneakCollision: boolean = false;
+
+    public attributes: Entity["attributes"] /* dunno yet */ = {};
+    public yaw: number = 0;
+    public pitch: number = 0;
+    public control: ControlStateHandler = defaultMoves;
+    public prevControl: ControlStateHandler = defaultMoves;
+    public heading: Heading = { forward: 0, strafe: 0 };
+    public prevHeading: Heading = { forward: 0, strafe: 0 };
+
+    public isUsingItem: boolean = false;
+    public isUsingMainHand: boolean = false;
+    public isUsingOffHand: boolean = false;
+
+    public jumpBoost: number = 0;
+    public speed: number = 0;
+    public slowness: number = 0;
+    public dolphinsGrace: number = 0;
+    public slowFalling: number = 0;
+    public levitation: number = 0;
+    public depthStrider: number = 0;
+    public swiftSneak: number = 0;
+    public blindness: number = 0;
+
+    public effects: Effect[] = [];
+    public statusEffectNames: ReturnType<typeof  getStatusEffectNamesForVersion>;
+
+    public pose: PlayerPoses = PlayerPoses.STANDING;
+    public gameMode: GameMode = "survival";
+
+    public food: number = 0;
+
+    // the below fields are abilities mineflayer is supposed to store.
 
     /**
      * TODO: proper impl.
      */
-    public flying: boolean;
+    public mayFly: boolean = false;
 
     /**
      * TODO: proper impl.
      */
-    public swimming: boolean;
+    public flying: boolean = false;
 
-    public sprinting: boolean;
-    public crouching: boolean;
+ 
+    /**
+     * TODO: proper impl.
+     */
+    public swimming: boolean = false;
 
+    /**
+     * TODO: proper impl.
+     */
+    public sprinting: boolean = false;
 
-    public sneakCollision: boolean;
+    /**
+     * TODO: proper impl.
+     */
+    public crouching: boolean = false;
 
-    public attributes: Entity["attributes"] /* dunno yet */;
-    public yaw: number;
-    public pitch: number;
-    public control: ControlStateHandler;
-    public prevControl: ControlStateHandler;
+    /**
+     * TODO: proper impl.
+     */
+    public fallFlying: boolean = false;
 
-    public isUsingItem: boolean;
-    public isUsingMainHand: boolean;
-    public isUsingOffHand: boolean;
+    /**
+     * TODO: proper impl.
+     */
+    public flySpeed: number = 0;
 
-    public jumpBoost: number;
-    public speed: number;
-    public slowness: number;
-    public dolphinsGrace: number;
-    public slowFalling: number;
-    public levitation: number;
-    public depthStrider: number;
-    public swiftSneak: number;
-    public blindness: number;
+    public get height(): number {
+        return playerPoseCtx[this.pose].height;
+    }
 
-    public effects: Effect[];
-    public statusEffectNames;
+    public get eyeHeight(): number {
+        switch (this.pose) {
+            case PlayerPoses.STANDING:
+                return 1.62;
+            case PlayerPoses.SNEAKING:
+                return 1.27;
+            case PlayerPoses.SWIMMING:
+            case PlayerPoses.FALL_FLYING:
+            case PlayerPoses.SPIN_ATTACK:
+                return 0.4;
+            default:
+                return 1.62;
+        }
+    }
 
-    public pose: PlayerPoses;
-    public gameMode: GameMode;
-
-    public food: number;
-
-
+    public get halfWidth(): number {
+        return playerPoseCtx[this.pose].width / 2;
+    }
 
     public readonly ctx: IPhysics;
     private readonly supportFeature: ReturnType<typeof makeSupportFeature>;
@@ -151,85 +210,8 @@ export class PlayerState implements IEntityState {
         this.bot = bot;
         this.pos = bot.entity.position.clone();
         this.vel = bot.entity.velocity.clone();
-        this.onGround = bot.entity.onGround;
-        this.isInWater = (bot.entity as any).isInWater;
-        this.isInLava = (bot.entity as any).isInLava;
-        this.isInWeb = (bot.entity as any).isInWeb;
-        this.elytraFlying = (bot.entity as any).elytraFlying;
-        this.elytraEquipped = bot.inventory.slots[bot.getEquipmentDestSlot('torso')]?.name === 'elytra';
-        this.fireworkRocketDuration = bot.fireworkRocketDuration;
-        this.isCollidedHorizontally = (bot.entity as any).isCollidedHorizontally;
-        this.isCollidedVertically = (bot.entity as any).isCollidedVertically;
-        this.sneakCollision = false; //TODO
-
-        //not sure what to do here, ngl.
-        this.jumpTicks = (bot as any).jumpTicks ?? 0;
-        this.jumpQueued = (bot as any).jumpQueued ?? false;
-
-        // Input only (not modified)
-        this.attributes = bot.entity.attributes;
-        this.yaw = bot.entity.yaw;
-        this.pitch = bot.entity.pitch;
-        this.control = control ?? ControlStateHandler.DEFAULT();
-        this.prevControl = ControlStateHandler.DEFAULT();
-
-        this.isUsingItem = isEntityUsingItem(bot.entity, this.ctx.supportFeature);
-        this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
-        this.isUsingOffHand = whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
-
-        // effects
-        this.effects = bot.entity.effects;
         this.statusEffectNames = getStatusEffectNamesForVersion(this.supportFeature);
-
-        this.jumpBoost = this.ctx.getEffectLevel(CheapEffects.JUMP_BOOST, this.effects);
-        this.speed = this.ctx.getEffectLevel(CheapEffects.SPEED, this.effects);
-        this.slowness = this.ctx.getEffectLevel(CheapEffects.SLOWNESS, this.effects);
-
-        this.dolphinsGrace = this.ctx.getEffectLevel(CheapEffects.DOLPHINS_GRACE, this.effects);
-        this.slowFalling = this.ctx.getEffectLevel(CheapEffects.SLOW_FALLING, this.effects);
-        this.levitation = this.ctx.getEffectLevel(CheapEffects.LEVITATION, this.effects);
-
-        this.blindness = this.ctx.getEffectLevel(CheapEffects.BLINDNESS, this.effects);
-
-        
-        // this.jumpBoost = ctx.getEffectLevel(this.statusEffectNames.jumpBoostEffectName, this.effects);
-        // this.speed = ctx.getEffectLevel(this.statusEffectNames.speedEffectName, this.effects);
-        // this.slowness = ctx.getEffectLevel(this.statusEffectNames.slownessEffectName, this.effects);
-
-        // this.dolphinsGrace = ctx.getEffectLevel(this.statusEffectNames.dolphinsGraceEffectName, this.effects);
-        // this.slowFalling = ctx.getEffectLevel(this.statusEffectNames.slowFallingEffectName, this.effects);
-        // this.levitation = ctx.getEffectLevel(this.statusEffectNames.levitationEffectName, this.effects);
-
-        // armour enchantments
-        //const boots = bot.inventory.slots[8];
-        const boots = bot.entity.equipment[5];
-        if (boots && boots.nbt) {
-            const simplifiedNbt = nbt.simplify(boots.nbt);
-            const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
-            this.depthStrider = this.ctx.getEnchantmentLevel(CheapEnchantments.DEPTH_STRIDER, enchantments);
-        } else {
-            this.depthStrider = 0;
-        }
-
-        const leggings = bot.entity.equipment[3];
-        if (leggings && leggings.nbt) {
-            const simplifiedNbt = nbt.simplify(leggings.nbt);
-            const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
-            this.swiftSneak = this.ctx.getEnchantmentLevel(CheapEnchantments.SWIFT_SNEAK, enchantments);
-        } else {
-            this.swiftSneak = 0;
-        }
-
-        this.pose = PlayerPoses.STANDING;
-        this.gameMode = bot.game.gameMode;
-
-        this.food = bot.food;
-
-        // TODO: impl
-        this.flying = false;
-        this.swimming = false;
-        this.sprinting = false;
-        this.crouching = false;
+        this.update(bot, control ?? defaultMoves);
     }
 
     public update(bot: Bot, control?: ControlStateHandler): PlayerState {
@@ -237,9 +219,13 @@ export class PlayerState implements IEntityState {
         // Input / Outputs
         this.pos.set(bot.entity.position.x, bot.entity.position.y, bot.entity.position.z);
         this.vel.set(bot.entity.velocity.x, bot.entity.velocity.y, bot.entity.velocity.z);
+        this.supportingBlockPos = (bot.entity as any).supportingBlockPos ?? null;
         this.onGround = bot.entity.onGround;
+        this.onClimbable = (bot.entity as any).onClimbable;
         this.isInWater = (bot.entity as any).isInWater;
+        this.isUnderWater = (bot.entity as any).isUnderWater;
         this.isInLava = (bot.entity as any).isInLava;
+        this.isUnderLava = (bot.entity as any).isUnderLava;
         this.isInWeb = (bot.entity as any).isInWeb;
         this.elytraFlying = (bot.entity as any).elytraFlying;
         this.elytraEquipped = bot.inventory.slots[bot.getEquipmentDestSlot('torso')]?.name === 'elytra';
@@ -250,6 +236,7 @@ export class PlayerState implements IEntityState {
         // dunno what to do about these, ngl.
         this.jumpTicks = (bot as any).jumpTicks ?? 0;
         this.jumpQueued = (bot as any).jumpQueued ?? false;
+        this.flyJumpTriggerTime = (bot as any).flyJumpTriggerTime ?? 0;
 
         // Input only (not modified)
         this.attributes = bot.entity.attributes;
@@ -295,14 +282,33 @@ export class PlayerState implements IEntityState {
 
         this.pose = getPose(bot.entity);
         this.gameMode = bot.game.gameMode;
+        this.food = bot.food;
 
         // TODO:
         this.flying = false;
         this.swimming = false;
         this.sprinting = false;
         this.crouching = false;
+        this.fallFlying = false;
 
-        this.food = bot.food;
+        switch (bot.game.gameMode) {
+            case "creative":
+                this.flySpeed = 0.05;
+                this.mayFly = true;
+                break;
+            case "spectator":
+                this.flySpeed = 0.1;
+                this.mayFly = true;
+                break;
+            case "survival":
+            case "adventure":
+                this.flySpeed = 0;
+                this.mayFly = false;
+                break;
+            default:
+                throw new Error("Unknown game mode: " + bot.game.gameMode);
+        }
+
 
         return this;
     }
@@ -312,18 +318,24 @@ export class PlayerState implements IEntityState {
         bot.entity.position.set(this.pos.x, this.pos.y, this.pos.z);
         bot.entity.velocity.set(this.vel.x, this.vel.y, this.vel.z);
         bot.entity.onGround = this.onGround;
+        (bot.entity as any).onClimbable = this.onClimbable;
         (bot.entity as any).isInWater = this.isInWater;
+        (bot.entity as any).isUnderWater = this.isUnderWater;
         (bot.entity as any).isInLava = this.isInLava;
+        (bot.entity as any).isUnderLava = this.isUnderLava;
         (bot.entity as any).isInWeb = this.isInWeb;
         (bot.entity as any).elytraFlying = this.elytraFlying;
         (bot.entity as any).elytraEquipped = this.elytraEquipped;
         bot.fireworkRocketDuration = this.fireworkRocketDuration;
         (bot.entity as any).isCollidedHorizontally = this.isCollidedHorizontally;
         (bot.entity as any).isCollidedVertically = this.isCollidedVertically;
+        (bot.entity as any).supportingBlockPos = this.supportingBlockPos;
 
         // dunno what to do about these, ngl.
         (bot as any).jumpTicks = this.jumpTicks;
         (bot as any).jumpQueued = this.jumpQueued;
+        (bot as any).flyJumpTriggerTime = this.flyJumpTriggerTime;
+
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;
 
@@ -339,19 +351,25 @@ export class PlayerState implements IEntityState {
         tmp.pos.set(this.pos.x, this.pos.y, this.pos.z);
         tmp.vel.set(this.vel.x, this.vel.y, this.vel.z);
         tmp.onGround = this.onGround;
+        tmp.onClimbable = this.onClimbable;
         tmp.isInWater = this.isInWater;
+        tmp.isUnderWater = this.isUnderWater;
         tmp.isInLava = this.isInLava;
+        tmp.isUnderLava = this.isUnderLava;
         tmp.isInWeb = this.isInWeb;
         tmp.elytraFlying = this.elytraFlying;
         tmp.elytraEquipped = this.elytraEquipped;
         tmp.fireworkRocketDuration = this.fireworkRocketDuration;
         tmp.isCollidedHorizontally = this.isCollidedHorizontally;
         tmp.isCollidedVertically = this.isCollidedVertically;
+        tmp.supportingBlockPos = this.supportingBlockPos;
+
         tmp.sneakCollision = false; //TODO
 
         //not sure what to do here, ngl.
         tmp.jumpTicks = this.jumpTicks ?? 0;
         tmp.jumpQueued = this.jumpQueued ?? false;
+        tmp.flyJumpTriggerTime = this.flyJumpTriggerTime ?? 0;
 
         // Input only (not modified)
         tmp.attributes = this.attributes;
@@ -384,6 +402,7 @@ export class PlayerState implements IEntityState {
         tmp.swimming = this.swimming;
         tmp.sprinting = this.sprinting;
         tmp.crouching = this.crouching;
+        tmp.fallFlying = this.fallFlying;
 
         tmp.food = this.food;
 
@@ -396,19 +415,25 @@ export class PlayerState implements IEntityState {
         this.pos.set(other.pos.x, other.pos.y, other.pos.z);
         this.vel.set(other.vel.x, other.vel.y, other.vel.z);
         this.onGround = other.onGround;
+        this.onClimbable = other.onClimbable;
         this.isInWater = other.isInWater;
+        this.isUnderWater = other.isUnderWater;
         this.isInLava = other.isInLava;
+        this.isUnderLava = other.isUnderLava;
         this.isInWeb = other.isInWeb;
         this.elytraFlying = other.elytraFlying;
         this.elytraEquipped = other.elytraEquipped;
         this.fireworkRocketDuration = other.fireworkRocketDuration;
         this.isCollidedHorizontally = other.isCollidedHorizontally;
         this.isCollidedVertically = other.isCollidedVertically;
+        this.supportingBlockPos = other.supportingBlockPos;
+
         this.sneakCollision = false; //TODO
 
         //not sure what to do here, ngl.
         this.jumpTicks = other.jumpTicks ?? 0;
         this.jumpQueued = other.jumpQueued ?? false;
+        this.flyJumpTriggerTime = other.flyJumpTriggerTime ?? 0;
 
         // Input only (not modified)
         this.attributes = other.attributes;
@@ -447,12 +472,7 @@ export class PlayerState implements IEntityState {
 
     }
 
-    public clearControlStates(): PlayerState {
-        this.control = defaultMoves
-        return this
-    }
-
-    public getAABB(): AABB {
+    public getBB(): AABB {
         const w = this.halfWidth;
         return new AABB(
             this.pos.x - w,
@@ -466,12 +486,14 @@ export class PlayerState implements IEntityState {
 
     
     public getUnderlyingBlockBBs(world:any /*prismarine-world*/): AABB[] {
-        const queryBB = this.getAABB();
+        const queryBB = this.getBB();
         return this.ctx.getUnderlyingBlockBBs(queryBB, world)
     }
 
     public getSurroundingBBs(world:any /*prismarine-world*/): AABB[] {
-        const queryBB = this.getAABB(); 
+        const queryBB = this.getBB(); 
         return this.ctx.getSurroundingBBs(queryBB, world);
     }
 }
+export { ControlStateHandler };
+

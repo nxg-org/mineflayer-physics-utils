@@ -5,7 +5,7 @@ import entityLoader, { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
 import { applyMdToNewEntity, DefaultPlayer } from "../../util/physicsUtils";
 import { IPhysics } from "../engines/IPhysics";
-import { EntityState, IEntityState } from "../states/entityState";
+import { EntityState, IEntityState } from "../states";
 import { playerPoseCtx, PlayerPoses } from "../states/poses";
 
 import info from "../info/entity_physics.json";
@@ -48,6 +48,7 @@ export class EPhysicsCtx {
     public airborneAccel: number = 0.02;
 
     public waterInertia: number = 0.8;
+    public sprintWaterInertia: number = 0.9;
     public lavaInertia: number = 0.5;
     public liquidAccel: number = 0.02;
 

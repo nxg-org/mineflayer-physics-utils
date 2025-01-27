@@ -33,7 +33,7 @@ export class PhysicsWorldSettings {
     // public lavaInertia: number = 0.5;
     // public liquidAcceleration: number = 0.02;
     public defaultSlipperiness: number = 0.6;
-    public outOfLiquidImpulse: number = 0.3;
+    public outOfLiquidImpulse: number = Math.fround(0.3);
     public autojumpCooldown: number = 10; // ticks (0.5s)
     public bubbleColumnSurfaceDrag: BubbleColumnInfo = {
         down: 0.03,

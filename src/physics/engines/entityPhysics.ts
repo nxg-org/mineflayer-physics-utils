@@ -14,7 +14,7 @@ import {
 import * as attributes from "../info/attributes";
 import * as math from "../info/math";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
-import { EntityState, IEntityState } from "../states/entityState";
+import { EntityState, IEntityState } from "../states";
 import { IPhysics } from "./IPhysics";
 import { PlayerState } from "../states";
 

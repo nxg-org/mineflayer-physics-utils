@@ -681,7 +681,7 @@ export class EntityPhysics implements IPhysics {
             // Water / Lava movement
             const lastY = pos.y;
             let acceleration = entity.liquidAccel;
-            const inertia = entity.state.isInWater ? entity.waterInertia : entity.lavaInertia;
+            const inertia = entity.state.isInWater ? entity.sprintWaterInertia : entity.lavaInertia;
             let horizontalInertia = inertia;
 
             if (entity.state.isInWater) {

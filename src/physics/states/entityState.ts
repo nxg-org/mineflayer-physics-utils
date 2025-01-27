@@ -11,53 +11,15 @@ import { PlayerPoses } from "./poses";
 import { IPhysics } from "../engines";
 import nbt from "prismarine-nbt";
 import {Entity} from "prismarine-entity";
+import { IEntityState } from ".";
 
 
-export interface IEntityState {
-    age: number;
-    height: number;
-    halfWidth: number;
-    pos: Vec3;
-    vel: Vec3;
-    pitch: number;
-    yaw: number;
-    pose: PlayerPoses;
-    control: ControlStateHandler;
-    onGround: boolean;
 
-    attributes: Entity["attributes"];
-
-    isUsingItem: boolean;
-    isInWater: boolean;
-    isInLava: boolean;
-    isInWeb: boolean;
-    elytraFlying: boolean;
-    elytraEquipped: boolean;
-    fireworkRocketDuration: number;
-    sneakCollision: boolean;
-    isCollidedHorizontally: boolean;
-    isCollidedVertically: boolean;
-
-    effects: Effect[];
-    jumpBoost: number;
-    speed: number;
-    slowness: number;
-    dolphinsGrace: number;
-    slowFalling: number;
-    levitation: number;
-    depthStrider: number;
-
-    jumpTicks: number;
-    jumpQueued: boolean;
-
-    clone(): IEntityState;
-}
 
 const emptyVec = new Vec3(0, 0, 0);
 export class EntityState implements IEntityState {
     // may keep this, may not. Who knows?
     public age: number = 0;
-
     public isInWater: boolean;
     public isInLava: boolean;
     public isInWeb: boolean;
@@ -67,6 +29,8 @@ export class EntityState implements IEntityState {
     public isCollidedVertically: boolean;
     public jumpTicks: number;
     public jumpQueued: boolean;
+
+    public onClimbable: boolean = false;
 
     public sneakCollision: boolean;
 
@@ -87,6 +51,8 @@ export class EntityState implements IEntityState {
     public effects: Effect[];
     public pose: PlayerPoses;
     public fireworkRocketDuration: number;
+
+    public supportingBlockPos: Vec3 | null;
 
     // public effects: Effect[];
     // public statusEffectNames;
@@ -137,6 +103,7 @@ export class EntityState implements IEntityState {
         this.depthStrider = 0;
 
         this.pose = PlayerPoses.STANDING;
+        this.supportingBlockPos = null;
     }
 
     public static CREATE_FROM_BOT(ctx: IPhysics, bot: Bot): EntityState {
@@ -206,6 +173,7 @@ export class EntityState implements IEntityState {
             // most mobs don't have this defined, so ignore it (only self does).
             this.vel = entity.velocity.clone();
             this.onGround = entity.onGround;
+            this.onClimbable = (entity as any).onClimbable;
             this.isInWater = (entity as any).isInWater;
             this.isInLava = (entity as any).isInLava;
             this.isInWeb = (entity as any).isInWeb;
@@ -262,6 +230,7 @@ export class EntityState implements IEntityState {
 
     public updateFromRaw(other: IEntityState) {
         this.onGround = other.onGround ?? this.onGround;
+        this.onClimbable = other.onClimbable ?? this.onClimbable;
         this.sneakCollision = other.sneakCollision ?? this.sneakCollision;
         this.isUsingItem = other.isUsingItem ?? this.isUsingItem;
         this.jumpBoost = other.jumpBoost ?? this.jumpBoost;
@@ -286,6 +255,7 @@ export class EntityState implements IEntityState {
         bot.entity.position.set(this.pos.x, this.pos.y, this.pos.z);
         bot.entity.velocity.set(this.vel.x, this.vel.y, this.vel.z);
         bot.entity.onGround = this.onGround;
+        (bot.entity as any).onClimbable = this.onClimbable;
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;
         bot.controlState = this.control;
@@ -315,6 +285,7 @@ export class EntityState implements IEntityState {
         // entity.position.set(this.position.x, this.position.y, this.position.z);
         // entity.velocity.set(this.velocity.x, this.velocity.y, this.velocity.z);
         entity.onGround = this.onGround;
+        (entity as any).onClimbable = this.onClimbable;
         entity.yaw = this.yaw;
         entity.pitch = this.pitch;
         return this;
@@ -332,6 +303,7 @@ export class EntityState implements IEntityState {
             this.pitch,
             this.control.clone(),
         );
+        other.onClimbable = this.onClimbable;
         other.age = this.age;
         other.isCollidedHorizontally = this.isCollidedHorizontally;
         other.isCollidedVertically = this.isCollidedVertically;
@@ -365,6 +337,7 @@ export class EntityState implements IEntityState {
         this.pos = other.pos.clone();
         this.vel = other.vel.clone();
         this.onGround = other.onGround;
+        this.onClimbable = other.onClimbable;
         this.isCollidedHorizontally = other.isCollidedHorizontally;
         this.isCollidedVertically = other.isCollidedVertically;
         this.isInWater = other.isInWater;
@@ -401,7 +374,7 @@ export class EntityState implements IEntityState {
      * needs to be updated.
      * @returns AABB
      */
-    public getAABB(): AABB {
+    public getBB(): AABB {
         const hW = this.halfWidth;
         return new AABB(
             this.pos.x - hW,
@@ -428,12 +401,12 @@ export class EntityState implements IEntityState {
     }
 
     public getUnderlyingBlockBBs(world: any /*prismarine-world*/) {
-        const queryBB = this.getAABB();
+        const queryBB = this.getBB();
         return this.ctx.getUnderlyingBlockBBs(queryBB, world);
     }
 
     public getSurroundingBBs(world: any /*prismarine-world*/): AABB[] {
-        const queryBB = this.getAABB();
+        const queryBB = this.getBB();
         return this.ctx.getSurroundingBBs(queryBB, world);
     }
 }
