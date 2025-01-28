@@ -499,10 +499,18 @@ export class PlayerState implements IEntityState {
     }
 
 
+    public lookAt(vec3: Vec3) {
+        const dx = vec3.x - this.pos.x;
+        const dy = vec3.y - this.pos.y;
+        const dz = vec3.z - this.pos.z;
 
-    public getSurroundingBBs(world:any /*prismarine-world*/): AABB[] {
-        const queryBB = this.getBB(); 
-        return this.ctx.getSurroundingBBs(queryBB, world);
+        this.yaw = Math.atan2(dz, dx) * 180 / Math.PI - 90;
+        this.pitch = -Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)) * 180 / Math.PI;
+    }
+
+    public look(yaw: number, pitch:number) {
+        this.yaw = yaw;
+        this.pitch = pitch;
     }
 }
 export { ControlStateHandler };

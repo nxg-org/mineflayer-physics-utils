@@ -399,9 +399,4 @@ export class EntityState implements IEntityState {
         this.yaw = yaw;
         this.pitch = pitch;
     }
-
-    public getSurroundingBBs(world: any /*prismarine-world*/): AABB[] {
-        const queryBB = this.getBB();
-        return this.ctx.getSurroundingBBs(queryBB, world);
-    }
 }

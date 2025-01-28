@@ -798,7 +798,7 @@ export class EntityPhysics implements IPhysics {
     }
 
     this.moveEntityWithHeading(entity, strafe, forward, world);
-
+    entity.state.age++;
     return entity.state;
   }
 }

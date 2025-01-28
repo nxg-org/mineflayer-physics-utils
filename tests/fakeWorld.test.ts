@@ -24,7 +24,10 @@ class FakeWorld {
   overrideBlocks: {[key: string]: PBlock} = {}
 
   setOverrideBlock(pos: Vec3, type: number) {
-    this.overrideBlocks[`${pos.x},${pos.y},${pos.z}`] = new Block(type, 0, 0);
+    pos = pos.floored();
+    const block = new Block(type, 0, 0);
+    block.position = pos;
+    this.overrideBlocks[`${pos.x},${pos.y},${pos.z}`] = block;
   }
 
   clearOverrides() {
@@ -32,6 +35,7 @@ class FakeWorld {
   }
   
   getBlock(pos: Vec3) {
+    pos = pos.floored();
     const key = `${pos.x},${pos.y},${pos.z}`;
     if (this.overrideBlocks[key]) {
       return this.overrideBlocks[key];
@@ -89,7 +93,7 @@ describe("Physics Simulation Tests", () => {
   const setupEntity = (yOffset: number) => {
     fakePlayer = createFakePlayer(new Vec3(0, groundLevel + yOffset, 0), groundLevel);
     fakePlayer.entity = applyMdToNewEntity(EPhysicsCtx, playerType, fakePlayer.entity);
-    physics = new EntityPhysics(mcData);
+    physics = new BotcraftPhysics(mcData);
     playerCtx = EPhysicsCtx.FROM_BOT(physics, fakePlayer );
     playerState = playerCtx.state as PlayerState;
     playerState.control = ControlStateHandler.DEFAULT();
@@ -106,7 +110,7 @@ describe("Physics Simulation Tests", () => {
     playerState.vel.y = 0
     playerCtx.gravity = 0;
 
-    for (let i = 0; i < floatingOffset; i++) {
+    for (let i = 0; i < 10; i++) {
       playerState.update(fakePlayer);
       physics.simulate(playerCtx, fakeWorld);
       playerState.apply(fakePlayer );
@@ -147,7 +151,8 @@ describe("Physics Simulation Tests", () => {
     expect(fakePlayer.entity.position).toEqual(new Vec3(0, groundLevel + floatingOffset, 0));
     playerCtx.gravity = orgGravity;
 
-    while (!fakePlayer.entity.onGround) {
+
+    while (!fakePlayer.entity.onGround && playerState.age < 100) {
       physics.simulate(playerCtx, fakeWorld);
       playerState.apply(fakePlayer );
     }
@@ -172,5 +177,20 @@ describe("Physics Simulation Tests", () => {
     }
 
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);
+  });
+
+  it("horizonal collision detection", () => {
+    setupEntity(0);
+    fakeWorld.setOverrideBlock(new Vec3(0, groundLevel + 1, -2), mcData.blocksByName.stone.id);
+    playerState.control.forward = true;
+
+    for (let i = 0; i < 10; i++) {
+      physics.simulate(playerCtx, fakeWorld);
+      playerState.apply(fakePlayer);
+      console.log(fakePlayer.entity.position, playerState.isCollidedHorizontally);
+    }
+
+    expect(playerState.pos.z).toEqual(-0.7);
+    expect(playerState.isCollidedHorizontally).toEqual(true);
   });
 });

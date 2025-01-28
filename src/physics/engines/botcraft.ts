@@ -1101,15 +1101,27 @@ export class BotcraftPhysics implements IPhysics {
       const minCollider = collider.minPoint().toArray();
       const maxCollider = collider.maxPoint().toArray();
 
+      const cond1 = movementLst[thisAxis] > 0.0 && maxAABB[thisAxis] - 1e-7 <= minCollider[thisAxis]
+      const cond2 = movementLst[thisAxis] < 0.0 && minAABB[thisAxis] + 1e-7 >= maxCollider[thisAxis]
+      if (collider.minY === 5 && thisAxis === 2) {
+        console.log("collider", collider);
+        console.log("movement", movement);
+        console.log("movedAABB", movedAABB);
+        console.log("movementLst", movementLst)
+        console.log(minCollider, maxCollider)
+        console.log(minAABB, maxAABB)
+        console.log("axis", thisAxis)
+        console.log( movementLst[thisAxis], maxAABB[thisAxis] - 1e-7, minCollider[thisAxis], cond1)
+        console.log(movementLst[thisAxis], minAABB[thisAxis] + 1e-7, maxCollider[thisAxis],  cond2)      }
       if (
         maxAABB[axis1] - 1e-7 > minCollider[axis1] &&
         minAABB[axis1] + 1e-7 < maxCollider[axis1] &&
         maxAABB[axis2] - 1e-7 > minCollider[axis2] &&
         minAABB[axis2] + 1e-7 < maxCollider[axis2]
       ) {
-        if (movementLst[thisAxis] > 0.0 && maxAABB[thisAxis] - 1e-7 <= minCollider[thisAxis]) {
+        if (cond1) {
           movementLst[thisAxis] = Math.min(minCollider[thisAxis] - maxAABB[thisAxis], movementLst[thisAxis]);
-        } else if (movementLst[thisAxis] < 0.0 && minAABB[thisAxis] + 1e-7 >= maxCollider[thisAxis]) {
+        } else if (cond2) {
           movementLst[thisAxis] = Math.max(maxCollider[thisAxis] - minAABB[thisAxis], movementLst[thisAxis]);
         }
       }
