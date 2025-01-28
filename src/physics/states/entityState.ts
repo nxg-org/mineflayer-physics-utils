@@ -400,11 +400,6 @@ export class EntityState implements IEntityState {
         this.pitch = pitch;
     }
 
-    public getUnderlyingBlockBBs(world: any /*prismarine-world*/) {
-        const queryBB = this.getBB();
-        return this.ctx.getUnderlyingBlockBBs(queryBB, world);
-    }
-
     public getSurroundingBBs(world: any /*prismarine-world*/): AABB[] {
         const queryBB = this.getBB();
         return this.ctx.getSurroundingBBs(queryBB, world);

@@ -11,7 +11,6 @@ import {
   makeSupportFeature,
   getLookingVector,
 } from "../../util/physicsUtils";
-import * as attributes from "../info/attributes";
 import * as math from "../info/math";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { IEntityState } from "../states";
@@ -131,25 +130,6 @@ export class BotcraftPhysics implements IPhysics {
     pos.z = bb.minZ + halfWidth;
   }
 
-  getUnderlyingBlockBBs(queryBB: AABB, world: World): AABB[] {
-    const surroundingBBs = [];
-    const cursor = new Vec3(0, Math.floor(queryBB.minY) - 0.251, 0);
-    for (cursor.z = Math.floor(queryBB.minZ); cursor.z <= Math.floor(queryBB.maxZ); cursor.z++) {
-      for (cursor.x = Math.floor(queryBB.minX); cursor.x <= Math.floor(queryBB.maxX); cursor.x++) {
-        const block = world.getBlock(cursor);
-        if (block) {
-          const blockPos = block.position;
-          for (const shape of block.shapes) {
-            const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
-            blockBB.translate(blockPos.x, blockPos.y, blockPos.z);
-            surroundingBBs.push(blockBB);
-          }
-        }
-      }
-    }
-    return surroundingBBs;
-  }
-
   getSurroundingBBs(queryBB: AABB, world: World): AABB[] {
     const surroundingBBs = [];
     const cursor = new Vec3(0, 0, 0);
@@ -211,7 +191,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   private worldIsFree(world: World, bb: AABB, ignoreLiquid: boolean) {
-    return this.getSurroundingBBs(bb, world).length === 0;
+    return this.getSurroundingBBs(bb, world).length === 0
   }
 
   /**

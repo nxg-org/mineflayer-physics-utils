@@ -12,7 +12,7 @@ export interface IPhysics {
     supportFeature: ReturnType<typeof makeSupportFeature>;
     getEffectLevel: (effect: CheapEffects, effects: Effect[]) => number;
     getEnchantmentLevel: (effect: CheapEnchantments, enchantments: any[]) => number;
-    getUnderlyingBlockBBs(queryBB: AABB, world: any): AABB[];
+    // getUnderlyingBlockBBs(queryBB: AABB, world: any): AABB[];
     getSurroundingBBs(queryBB: AABB, world: any): AABB[];
     simulate(simCtx: EPhysicsCtx, world: any): IEntityState;
 
