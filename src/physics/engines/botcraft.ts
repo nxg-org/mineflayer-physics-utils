@@ -12,6 +12,7 @@ import {
   getLookingVector,
 } from "../../util/physicsUtils";
 import * as math from "../info/math";
+import * as attributes from "../info/attributes";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { IEntityState } from "../states";
 import { IPhysics } from "./IPhysics";
@@ -25,6 +26,16 @@ type Heading = { forward: number; strafe: number };
 type World = {
   getBlock: (pos: Vec3) => Block;
 };
+
+function extractAttribute(ctx: IPhysics, genericName: string) {
+  const data = ctx.data.attributesByName[genericName] as any;
+  if (data == null) return null;
+  if (ctx.supportFeature("attributesPrefixedByMinecraft")) {
+    return `minecraft:${data.resource}`;
+  } else {
+    return data.resource;
+  }
+}
 
 /**
  * Looking at this code, it's too specified towards players.
@@ -64,11 +75,11 @@ export class BotcraftPhysics implements IPhysics {
     this.data = mcData;
     const blocksByName = mcData.blocksByName;
     this.supportFeature = makeSupportFeature(mcData);
-    this.movementSpeedAttribute = (this.data.attributesByName.movementSpeed as any).resource;
-    this.movementEfficiencyAttribute = (this.data.attributesByName.movement as any).resource;
-    this.jumpStrengthAttribute = (this.data.attributesByName.jumpStrength as any).resource;
-    this.waterMovementEfficiencyAttribute = (this.data.attributesByName.waterMovementEfficiency as any).resource;
-    this.stepHeightAttribute = (this.data.attributesByName.stepHeight as any).resource;
+    this.movementSpeedAttribute = extractAttribute(this, "movementSpeed");
+    this.movementEfficiencyAttribute = extractAttribute(this, "movementEfficiency");
+    this.jumpStrengthAttribute = extractAttribute(this, "jumpStrength");
+    this.waterMovementEfficiencyAttribute = extractAttribute(this, "waterMovementEfficiency");
+    this.stepHeightAttribute = extractAttribute(this, "stepHeight");
 
     this.blockSlipperiness = {};
     this.slimeBlockId = blocksByName.slime_block ? blocksByName.slime_block.id : blocksByName.slime.id;
@@ -82,17 +93,17 @@ export class BotcraftPhysics implements IPhysics {
     // 1.13+
     if (blocksByName.blue_ice) this.blockSlipperiness[blocksByName.blue_ice.id] = 0.989;
 
-    this.bedId = blocksByName.bed.id;
+    this.bedId = blocksByName.bed?.id ?? blocksByName.white_bed?.id ?? -1;
     this.soulsandId = blocksByName.soul_sand.id;
-    this.berryBushId = blocksByName.sweet_berry_bush.id;
-    this.powderSnowId = blocksByName.powder_snow.id;
+    this.scaffoldId = blocksByName.scaffolding?.id ?? -1; // 1.14+
+    this.berryBushId = blocksByName.sweet_berry_bush?.id ?? -1; // 1.14+
+    this.powderSnowId = blocksByName.powder_snow?.id ?? -1;
     this.honeyblockId = blocksByName.honey_block ? blocksByName.honey_block.id : -1; // 1.15+
     this.webId = blocksByName.cobweb ? blocksByName.cobweb.id : blocksByName.web.id;
     this.waterId = blocksByName.water.id;
     this.lavaId = blocksByName.lava.id;
     this.ladderId = blocksByName.ladder.id;
     this.vineId = blocksByName.vine.id;
-    this.scaffoldId = blocksByName.scaffolding.id; // 1.14+
     this.waterLike = new Set();
     if (blocksByName.seagrass) this.waterLike.add(blocksByName.seagrass.id); // 1.13+
     if (blocksByName.tall_seagrass) this.waterLike.add(blocksByName.tall_seagrass.id); // 1.13+
@@ -133,9 +144,9 @@ export class BotcraftPhysics implements IPhysics {
   getSurroundingBBs(queryBB: AABB, world: World): AABB[] {
     const surroundingBBs = [];
     const cursor = new Vec3(0, 0, 0);
-    for (cursor.y = Math.floor(queryBB.minY) - 1; cursor.y <= Math.floor(queryBB.maxY); cursor.y++) {
-      for (cursor.z = Math.floor(queryBB.minZ); cursor.z <= Math.floor(queryBB.maxZ); cursor.z++) {
-        for (cursor.x = Math.floor(queryBB.minX); cursor.x <= Math.floor(queryBB.maxX); cursor.x++) {
+    for (cursor.y = Math.floor(queryBB.minY) - 1; cursor.y <= Math.floor(queryBB.maxY); ++cursor.y) {
+      for (cursor.z = Math.floor(queryBB.minZ); cursor.z <= Math.floor(queryBB.maxZ); ++cursor.z) {
+        for (cursor.x = Math.floor(queryBB.minX); cursor.x <= Math.floor(queryBB.maxX); ++cursor.x) {
           const block = world.getBlock(cursor);
           if (block) {
             const blockPos = block.position;
@@ -191,7 +202,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   private worldIsFree(world: World, bb: AABB, ignoreLiquid: boolean) {
-    return this.getSurroundingBBs(bb, world).length === 0
+    return this.getSurroundingBBs(bb, world).length === 0;
   }
 
   /**
@@ -251,6 +262,7 @@ export class BotcraftPhysics implements IPhysics {
   private localPlayerAIStep(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
     const heading = convInpToAxes(player);
+    player.heading = heading;
     this.inputsToCrouch(player, heading, world);
     this.inputsToSprint(player, heading, world);
     this.inputsToFly(player, heading, world);
@@ -417,7 +429,6 @@ export class BotcraftPhysics implements IPhysics {
       } else {
         sneakCoefficient = player.attributes?.sneakingSpeed.value ?? 0.3;
       }
-
       heading.forward *= sneakCoefficient;
       heading.strafe *= sneakCoefficient;
     }
@@ -538,45 +549,47 @@ export class BotcraftPhysics implements IPhysics {
       const player = entity as PlayerState;
 
       if (player.control.jump && !player.flying) {
-        player.vel.y += 0.03999999910593033;
-      } else if (player.onGround && player.jumpTicks === 0) {
-        let blockJumpFactor = 1.0;
-        const jumpBoost = 0.1 * player.jumpBoost; // in mineflayer, level 1 is 1, not 0.
+        if (player.isInWater || player.isInLava) {
+          player.vel.y += 0.03999999910593033;
+        } else if (player.onGround && player.jumpTicks === 0) {
+          let blockJumpFactor = 1.0;
+          const jumpBoost = 0.1 * player.jumpBoost; // in mineflayer, level 1 is 1, not 0.
 
-        // get below block
-        const blFeet = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
-        if (blFeet && this.honeyblockId !== blFeet.type) {
-          const blBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
-          if (blBelow && this.honeyblockId === blBelow.type) {
+          // get below block
+          const blFeet = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
+          if (blFeet && this.honeyblockId !== blFeet.type) {
+            const blBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
+            if (blBelow && this.honeyblockId === blBelow.type) {
+              blockJumpFactor = 0.4;
+            }
+          } else {
             blockJumpFactor = 0.4;
           }
-        } else {
-          blockJumpFactor = 0.4;
-        }
 
-        if (this.verLessThan("1.20.5")) {
-          player.vel.y = 0.42 * blockJumpFactor + jumpBoost;
-          if (player.sprinting) {
-            const yawRad = player.yaw; // should already be in yaw.
-            // potential inconsistency here. This may not be accurate.
-            player.vel.x -= Math.fround(Math.sin(yawRad)) * 0.2;
-            player.vel.z += Math.fround(Math.cos(yawRad)) * 0.2;
-          }
-        } else {
-          // something about getting an attribute for jump strength?
-          const jumpPower = entity.attributes[this.jumpStrengthAttribute].value * blockJumpFactor + jumpBoost;
-          if (jumpPower > 1e-5) {
-            player.vel.y = jumpPower;
+          if (this.verLessThan("1.20.5")) {
+            player.vel.y = 0.42 * blockJumpFactor + jumpBoost;
             if (player.sprinting) {
               const yawRad = player.yaw; // should already be in yaw.
-              player.vel.x -= Math.sin(yawRad) * 0.2;
-              player.vel.z += Math.cos(yawRad) * 0.2;
+              // potential inconsistency here. This may not be accurate.
+              player.vel.x -= Math.fround(Math.sin(yawRad)) * 0.2;
+              player.vel.z += Math.fround(Math.cos(yawRad)) * 0.2;
             }
+          } else {
+            // something about getting an attribute for jump strength?
+            const jumpPower = entity.attributes[this.jumpStrengthAttribute].value * blockJumpFactor + jumpBoost;
+            if (jumpPower > 1e-5) {
+              player.vel.y = jumpPower;
+              if (player.sprinting) {
+                const yawRad = player.yaw; // should already be in yaw.
+                player.vel.x -= Math.sin(yawRad) * 0.2;
+                player.vel.z += Math.cos(yawRad) * 0.2;
+              }
+            }
+            player.jumpTicks = worldSettings.autojumpCooldown;
           }
-          player.jumpTicks = worldSettings.autojumpCooldown;
+        } else {
+          player.jumpTicks = 0;
         }
-      } else {
-        player.jumpTicks = 0;
       }
     }
   }
@@ -587,6 +600,39 @@ export class BotcraftPhysics implements IPhysics {
     } else {
       return entity.pos.offset(0, -0.500001, 0);
     }
+  }
+
+  /**
+   * Taken from original physics impl.
+   * @param entity 
+   * @returns 
+   */
+  getMovementSpeedAttribute(entity: EPhysicsCtx) {
+    let attribute;
+    if (entity.state.attributes && entity.state.attributes[this.movementSpeedAttribute]) {
+      // Use server-side player attributes
+      attribute = entity.state.attributes[this.movementSpeedAttribute];
+    } else {
+      // Create an attribute if the player does not have it
+      //TODO: Generalize to all entities.
+      attribute = attributes.createAttributeValue(entity.worldSettings.playerSpeed);
+    }
+    // Client-side sprinting (don't rely on server-side sprinting)
+    // setSprinting in Livingentity.state.java
+    //TODO: Generalize to all entities.
+    attribute = attributes.deleteAttributeModifier(attribute, entity.worldSettings.sprintingUUID); // always delete sprinting (if it exists)
+    if (entity.state.control.sprint) {
+      if (!attributes.checkAttributeModifier(attribute, entity.worldSettings.sprintingUUID)) {
+        attribute = attributes.addAttributeModifier(attribute, {
+          uuid: entity.worldSettings.sprintingUUID,
+          amount: entity.worldSettings.sprintSpeed,
+          operation: 2,
+        });
+      }
+    }
+    // Calculate what the speed is (0.1 if no modification)
+    const attributeSpeed = attributes.getAttributeValue(attribute);
+    return attributeSpeed;
   }
 
   /**
@@ -674,7 +720,7 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.y -= ctx.lavaGravity;
 
         const bb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
-        bb.translate(0, 0.6000000238418579 - player.pos.y + initY, 0);
+        bb.translate(0, 0.6000000238418579 - player.pos.y + initY, 0); // Math.fround(0.60)
         bb.translateVec(player.vel);
         if (player.isCollidedHorizontally && this.worldIsFree(world, bb, true)) {
           player.vel.y = ctx.worldSettings.outOfLiquidImpulse;
@@ -702,7 +748,7 @@ export class BotcraftPhysics implements IPhysics {
           const deltaSpeed = hVel * -lookDir.y * 0.04;
           player.vel.x += (lookDir.x * deltaSpeed) / cosPitchFromLength;
           player.vel.z += (lookDir.z * deltaSpeed) / cosPitchFromLength;
-          player.vel.y += deltaSpeed * 3.2;
+          player.vel.y += deltaSpeed * 3.2; // magic number
         }
 
         if (cosPitchFromLength > 0.0) {
@@ -723,8 +769,10 @@ export class BotcraftPhysics implements IPhysics {
         const friction = this.blockSlipperiness[blockBelow.type] ?? ctx.worldSettings.defaultSlipperiness;
         const inertia = player.onGround ? friction * ctx.airborneInertia : ctx.airborneInertia;
 
+        // deviation, adding additional logic for changing attribute values.
+        const movementSpeedAttr = this.getMovementSpeedAttribute(ctx);
         const inputStrength = player.onGround
-          ? player.attributes[this.movementSpeedAttribute].value * ((0.21600002 / friction) * friction * friction)
+          ? movementSpeedAttr * (0.21600002 / ( friction * friction * friction))
           : 0.02;
 
         this.applyInputs(inputStrength, player);
@@ -751,6 +799,7 @@ export class BotcraftPhysics implements IPhysics {
         if (player.levitation > 0) {
           player.vel.y += (0.05 * player.levitation - player.vel.y) * 0.2;
         } else {
+          console.log(player.vel.y)
           player.vel.y -= gravity;
         }
         player.vel.x *= inertia;
@@ -761,6 +810,7 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
   }
+
   applyMovement(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
     if (player.gameMode === "spectator") {
@@ -998,7 +1048,7 @@ export class BotcraftPhysics implements IPhysics {
             }
           } else if (this.berryBushId === block.type) {
             // BerryBushBlock::entityInside
-            player.stuckSpeedMultiplier = new Vec3(.800000011920929, 0.75, 0.800000011920929); // magic number
+            player.stuckSpeedMultiplier = new Vec3(0.800000011920929, 0.75, 0.800000011920929); // magic number
           } else if (this.powderSnowId === block.type) {
             // PowderSnowBlock::entityInside
             const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
@@ -1011,19 +1061,19 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
-
   collideBoundingBox(world: World, bb: AABB, movement: Vec3): Vec3 {
     // BIG DEVIATION.
     const newBB = bb.clone();
-    newBB.translateVec(movement);
+    // newBB.translateVec(movement);
 
     const colliders = this.getSurroundingBBs(newBB, world);
+
     if (colliders.length === 0) {
       return movement;
     }
 
-    let collidedMovement = movement.clone();
-    let movedAABB = newBB;
+    let collidedMovement = movement;
+    let movedAABB = newBB.clone();
     this.collideOneAxis(movedAABB, collidedMovement, 1, colliders);
     // collision on X before Z
     if (Math.abs(collidedMovement.x) > Math.abs(collidedMovement.z)) {
@@ -1064,10 +1114,12 @@ export class BotcraftPhysics implements IPhysics {
           movementLst[thisAxis] = Math.max(maxCollider[thisAxis] - minAABB[thisAxis], movementLst[thisAxis]);
         }
       }
-
-      // deviation. pretty bad code but its accurate.
-      movedAABB.translate(thisAxis == 0 ? movementLst[0] : 0, thisAxis == 1 ? movementLst[1] : 0, thisAxis == 2 ? movementLst[2] : 0);
     }
+    movement.x = movementLst[0];
+    movement.y = movementLst[1];
+    movement.z = movementLst[2];
+    // deviation. pretty bad code but its accurate.
+    movedAABB.translate(thisAxis == 0 ? movementLst[0] : 0, thisAxis == 1 ? movementLst[1] : 0, thisAxis == 2 ? movementLst[2] : 0);
   }
 
   applyInputs(inputStrength: number, player: PlayerState) {
@@ -1079,14 +1131,16 @@ export class BotcraftPhysics implements IPhysics {
     if (sqrNorm > 1) {
       inputVector.normalize();
     }
-    inputVector.scale(inputStrength);
+    inputVector.scale(inputStrength/Math.max(1, sqrNorm));
 
-    const sinYaw = Math.sin(player.yaw);
-    const cosYaw = Math.cos(player.yaw);
+    const yaw = Math.PI - player.yaw;
+    const sinYaw = Math.sin(yaw);
+    const cosYaw = Math.cos(yaw);
 
-    player.vel.x += inputVector.x * cosYaw - inputVector.z * sinYaw;
-    player.vel.z += inputVector.x * sinYaw + inputVector.z * cosYaw;
-    player.vel.y += inputVector.y;
+    const offsetX = inputVector.x * cosYaw - inputVector.z * sinYaw;
+    const offsetZ = inputVector.z * cosYaw + inputVector.x * sinYaw;
+    player.vel.x += offsetX;
+    player.vel.z += offsetZ;
   }
 
   isInClimbable(player: PlayerState, world: World): boolean {
@@ -1112,7 +1166,7 @@ export class BotcraftPhysics implements IPhysics {
       for (blockPos.x = Math.floor(minAABB[0]); blockPos.x <= Math.floor(maxAABB[0]); ++blockPos.x) {
         for (blockPos.z = Math.floor(minAABB[2]); blockPos.z <= Math.floor(maxAABB[2]); ++blockPos.z) {
           const block = world.getBlock(blockPos);
-          if (block == null || block.boundingBox === "empty") continue
+          if (block == null || block.boundingBox === "empty") continue;
           for (const shape of block.shapes) {
             const bb1 = AABB.fromShape(shape).translateVec(blockPos);
             if (aabb.collides(bb1)) {
@@ -1131,6 +1185,7 @@ export class BotcraftPhysics implements IPhysics {
 
   simulate(entity: EPhysicsCtx, world: World): IEntityState {
     this.physicsTick(entity, world);
-    return entity.state;
+    entity.state.age++;
+    return entity.state
   }
 }

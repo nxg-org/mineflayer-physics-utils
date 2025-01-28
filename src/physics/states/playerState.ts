@@ -24,7 +24,7 @@ import { Heading, getPose } from ".";
 export function convInpToAxes(player: PlayerState): Heading {
     return {
       forward: (player.control.forward as unknown as number) - (player.control.back as unknown as number),
-      strafe: (player.control.forward as unknown as number) - (player.control.back as unknown as number),
+      strafe: (player.control.left as unknown as number) - (player.control.right as unknown as number),
     };
   }
 
@@ -218,7 +218,7 @@ export class PlayerState implements IEntityState {
         this.pos = bot.entity.position.clone();
         this.vel = bot.entity.velocity.clone();
         this.statusEffectNames = getStatusEffectNamesForVersion(this.supportFeature);
-        this.update(bot, control ?? defaultMoves);
+        this.update(bot, ControlStateHandler.COPY_BOT(bot));
     }
 
     public update(bot: Bot, control?: ControlStateHandler): PlayerState {
@@ -249,7 +249,7 @@ export class PlayerState implements IEntityState {
         this.attributes = bot.entity.attributes;
         this.yaw = bot.entity.yaw;
         this.pitch = bot.entity.pitch;
-        this.control = control ?? this.control; // prevControl only updated internally.
+        this.control = control ?? ControlStateHandler.COPY_BOT(bot); // prevControl only updated internally.
 
         this.isUsingItem = isEntityUsingItem(bot.entity, this.ctx.supportFeature);
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;

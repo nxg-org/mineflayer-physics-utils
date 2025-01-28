@@ -400,8 +400,10 @@ export class EntityPhysics implements IPhysics {
     const cos = Math.cos(yaw);
 
     const vel = entity.velocity;
-    vel.x += strafe * cos - forward * sin;
-    vel.z += forward * cos + strafe * sin;
+    const offsetX = strafe * cos - forward * sin;
+    const offsetZ = forward * cos + strafe * sin;
+    vel.x += offsetX
+    vel.z += offsetZ
   }
 
   getEffectLevel(wantedEffect: CheapEffects, effects: Effect[]) {

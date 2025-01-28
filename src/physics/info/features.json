@@ -33,5 +33,10 @@
       "name": "itemUsageMetadata6",
       "description": "Item usage metadata is the 6th slot.",
       "versions": ["1.12"]
+    },
+    {
+      "name": "attributesPrefixedByMinecraft",
+      "description": "Attributes are prefixed by 'minecraft:'",
+      "versions": ["1.19"]
     }
   ]

@@ -1,6 +1,7 @@
 import { pathfinder, goals } from "mineflayer-pathfinder";
 import { Bot, createBot } from "mineflayer";
-import loader, { EntityPhysics, EntityState, EPhysicsCtx } from "../src/index";
+import loader, { BotcraftPhysics, EntityPhysics, EntityState, EPhysicsCtx } from "../src/index";
+import { PlayerState } from "../src/physics/states";
 
 const { Physics } = require("prismarine-physics");
 
@@ -39,7 +40,7 @@ bot.on("move", (pos) => {
 // print whenever another player hits the ground
 let lastPositions: Record<string, boolean> = {};
 bot.on("entityMoved", (entity) => {
-  console.log(entity.username)
+  console.log("entityMove", entity.username)
   if (entity.username && entity.username !== bot.username) {
     // check by seeing is y value is an integer
     if (Math.floor(entity.position.y) === entity.position.y && !lastPositions[entity.username]) {
@@ -55,6 +56,10 @@ bot.on("chat", (user, message) => {
   const author = bot.nearestEntity((e) => e.username === user);
 
   switch (cmd) {
+    case "status":
+      const str = `onGround: ${bot.entity.onGround}, hCol:${(bot.entity as any).isCollidedHorizontally}, vCol:${(bot.entity as any).isCollidedVertically}, inWater:${(bot.entity as any).isInWater}, inLava:${(bot.entity as any).isInLava}`;
+      bot.chat(str);
+      break
     case "use":
       if (bot.usingHeldItem) bot.deactivateItem();
       else bot.activateItem();
@@ -74,13 +79,16 @@ bot.on("chat", (user, message) => {
       bot.chat("Switched to original physics!");
       break;
     case "new":
-      const val = new EntityPhysics(bot.registry);
+      const val = new BotcraftPhysics(bot.registry);
       const oldSim = (bot.physics as any).simulatePlayer;
 
       (EntityState.prototype as any).apply = function (this: EntityState, bot: Bot) {
         // console.log(this.control, this.isUsingItem);
         this.applyToBot(bot);
       };
+
+      const ctx = EPhysicsCtx.FROM_BOT(val, bot);
+      const state = ctx.state as PlayerState
 
       // EntityPhysics.prototype.simulate = function (ctx, world) {
       //   bot.physics.simulatePlayer(ctx.state, world);
@@ -90,7 +98,7 @@ bot.on("chat", (user, message) => {
       // (bot.physics).jumpTicks = 0;
 
       (bot.physics as any).simulatePlayer = (...args: any[]) => {
-        const ctx = EPhysicsCtx.FROM_BOT(val, bot);
+        state.update(bot);
         ctx.state.jumpTicks = 0; // allow immediate jumping
         return val.simulate(ctx, bot.world);
         return oldSim(...args);
