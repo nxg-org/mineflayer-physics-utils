@@ -799,7 +799,6 @@ export class BotcraftPhysics implements IPhysics {
         if (player.levitation > 0) {
           player.vel.y += (0.05 * player.levitation - player.vel.y) * 0.2;
         } else {
-          console.log(player.vel.y)
           player.vel.y -= gravity;
         }
         player.vel.x *= inertia;
