@@ -727,7 +727,7 @@ export class BotcraftPhysics implements IPhysics {
       !player.onClimbable &&
       !player.onGround &&
       !player.isInWater &&
-      /* !player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying) && */
+      /* !player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying) && */ !player.fallFlying &&
       !hasLevitationEffect
     ) {
       const hasElytra = player.elytraEquipped;
@@ -1332,7 +1332,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   applyInputs(inputStrength: number, player: PlayerState) {
-    console.log("current input strength of normal movement", inputStrength, player.onGround, player.sprinting, player.control)
+    // console.log("current input strength of normal movement", inputStrength, player.onGround, player.sprinting, player.control)
     const inputVector = new Vec3(player.heading.strafe, 0, player.heading.forward);
     const sqrNorm = inputVector.norm() ** 2;
     if (sqrNorm < 1e-7) {

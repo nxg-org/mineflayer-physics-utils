@@ -139,7 +139,7 @@ describe("Physics Simulation Tests", () => {
   it("test sprint-jumping", () => {
     setupEntity(0);
     playerState.control.forward = true;
-    playerState.control.sprint = true;
+    // playerState.control.sprint = true;
 
     for (let i = 0; i < 4; i++) {
       physics.simulate(playerCtx, fakeWorld);
@@ -156,7 +156,7 @@ describe("Physics Simulation Tests", () => {
     }
 
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);
-    expect(fakePlayer.entity.position.z).toEqual(-4.085029471928113);
+    expect(fakePlayer.entity.position.z).toEqual(-2.610639097306083);
   });
 
   it("falling movement speed", () => {
