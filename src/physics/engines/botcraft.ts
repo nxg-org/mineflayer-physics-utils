@@ -162,6 +162,23 @@ export class BotcraftPhysics implements IPhysics {
     return surroundingBBs;
   }
 
+  getWaterInBB(bb: AABB, world: any /*prismarine-world*/) {
+    const waterBlocks = [];
+    const cursor = new Vec3(0, 0, 0);
+    for (cursor.y = Math.floor(bb.minY); cursor.y <= Math.floor(bb.maxY); cursor.y++) {
+      for (cursor.z = Math.floor(bb.minZ); cursor.z <= Math.floor(bb.maxZ); cursor.z++) {
+        for (cursor.x = Math.floor(bb.minX); cursor.x <= Math.floor(bb.maxX); cursor.x++) {
+          const block = world.getBlock(cursor);
+          if (block && (block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged)) {
+            const waterLevel = cursor.y + 1 - this.getLiquidHeightPcent(block);
+            if (Math.ceil(bb.maxY) >= waterLevel) waterBlocks.push(block);
+          }
+        }
+      }
+    }
+    return waterBlocks;
+  }
+
   getEffectLevel(wantedEffect: CheapEffects, effects: Effect[]) {
     const effectDescriptor = this.data.effectsByName[this.statusEffectNames[wantedEffect]];
     if (!effectDescriptor) {
@@ -202,7 +219,8 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   private worldIsFree(world: World, bb: AABB, ignoreLiquid: boolean) {
-    return this.getSurroundingBBs(bb, world).length === 0;
+    if (ignoreLiquid) return this.getSurroundingBBs(bb, world).length === 0;
+    else return this.getSurroundingBBs(bb, world).length === 0 && this.getWaterInBB(bb, world).length === 0;
   }
 
   /**
@@ -210,14 +228,14 @@ export class BotcraftPhysics implements IPhysics {
    * https://github.com/adepierre/Botcraft/blob/6c572071b0237c27a85211a246ce10565ef4d80f/botcraft/src/Game/Physics/PhysicsManager.cpp#L277
    *
    *
-   * @param ectx
+   * @param ctx
    * @param world
    */
-  private physicsTick(ectx: EPhysicsCtx, world: World) {
+  private physicsTick(ctx: EPhysicsCtx, world: World) {
     // Check for rocket boosting if currently in elytra flying mode
-    const entity = ectx.state;
+    const entity = ctx.state;
 
-    if (ectx.state.elytraFlying) {
+    if (ctx.state.elytraFlying) {
       // TODO: entity check for fireworks
       // TODO: check if firework is attached to player
       if (false) {
@@ -225,21 +243,20 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
 
-    const playerFlag = ectx.entityType.type === "player";
+    const playerFlag = ctx.entityType.type === "player";
 
     // if world is currently loaded at player position
     if (playerFlag) {
       // TODO: check if spectator mode
     }
 
-    this.fluidPhysics(true);
-    this.fluidPhysics(false);
-    this.updateSwimming();
+    this.fluidPhysics(ctx, world, true);
+    this.fluidPhysics(ctx, world, false);
 
     // separation into a new function
     // originally: https://github.com/adepierre/Botcraft/blob/6c572071b0237c27a85211a246ce10565ef4d80f/botcraft/src/Game/Physics/PhysicsManager.cpp#L325
     if (playerFlag) {
-      this.localPlayerAIStep(ectx, world);
+      this.localPlayerAIStep(ctx, world);
     }
   }
 
@@ -248,27 +265,11 @@ export class BotcraftPhysics implements IPhysics {
    * @param player
    * @param world
    */
-  private updatePoses(player: PlayerState, world: World) {
+  private updatePoses(ctx: EPhysicsCtx, world: World) {
+    const player = ctx.state as PlayerState;
     const swimPose = getCollider(PlayerPoses.SWIMMING, player.pos).expand(-1e-7, -1e-7, -1e-7);
     if (this.worldIsFree(world, swimPose, false)) {
       // update poses
-    }
-  }
-
-  private fluidPhysics(val: boolean) {}
-
-  private updateSwimming() {}
-
-  private localPlayerAIStep(ctx: EPhysicsCtx, world: World) {
-    const player = ctx.state as PlayerState;
-    const heading = convInpToAxes(player);
-    player.heading = heading;
-    this.inputsToCrouch(player, heading, world);
-    this.inputsToSprint(player, heading, world);
-    this.inputsToFly(player, heading, world);
-
-    // If sneaking in water, add downward speed
-    if (player.isInWater && player.control.sneak /* TODO: flying check */) {
       let currentPose: PlayerPoses;
       // player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying)
       if (player.fallFlying) {
@@ -278,7 +279,7 @@ export class BotcraftPhysics implements IPhysics {
       // this is based on metadata which I currently do not have access to.
       else if (player.pose === PlayerPoses.SLEEPING) {
         currentPose = PlayerPoses.SLEEPING;
-      } else if (this.isSwimmingAndNotFlying(player, world)) {
+      } else if (this.isSwimmingAndNotFlying(ctx, world)) {
         currentPose = PlayerPoses.SWIMMING;
       }
       // player->GetDataLivingEntityFlagsImpl() & 0x04
@@ -303,6 +304,185 @@ export class BotcraftPhysics implements IPhysics {
         }
       }
     }
+  }
+
+  private fluidPhysics(ctx: EPhysicsCtx, world: World, water: boolean) {
+    const player = ctx.state as PlayerState;
+    const aabb = getCollider(player.pose, player.pos).expand(-1e-3, -1e-3, -1e-3); // -0.001
+    if (water) {
+      player.isInWater = false;
+      player.isUnderWater = false;
+    } else {
+      player.isInLava = false;
+      player.isUnderLava = false;
+    }
+
+    const minAABB = aabb.minPoint();
+    const maxAABB = aabb.maxPoint();
+    const eyeHeight = player.eyeHeight;
+
+    const waterCond = (block: Block) => block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged;
+    const lavaCond = (block: Block) => block.type === this.lavaId;
+
+    const push = new Vec3(0, 0, 0);
+    const blockPos = new Vec3(0, 0, 0);
+    let fluidRelativeHeight = 0.0;
+    let numPush = 0;
+    for (blockPos.x = Math.floor(minAABB.x); blockPos.x <= Math.floor(maxAABB.x); ++blockPos.x) {
+      for (blockPos.y = Math.floor(minAABB.y); blockPos.y <= Math.floor(maxAABB.y); ++blockPos.y) {
+        for (blockPos.z = Math.floor(minAABB.z); blockPos.z <= Math.floor(maxAABB.z); ++blockPos.z) {
+          const block = world.getBlock(blockPos);
+          const waterRes = waterCond(block);
+          const lavaRes = lavaCond(block);
+          if (block == null || (waterRes && !water) || (lavaRes && water) || (!waterRes && !lavaRes)) {
+            continue;
+          }
+
+          let fluidHeight = 0.0;
+          const blockAbv = world.getBlock(blockPos.offset(0, 1, 0));
+          if ((blockAbv != null && waterCond(blockAbv) && waterRes) || (lavaCond(blockAbv) && lavaRes)) {
+            fluidHeight = 1.0;
+          } else {
+            fluidHeight = this.getLiquidHeightPcent(block);
+          }
+
+          if (fluidHeight + blockPos.y < minAABB.y) {
+            continue;
+          }
+
+          if (water) {
+            player.isInWater = true;
+            if (fluidHeight + blockPos.y > eyeHeight) {
+              player.isUnderWater = true;
+            }
+          } else {
+            player.isInLava = true;
+            if (fluidHeight + blockPos.y > eyeHeight) {
+              player.isUnderLava = true;
+            }
+          }
+
+          fluidRelativeHeight = Math.max(fluidHeight + blockPos.y - minAABB.y, fluidRelativeHeight);
+
+          if (player.flying) continue;
+
+          const currentPush = this.getFlow(block, world);
+          if (fluidRelativeHeight < 0.4) {
+            currentPush.scale(fluidRelativeHeight);
+          }
+          push.add(currentPush);
+          numPush++;
+        }
+      }
+    }
+
+    if (push.norm() > 0.0) {
+      if (numPush > 0) {
+        push.scale(1.0 / numPush);
+      }
+      if (water) {
+        push.scale(0.014);
+      } else {
+        const worldInUltraWarm = false; // TODO: implement this (bot world relevance)
+        push.scale(worldInUltraWarm ? 0.007 : 0.0023333333333333335);
+      }
+    }
+    const pushNorm = push.norm();
+    if (
+      Math.abs(player.vel.x) < ctx.worldSettings.negligeableVelocity &&
+      Math.abs(player.vel.z) < ctx.worldSettings.negligeableVelocity &&
+      pushNorm < 0.0045000000000000005
+    ) {
+      // normalize and scale
+      push.normalize().scale(0.0045000000000000005);
+    }
+    player.vel.add(push);
+  }
+
+  getFlow(block: Block, world: World) {
+    const curlevel = this.getRenderedDepth(block);
+    const flow = new Vec3(0, 0, 0);
+    for (const [dx, dz] of [
+      [0, 1],
+      [-1, 0],
+      [0, -1],
+      [1, 0],
+    ]) {
+      const adjBlock = world.getBlock(block.position.offset(dx, 0, dz));
+      const adjLevel = this.getRenderedDepth(adjBlock);
+      if (adjLevel < 0) {
+        if (adjBlock && adjBlock.boundingBox !== "empty") {
+          const adjLevel = this.getRenderedDepth(world.getBlock(block.position.offset(dx, -1, dz)));
+          if (adjLevel >= 0) {
+            const f = adjLevel - (curlevel - 8);
+            flow.x += dx * f;
+            flow.z += dz * f;
+          }
+        }
+      } else {
+        const f = adjLevel - curlevel;
+        flow.x += dx * f;
+        flow.z += dz * f;
+      }
+    }
+
+    if (block.metadata >= 8) {
+      for (const [dx, dz] of [
+        [0, 1],
+        [-1, 0],
+        [0, -1],
+        [1, 0],
+      ]) {
+        const adjBlock = world.getBlock(block.position.offset(dx, 0, dz));
+        const adjUpBlock = world.getBlock(block.position.offset(dx, 1, dz));
+        if ((adjBlock && adjBlock.boundingBox !== "empty") || (adjUpBlock && adjUpBlock.boundingBox !== "empty")) {
+          flow.normalize().translate(0, -6, 0);
+        }
+      }
+    }
+
+    return flow.normalize();
+  }
+
+  getLiquidHeightPcent(block: Block) {
+    return 1 - (this.getRenderedDepth(block) + 1) / 9;
+  }
+
+  getRenderedDepth(block: Block) {
+    if (!block) return -1;
+    if (this.waterLike.has(block.type)) return 0;
+    if (block.getProperties().waterlogged) return 0;
+    if (block.type !== this.waterId) return -1;
+    const meta = block.metadata;
+    return meta >= 8 ? 0 : meta;
+  }
+
+  private updateSwimming(player: PlayerState, world: World) {
+    if (player.flying) {
+      player.swimming = false;
+    } else if (player.swimming) {
+      player.swimming = player.sprinting && player.isInWater;
+    } else {
+      const block = world.getBlock(player.pos);
+      player.swimming =
+        player.sprinting &&
+        player.isUnderWater &&
+        block != null &&
+        !!(block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged);
+    }
+  }
+
+  private localPlayerAIStep(ctx: EPhysicsCtx, world: World) {
+    const player = ctx.state as PlayerState;
+    const heading = convInpToAxes(player);
+    player.heading = heading;
+
+    // moved into AiStep since it's tied to player behavior. Strictly, is Player::updateSwimming.
+    this.updateSwimming(player, world);
+
+    this.inputsToCrouch(ctx, heading, world);
+    this.inputsToSprint(ctx, heading, world);
+    this.inputsToFly(ctx, heading, world);
 
     // If sneaking in water, add downward speed
     if (player.isInWater && player.control.sneak && !player.flying) {
@@ -321,6 +501,7 @@ export class BotcraftPhysics implements IPhysics {
 
     // TODO: find a good way to implement this.
     player.prevHeading.forward = heading.forward;
+    player.prevHeading.strafe = heading.strafe;
     player.prevControl.jump = player.control.jump;
     player.prevControl.sneak = player.control.sneak;
 
@@ -346,7 +527,7 @@ export class BotcraftPhysics implements IPhysics {
       // player->inputs.left_axis *= 0.98f;
 
       // Compensate water downward speed depending on looking direction (?)
-      if (this.isSwimmingAndNotFlying(player, world)) {
+      if (this.isSwimmingAndNotFlying(ctx, world)) {
         const mSinPitch = player.pitch;
         const condition = mSinPitch < 0.0 || player.control.jump;
         if (!condition) {
@@ -379,11 +560,12 @@ export class BotcraftPhysics implements IPhysics {
     player.pos.z = math.clamp(-2.9999999e7, player.pos.z, 2.9999999e7);
 
     if (this.verGreaterThan("1.13.2")) {
-      this.updatePoses(player, world);
+      this.updatePoses(ctx, world);
     }
   }
 
-  private inputsToCrouch(player: PlayerState, heading: Heading, world: World) {
+  private inputsToCrouch(ctx: EPhysicsCtx, heading: Heading, world: World) {
+    const player = ctx.state as PlayerState;
     if (this.verGreaterThan("1.13.2")) {
       const sneakBb = getCollider(PlayerPoses.SNEAKING, player.pos);
       const standBb = getCollider(PlayerPoses.STANDING, player.pos);
@@ -391,11 +573,11 @@ export class BotcraftPhysics implements IPhysics {
       standBb.expand(-1e-7, -1e-7, -1e-7);
 
       player.crouching =
-        !this.isSwimmingAndNotFlying(player, world) &&
+        !this.isSwimmingAndNotFlying(ctx, world) &&
         this.worldIsFree(world, sneakBb, false) &&
         (player.prevControl.sneak || !this.worldIsFree(world, standBb, false));
     } else {
-      player.crouching = !this.isSwimmingAndNotFlying(player, world) && player.prevControl.sneak;
+      player.crouching = !this.isSwimmingAndNotFlying(ctx, world) && player.prevControl.sneak;
     }
 
     // Determine if moving slowly
@@ -413,7 +595,7 @@ export class BotcraftPhysics implements IPhysics {
 
       // Stop sprinting when crouching fix in 1.21.4+
       if (player.fallFlying || hasBlindness || isMovingSlowly) {
-        this.setSprinting(player, false);
+        this.setSprinting(ctx, false);
       }
     }
 
@@ -434,7 +616,8 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
-  private isSwimmingAndNotFlying(entity: IEntityState, world: World): boolean {
+  private isSwimmingAndNotFlying(ctx: EPhysicsCtx, world: World): boolean {
+    const entity = ctx.state;
     //  return !player->flying &&
     // player->game_mode != GameType::Spectator &&
     // player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::Swimming);
@@ -446,7 +629,8 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
-  private inputsToSprint(player: PlayerState, heading: Heading, world: World) {
+  private inputsToSprint(ctx: EPhysicsCtx, heading: Heading, world: World) {
+    const player = ctx.state as PlayerState;
     const canStartSprinting =
       /* !player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::Sprinting) */ !player.sprinting &&
       heading.forward >= (player.isInWater ? 1e-5 : 0.8) &&
@@ -455,25 +639,34 @@ export class BotcraftPhysics implements IPhysics {
       !player.blindness;
 
     // TODO: keep track of previous movement values?
-    const couldSprintPrevious = true; /*  player->previous_forward >= (player->under_water ? 1e-5f : 0.8f); */
+    // const couldSprintPrevious = player.prevControl.forward >= (!!player.isUnderWater ? 1e-5 : 0.8); /*  player->previous_forward >= (player->under_water ? 1e-5f : 0.8f); */
 
+    let couldSprintPrevious;
+    if (player.isUnderWater) {
+      couldSprintPrevious = player.prevHeading.forward >= 1e-5;
+    } else {
+      couldSprintPrevious = player.prevHeading.forward >= 0.8;
+    }
     // start sprinting if possible
     if (
-      (canStartSprinting && player.control.sprint && (!player.isInWater || player.isUnderWater)) ||
-      ((player.onGround || player.isUnderWater) && !player.prevControl.sneak && !couldSprintPrevious)
+      canStartSprinting &&
+      player.control.sprint &&
+      ((!player.isInWater ||
+        player.isUnderWater) ||
+        ((player.onGround || player.isUnderWater) && !player.prevControl.sneak && !couldSprintPrevious))
     ) {
-      this.setSprinting(player, true);
+      this.setSprinting(ctx, true);
     }
 
     // stop sprinting if necessary
     if (player.sprinting) {
       const stopSprintCond = heading.forward <= 1e-5 || (player.food <= 6 && !player.mayFly);
-      if (this.isSwimmingAndNotFlying(player, world)) {
+      if (this.isSwimmingAndNotFlying(ctx, world)) {
         if ((!player.onGround && !player.control.sneak && stopSprintCond) || !player.isInWater) {
-          this.setSprinting(player, false);
+          this.setSprinting(ctx, false);
         }
       } else if (stopSprintCond || player.isCollidedHorizontally || (player.isInWater && !player.isUnderWater)) {
-        this.setSprinting(player, false);
+        this.setSprinting(ctx, false);
       }
     }
   }
@@ -483,21 +676,25 @@ export class BotcraftPhysics implements IPhysics {
    * @param player
    * @param value
    */
-  setSprinting(player: PlayerState, value: boolean) {
-    // player->SetDataSharedFlagsIdImpl(EntitySharedFlagsId::Sprinting, b);
-    // player->RemoveAttributeModifierImpl(EntityAttribute::Type::MovementSpeed, PlayerEntity::speed_modifier_sprinting_key);
-    // if (b)
-    // {
-    //     player->SetAttributeModifierImpl(EntityAttribute::Type::MovementSpeed, PlayerEntity::speed_modifier_sprinting_key,
-    //         EntityAttribute::Modifier{
-    //             0.3,                                                // amount
-    //             EntityAttribute::Modifier::Operation::MultiplyTotal // operation
-    //         });
-    // }
+  setSprinting(ctx: EPhysicsCtx, value: boolean) {
+    const player = ctx.state as PlayerState;
+    let attr = player.attributes[this.movementSpeedAttribute];
+    if (attr != null) attributes.deleteAttributeModifier(attr, ctx.worldSettings.sprintingUUID);
+    else attr = attributes.createAttributeValue(ctx.worldSettings.playerSpeed);
+    if (value) {
+      attributes.addAttributeModifier(attr, {
+        uuid: ctx.worldSettings.sprintingUUID,
+        amount: ctx.worldSettings.sprintSpeed,
+        operation: 2,
+      });
+    }
+
+    player.attributes[this.movementSpeedAttribute] = attr;
     player.sprinting = value;
   }
 
-  private inputsToFly(player: PlayerState, heading: Heading, world: World) {
+  private inputsToFly(ctx: EPhysicsCtx, heading: Heading, world: World) {
+    const player = ctx.state as PlayerState;
     let flyChanged = false;
     if (player.mayFly) {
       // Auto trigger if in spectator mode
@@ -510,7 +707,7 @@ export class BotcraftPhysics implements IPhysics {
         if (player.prevControl.jump && player.control.jump) {
           if (player.flyJumpTriggerTime === 0) {
             player.flyJumpTriggerTime = 7;
-          } else if (this.isSwimmingAndNotFlying(player, world)) {
+          } else if (this.isSwimmingAndNotFlying(ctx, world)) {
             player.flying = !player.flying;
             flyChanged = true;
             // onUpdateAbilities();
@@ -550,7 +747,7 @@ export class BotcraftPhysics implements IPhysics {
 
       if (player.control.jump && !player.flying) {
         if (player.isInWater || player.isInLava) {
-          player.vel.y += 0.03999999910593033;
+          player.vel.y += 0.03999999910593033; // magic number
         } else if (player.onGround && player.jumpTicks === 0) {
           let blockJumpFactor = 1.0;
           const jumpBoost = 0.1 * player.jumpBoost; // in mineflayer, level 1 is 1, not 0.
@@ -604,8 +801,8 @@ export class BotcraftPhysics implements IPhysics {
 
   /**
    * Taken from original physics impl.
-   * @param entity 
-   * @returns 
+   * @param entity
+   * @returns
    */
   getMovementSpeedAttribute(entity: EPhysicsCtx) {
     let attribute;
@@ -701,9 +898,9 @@ export class BotcraftPhysics implements IPhysics {
           //   }
 
           // because of this, I will implement my own version.
-          if (goingDown) {
+          // if (goingDown) {
             player.vel.y -= ctx.waterGravity;
-          }
+          // }
         }
 
         const bb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
@@ -766,15 +963,15 @@ export class BotcraftPhysics implements IPhysics {
       } else {
         const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
         // deviation. using our stores slipperiness values.
-        const friction = this.blockSlipperiness[blockBelow.type] ?? ctx.worldSettings.defaultSlipperiness;
+        const friction = blockBelow
+          ? this.blockSlipperiness[blockBelow.type] ?? ctx.worldSettings.defaultSlipperiness
+          : ctx.worldSettings.defaultSlipperiness;
         const inertia = player.onGround ? friction * ctx.airborneInertia : ctx.airborneInertia;
 
         // deviation, adding additional logic for changing attribute values.
         const movementSpeedAttr = this.getMovementSpeedAttribute(ctx);
-        const inputStrength = player.onGround
-          ? movementSpeedAttr * (0.21600002 / ( friction * friction * friction))
-          : 0.02;
 
+        const inputStrength = player.onGround ? movementSpeedAttr * (0.21600002 / (friction * friction * friction)) : 0.02;
         this.applyInputs(inputStrength, player);
 
         if (player.onClimbable) {
@@ -1101,18 +1298,19 @@ export class BotcraftPhysics implements IPhysics {
       const minCollider = collider.minPoint().toArray();
       const maxCollider = collider.maxPoint().toArray();
 
-      const cond1 = movementLst[thisAxis] > 0.0 && maxAABB[thisAxis] - 1e-7 <= minCollider[thisAxis]
-      const cond2 = movementLst[thisAxis] < 0.0 && minAABB[thisAxis] + 1e-7 >= maxCollider[thisAxis]
-      if (collider.minY === 5 && thisAxis === 2) {
-        console.log("collider", collider);
-        console.log("movement", movement);
-        console.log("movedAABB", movedAABB);
-        console.log("movementLst", movementLst)
-        console.log(minCollider, maxCollider)
-        console.log(minAABB, maxAABB)
-        console.log("axis", thisAxis)
-        console.log( movementLst[thisAxis], maxAABB[thisAxis] - 1e-7, minCollider[thisAxis], cond1)
-        console.log(movementLst[thisAxis], minAABB[thisAxis] + 1e-7, maxCollider[thisAxis],  cond2)      }
+      const cond1 = movementLst[thisAxis] > 0.0 && maxAABB[thisAxis] - 1e-7 <= minCollider[thisAxis];
+      const cond2 = movementLst[thisAxis] < 0.0 && minAABB[thisAxis] + 1e-7 >= maxCollider[thisAxis];
+      // if (collider.minY === 5 && thisAxis === 2) {
+      //   console.log("collider", collider);
+      //   console.log("movement", movement);
+      //   console.log("movedAABB", movedAABB);
+      //   console.log("movementLst", movementLst);
+      //   console.log(minCollider, maxCollider);
+      //   console.log(minAABB, maxAABB);
+      //   console.log("axis", thisAxis);
+      //   console.log(movementLst[thisAxis], maxAABB[thisAxis] - 1e-7, minCollider[thisAxis], cond1);
+      //   console.log(movementLst[thisAxis], minAABB[thisAxis] + 1e-7, maxCollider[thisAxis], cond2);
+      // }
       if (
         maxAABB[axis1] - 1e-7 > minCollider[axis1] &&
         minAABB[axis1] + 1e-7 < maxCollider[axis1] &&
@@ -1134,6 +1332,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   applyInputs(inputStrength: number, player: PlayerState) {
+    console.log("current input strength of normal movement", inputStrength, player.onGround, player.sprinting, player.control)
     const inputVector = new Vec3(player.heading.strafe, 0, player.heading.forward);
     const sqrNorm = inputVector.norm() ** 2;
     if (sqrNorm < 1e-7) {
@@ -1142,7 +1341,7 @@ export class BotcraftPhysics implements IPhysics {
     if (sqrNorm > 1) {
       inputVector.normalize();
     }
-    inputVector.scale(inputStrength/Math.max(1, sqrNorm));
+    inputVector.scale(inputStrength / Math.max(1, sqrNorm));
 
     const yaw = Math.PI - player.yaw;
     const sinYaw = Math.sin(yaw);
@@ -1197,6 +1396,6 @@ export class BotcraftPhysics implements IPhysics {
   simulate(entity: EPhysicsCtx, world: World): IEntityState {
     this.physicsTick(entity, world);
     entity.state.age++;
-    return entity.state
+    return entity.state;
   }
 }

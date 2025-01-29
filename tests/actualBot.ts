@@ -44,6 +44,11 @@ bot.on("entityMoved", (entity) => {
   if (entity.username && entity.username !== bot.username) {
     // check by seeing is y value is an integer
     if (Math.floor(entity.position.y) === entity.position.y && !lastPositions[entity.username]) {
+
+      // check if in liquid
+      const block = bot.blockAt(entity.position);
+      if (block && (block.type === bot.registry.blocksByName.water.id || block.type === bot.registry.blocksByName.lava.id)) return;
+
       bot.chat(`${entity.username} hit the ground! ${entity.position.toString()}`);
       lastPositions[entity.username] = true;
     } else if (Math.floor(entity.position.y) !== entity.position.y) {

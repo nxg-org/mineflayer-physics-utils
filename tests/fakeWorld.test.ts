@@ -2,7 +2,7 @@ import { describe, it, beforeEach } from "mocha";
 import expect from "expect";
 import { Vec3 } from "vec3";
 import md from "minecraft-data";
-import block, {Block as PBlock} from "prismarine-block";
+import block, { Block as PBlock } from "prismarine-block";
 import { applyMdToNewEntity } from "../src/util/physicsUtils";
 import { EPhysicsCtx, PhysicsWorldSettings } from "../src/physics/settings";
 import { ControlStateHandler } from "../src/physics/player";
@@ -13,15 +13,14 @@ import { Bot, ControlState } from "mineflayer";
 
 const version = "1.12.2";
 const mcData = md(version);
-const Block = (block)(version) as typeof PBlock;
+const Block = block(version) as typeof PBlock;
 
 const groundLevel = 4;
-const floatingOffset = 5;
-const control: {[key: string]: boolean} = {};
+const floatingOffset = 20;
+const control: { [key: string]: boolean } = {};
 
 class FakeWorld {
-
-  overrideBlocks: {[key: string]: PBlock} = {}
+  overrideBlocks: { [key: string]: PBlock } = {};
 
   setOverrideBlock(pos: Vec3, type: number) {
     pos = pos.floored();
@@ -33,7 +32,7 @@ class FakeWorld {
   clearOverrides() {
     this.overrideBlocks = {};
   }
-  
+
   getBlock(pos: Vec3) {
     pos = pos.floored();
     const key = `${pos.x},${pos.y},${pos.z}`;
@@ -46,7 +45,7 @@ class FakeWorld {
     b.position = pos;
     return b;
   }
-};
+}
 
 function createFakePlayer(pos: Vec3, groundLevel: number) {
   return {
@@ -61,15 +60,17 @@ function createFakePlayer(pos: Vec3, groundLevel: number) {
       isCollidedVertically: false,
       yaw: 0,
       effects: [],
+      attributes: {}
     },
     jumpTicks: 0,
     jumpQueued: false,
     version: version,
     inventory: { slots: [] },
     equipment: [],
+    food: 20,
     game: { gameMode: "survival" },
     registry: mcData,
-    setControlState: (name: ControlState, value:boolean) => {
+    setControlState: (name: ControlState, value: boolean) => {
       control[name] = value;
     },
     getControlState: (name: ControlState) => {
@@ -94,11 +95,10 @@ describe("Physics Simulation Tests", () => {
     fakePlayer = createFakePlayer(new Vec3(0, groundLevel + yOffset, 0), groundLevel);
     fakePlayer.entity = applyMdToNewEntity(EPhysicsCtx, playerType, fakePlayer.entity);
     physics = new BotcraftPhysics(mcData);
-    playerCtx = EPhysicsCtx.FROM_BOT(physics, fakePlayer );
+    playerCtx = EPhysicsCtx.FROM_BOT(physics, fakePlayer);
     playerState = playerCtx.state as PlayerState;
     playerState.control = ControlStateHandler.DEFAULT();
-  }
-
+  };
 
   afterEach(() => {
     fakeWorld.clearOverrides();
@@ -107,14 +107,13 @@ describe("Physics Simulation Tests", () => {
   it("should maintain position when gravity is zero", () => {
     setupEntity(floatingOffset);
     fakePlayer.entity.velocity = new Vec3(0, 0, 0);
-    playerState.vel.y = 0
+    playerState.vel.y = 0;
     playerCtx.gravity = 0;
 
     for (let i = 0; i < 10; i++) {
-      playerState.update(fakePlayer);
+      // playerState.update(fakePlayer);
       physics.simulate(playerCtx, fakeWorld);
-      playerState.apply(fakePlayer );
-     
+      playerState.apply(fakePlayer);
     }
 
     expect(fakePlayer.entity.position).toEqual(new Vec3(0, groundLevel + floatingOffset, 0));
@@ -127,7 +126,7 @@ describe("Physics Simulation Tests", () => {
 
     for (let i = 0; i < 10; i++) {
       physics.simulate(playerCtx, fakeWorld);
-      playerState.apply(fakePlayer );
+      playerState.apply(fakePlayer);
     }
 
     if (playerState.control.forward) {
@@ -137,24 +136,75 @@ describe("Physics Simulation Tests", () => {
     }
   });
 
+  it("test sprint-jumping", () => {
+    setupEntity(0);
+    playerState.control.forward = true;
+    playerState.control.sprint = true;
+
+    for (let i = 0; i < 4; i++) {
+      physics.simulate(playerCtx, fakeWorld);
+      playerState.apply(fakePlayer);
+      console.log(playerState.sprinting, playerState.onGround, playerState.pos)
+    }
+
+    playerState.control.jump = true;
+
+    for (let i = 0; i < 12; i++) {
+      physics.simulate(playerCtx, fakeWorld);
+      playerState.apply(fakePlayer);
+      console.log(playerState.sprinting, playerState.onGround, playerState.pos)
+    }
+
+    expect(fakePlayer.entity.position.y).toEqual(groundLevel);
+    expect(fakePlayer.entity.position.z).toEqual(-4.085029471928113);
+  });
+
+  it("falling movement speed", () => {
+    setupEntity(floatingOffset);
+    playerState.control.forward = true;
+
+    while (!fakePlayer.entity.onGround && playerState.age < 100) {
+      physics.simulate(playerCtx, fakeWorld);
+      playerState.apply(fakePlayer);
+    }
+
+    console.log(playerState.pos, playerState.vel);
+
+    expect(fakePlayer.entity.position.y).toEqual(groundLevel);
+    expect(fakePlayer.entity.position.z).toEqual(-3.253675739201285);
+
+    const landingPos = playerState.pos.clone();
+
+    setupEntity(floatingOffset);
+    playerState.control.forward = true;
+    playerState.control.sprint = true;
+
+    while (!fakePlayer.entity.onGround && playerState.age < 100) {
+      physics.simulate(playerCtx, fakeWorld);
+      playerState.apply(fakePlayer);
+    }
+
+    expect(fakePlayer.entity.position.y).toEqual(groundLevel);
+    expect(fakePlayer.entity.position).toEqual(landingPos);
+  });
+
   it("should restore position after gravity toggle", () => {
     setupEntity(floatingOffset);
     const orgGravity = playerCtx.gravity;
     fakePlayer.entity.velocity = new Vec3(0, 0, 0);
-    playerState.vel.y = 0
+    playerState.vel.y = 0;
     playerCtx.gravity = 0;
 
     for (let i = 0; i < 5; i++) {
       physics.simulate(playerCtx, fakeWorld);
-      playerState.apply(fakePlayer );
+      playerState.apply(fakePlayer);
     }
     expect(fakePlayer.entity.position).toEqual(new Vec3(0, groundLevel + floatingOffset, 0));
     playerCtx.gravity = orgGravity;
 
-
     while (!fakePlayer.entity.onGround && playerState.age < 100) {
       physics.simulate(playerCtx, fakeWorld);
-      playerState.apply(fakePlayer );
+      playerState.apply(fakePlayer);
     }
 
     expect(fakePlayer.entity.position.y).toEqual(groundLevel); // Verify movement in Z direction

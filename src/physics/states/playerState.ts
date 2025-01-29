@@ -164,7 +164,16 @@ export class PlayerState implements IEntityState {
     /**
      * TODO: proper impl.
      */
-    public sprinting: boolean = false;
+    public _sprinting: boolean = false;
+
+    public get sprinting(): boolean {
+        return this._sprinting;
+    }
+
+    public set sprinting(value: boolean) {
+        // console.trace('set sprinting', value)
+        this._sprinting = value;
+    }
 
     /**
      * TODO: proper impl.
@@ -294,11 +303,11 @@ export class PlayerState implements IEntityState {
         this.food = bot.food;
 
         // TODO:
-        this.flying = false;
-        this.swimming = false;
-        this.sprinting = false;
-        this.crouching = false;
-        this.fallFlying = false;
+        this.flying = (bot.entity as any).flying ?? false;
+        this.swimming = (bot.entity as any).swimming ?? false;
+        this.sprinting = (bot.entity as any).sprinting ?? false;
+        this.crouching = (bot.entity as any).crouching ?? false;
+        this.fallFlying = (bot.entity as any).fallFlying ?? false;
 
         switch (bot.game.gameMode) {
             case "creative":
@@ -351,6 +360,14 @@ export class PlayerState implements IEntityState {
         Object.assign(bot.entity, this.pose)
         bot.game.gameMode = this.gameMode; // this should never actually be in charge.
         bot.food = this.food; // this should also never actually be in charge.
+
+        (bot.entity as any).flying = this.flying ?? false;
+        (bot.entity as any).swimming = this.swimming ?? false;
+        (bot.entity as any).sprinting = this.sprinting ?? false;
+        (bot.entity as any).crouching = this.crouching ?? false;
+        (bot.entity as any).fallFlying = this.fallFlying ?? false;
+
+        bot.entity.attributes = this.attributes;
 
         this.control.applyControls(bot);
     }
