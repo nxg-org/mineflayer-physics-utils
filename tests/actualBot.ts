@@ -1,5 +1,6 @@
 import { pathfinder, goals } from "mineflayer-pathfinder";
 import { Bot, createBot } from "mineflayer";
+const physicsInject = require("mineflayer/lib/plugins/physics")
 import loader, { BotcraftPhysics, EntityPhysics, EntityState, EPhysicsCtx } from "../src/index";
 import { PlayerState } from "../src/physics/states";
 
@@ -16,7 +17,9 @@ bot.once("spawn", async () => {
   bot.loadPlugin(loader);
   bot.loadPlugin(pathfinder);
   await bot.waitForTicks(20);
-  bot.chat("rocky1928");
+  (bot as any).physics.yawSpeed = 50;
+  (bot as any).physics.pitchSpeed = 50;
+  // setupNewPhysics(bot);
 });
 
 const rl = require("readline").createInterface({
@@ -40,7 +43,6 @@ bot.on("move", (pos) => {
 // print whenever another player hits the ground
 let lastPositions: Record<string, boolean> = {};
 bot.on("entityMoved", (entity) => {
-  console.log("entityMove", entity.username)
   if (entity.username && entity.username !== bot.username) {
     // check by seeing is y value is an integer
     if (Math.floor(entity.position.y) === entity.position.y && !lastPositions[entity.username]) {
@@ -56,36 +58,8 @@ bot.on("entityMoved", (entity) => {
     }}
 });
 
-bot.on("chat", (user, message) => {
-  const [cmd, ...args] = message.split(" ");
-  const author = bot.nearestEntity((e) => e.username === user);
-
-  switch (cmd) {
-    case "status":
-      const str = `onGround: ${bot.entity.onGround}, hCol:${(bot.entity as any).isCollidedHorizontally}, vCol:${(bot.entity as any).isCollidedVertically}, inWater:${(bot.entity as any).isInWater}, inLava:${(bot.entity as any).isInLava}`;
-      bot.chat(str);
-      break
-    case "use":
-      if (bot.usingHeldItem) bot.deactivateItem();
-      else bot.activateItem();
-      break;
-    case "useoff":
-      bot.deactivateItem()
-      bot.activateItem(true)
-      break
-    case "control":
-     
-      if (args[0] === "clear") return bot.clearControlStates();
-      if (args.length !== 2) return bot.chat("Invalid control command!");
-      bot.setControlState(args[0] as any, args[1] === "true");
-      break;
-    case "original":
-      bot.physics = new Physics(bot.registry, bot.world);
-      bot.chat("Switched to original physics!");
-      break;
-    case "new":
-      const val = new BotcraftPhysics(bot.registry);
-      const oldSim = (bot.physics as any).simulatePlayer;
+function setupNewPhysics(bot: Bot) {
+  const val = new BotcraftPhysics(bot.registry);
 
       (EntityState.prototype as any).apply = function (this: EntityState, bot: Bot) {
         // console.log(this.control, this.isUsingItem);
@@ -106,8 +80,42 @@ bot.on("chat", (user, message) => {
         state.update(bot);
         ctx.state.jumpTicks = 0; // allow immediate jumping
         return val.simulate(ctx, bot.world);
-        return oldSim(...args);
       };
+}
+
+bot.on("chat", (user, message) => {
+  const [cmd, ...args] = message.split(" ");
+  const author = bot.nearestEntity((e) => e.username === user);
+
+  switch (cmd) {
+    case "lookatme":
+      if (!author) return bot.chat("I can't see you!");
+      bot.lookAt(author.position.offset(0, author.height, 0));
+      break;
+    case "status":
+      const str = `onGround: ${bot.entity.onGround}, hCol:${(bot.entity as any).isCollidedHorizontally}, vCol:${(bot.entity as any).isCollidedVertically}, inWater:${(bot.entity as any).isInWater}, inLava:${(bot.entity as any).isInLava}`;
+      bot.chat(str);
+      break
+    case "use":
+      if (bot.usingHeldItem) bot.deactivateItem();
+      else bot.activateItem();
+      break;
+    case "useoff":
+      bot.deactivateItem()
+      bot.activateItem(true)
+      break
+    case "control":
+     
+      if (args[0] === "clear") return bot.clearControlStates();
+      if (args.length !== 2) return bot.chat("Invalid control command!");
+      bot.setControlState(args[0] as any, args[1] === "true");
+      break;
+    case "original":
+      bot.loadPlugin(physicsInject);
+      bot.chat("Switched to original physics!");
+      break;
+    case "new":
+      setupNewPhysics(bot);
       bot.chat("Switched to new physics!");
       break;
     case "jump":

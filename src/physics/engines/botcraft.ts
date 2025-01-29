@@ -527,16 +527,18 @@ export class BotcraftPhysics implements IPhysics {
       // player->inputs.left_axis *= 0.98f;
 
       // Compensate water downward speed depending on looking direction (?)
+    
       if (this.isSwimmingAndNotFlying(ctx, world)) {
         const mSinPitch = player.pitch;
-        const condition = mSinPitch < 0.0 || player.control.jump;
+        let condition = mSinPitch < 0.0 || player.control.jump;
         if (!condition) {
           // check above block
           const bl1 = world.getBlock(new Vec3(player.pos.x, player.pos.y + 1.0 - 0.1, player.pos.z));
-          const condition1 = bl1 && this.waterLike.has(bl1.type);
-          if (condition1) {
-            player.vel.y += (mSinPitch - player.vel.y) * (mSinPitch < -0.2 ? 0.085 : 0.06);
-          }
+          condition = bl1 != null && (this.waterId === bl1.type || this.waterLike.has(bl1.type))
+        }
+        if (condition) {
+          // console.log('changing vel by',  (mSinPitch - player.vel.y) * (mSinPitch < -0.2 ? 0.085 : 0.06));
+          player.vel.y += (mSinPitch - player.vel.y) * (mSinPitch < -0.2 ? 0.085 : 0.06);
         }
       }
 
@@ -971,7 +973,7 @@ export class BotcraftPhysics implements IPhysics {
         // deviation, adding additional logic for changing attribute values.
         const movementSpeedAttr = this.getMovementSpeedAttribute(ctx);
 
-        const inputStrength = player.onGround ? movementSpeedAttr * (0.21600002 / (friction * friction * friction)) : 0.02;
+        const inputStrength = player.onGround ? movementSpeedAttr * (0.21600002 / (friction * friction * friction)) : (movementSpeedAttr) * 0.2;
         this.applyInputs(inputStrength, player);
 
         if (player.onClimbable) {
@@ -1332,7 +1334,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   applyInputs(inputStrength: number, player: PlayerState) {
-    // console.log("current input strength of normal movement", inputStrength, player.onGround, player.sprinting, player.control)
+    console.log("current input strength of normal movement", inputStrength, player.onGround, player.sprinting, player.control)
     const inputVector = new Vec3(player.heading.strafe, 0, player.heading.forward);
     const sqrNorm = inputVector.norm() ** 2;
     if (sqrNorm < 1e-7) {

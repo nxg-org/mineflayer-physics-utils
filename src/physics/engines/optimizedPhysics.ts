@@ -16,6 +16,7 @@ import * as math from "../info/math";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { EntityState } from "../states/entityState";
 import { IPhysics } from "./IPhysics";
+import { IEntityState } from "../states";
 
 type CheapEffectNames = keyof ReturnType<typeof getStatusEffectNamesForVersion>;
 type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersion>;
@@ -718,7 +719,7 @@ export class EntityPhysics implements IPhysics {
         }
     }
 
-    simulate(entity: EPhysicsCtx, world: any /*prismarine-world*/): EntityState {
+    simulate(entity: EPhysicsCtx, world: any /*prismarine-world*/): IEntityState {
         if (!this.shouldMoveEntity(entity)) {
             entity.velocity.set(0, 0, 0);
             return entity.state;
