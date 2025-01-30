@@ -181,10 +181,9 @@ describe("Physics Simulation Tests", () => {
     playerState.control.forward = true;
     playerState.control.sprint = true;
 
-    console.log(playerState.vel)
+    // console.log(playerState.vel)
     while (!fakePlayer.entity.onGround && playerState.age < 100) {
       physics.simulate(playerCtx, fakeWorld);
-      console.log(fakePlayer.entity.position, playerState.pos, playerState.vel, playerState.age)
       playerState.apply(fakePlayer);
     }
 
