@@ -144,7 +144,7 @@ describe("Physics Simulation Tests", () => {
     for (let i = 0; i < 4; i++) {
       physics.simulate(playerCtx, fakeWorld);
       playerState.apply(fakePlayer);
-      console.log(playerState.sprinting, playerState.onGround, playerState.pos)
+      // console.log(playerState.sprinting, playerState.onGround, playerState.pos)
     }
 
     playerState.control.jump = true;
@@ -152,7 +152,7 @@ describe("Physics Simulation Tests", () => {
     for (let i = 0; i < 12; i++) {
       physics.simulate(playerCtx, fakeWorld);
       playerState.apply(fakePlayer);
-      console.log(playerState.sprinting, playerState.onGround, playerState.pos)
+      // console.log(playerState.sprinting, playerState.onGround, playerState.pos)
     }
 
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);
@@ -167,8 +167,6 @@ describe("Physics Simulation Tests", () => {
       physics.simulate(playerCtx, fakeWorld);
       playerState.apply(fakePlayer);
     }
-
-    console.log(playerState.pos, playerState.vel);
 
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);
     expect(fakePlayer.entity.position.z).toEqual(-3.253675739201285);
@@ -237,7 +235,7 @@ describe("Physics Simulation Tests", () => {
     for (let i = 0; i < 10; i++) {
       physics.simulate(playerCtx, fakeWorld);
       playerState.apply(fakePlayer);
-      console.log(fakePlayer.entity.position, playerState.isCollidedHorizontally);
+      // console.log(fakePlayer.entity.position, playerState.isCollidedHorizontally);
     }
 
     expect(playerState.pos.z).toEqual(-0.7);
