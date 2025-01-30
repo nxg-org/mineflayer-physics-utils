@@ -182,6 +182,8 @@ describe("Physics Simulation Tests", () => {
       playerState.apply(fakePlayer);
     }
 
+    console.log(fakePlayer.entity.position, landingPos, playerState.pos)
+
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);
     expect(fakePlayer.entity.position).toEqual(landingPos);
   });

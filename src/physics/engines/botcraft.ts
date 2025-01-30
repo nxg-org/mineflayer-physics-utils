@@ -973,7 +973,7 @@ export class BotcraftPhysics implements IPhysics {
         // deviation, adding additional logic for changing attribute values.
         const movementSpeedAttr = this.getMovementSpeedAttribute(ctx);
 
-        const inputStrength = player.onGround ? movementSpeedAttr * (0.21600002 / (friction * friction * friction)) : (movementSpeedAttr) * 0.2;
+        const inputStrength = player.onGround ? movementSpeedAttr * (0.21600002 / (friction * friction * friction)) : 0.02;
         this.applyInputs(inputStrength, player);
 
         if (player.onClimbable) {
