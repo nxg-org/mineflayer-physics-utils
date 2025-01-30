@@ -245,13 +245,9 @@ export class BotcraftPhysics implements IPhysics {
 
     const playerFlag = ctx.entityType.type === "player";
 
-    // if world is currently loaded at player position
-    if (playerFlag) {
-      // TODO: check if spectator mode
-    }
-
     this.fluidPhysics(ctx, world, true);
     this.fluidPhysics(ctx, world, false);
+    // updateSwimming moved into AiStep.
 
     // separation into a new function
     // originally: https://github.com/adepierre/Botcraft/blob/6c572071b0237c27a85211a246ce10565ef4d80f/botcraft/src/Game/Physics/PhysicsManager.cpp#L325
@@ -975,7 +971,19 @@ export class BotcraftPhysics implements IPhysics {
         // deviation, adding additional logic for changing attribute values.
         const movementSpeedAttr = this.getMovementSpeedAttribute(ctx);
 
-        const inputStrength = player.onGround ? movementSpeedAttr * (0.21600002 / (friction * friction * friction)) : 0.02;
+        let inputStrength: number;
+        if (player.onGround) {
+          inputStrength = movementSpeedAttr * (0.21600002 / (friction * friction * friction));
+        } else {
+          inputStrength = 0.02;
+
+          // DEVIATION: taken from p-physics, fixes motion!
+          if (player.control.sprint) {
+            const airSprintFactor = ctx.airborneAccel * 0.3
+            inputStrength += airSprintFactor
+          }
+        }
+            
         this.applyInputs(inputStrength, player);
 
         if (player.onClimbable) {
@@ -1002,6 +1010,7 @@ export class BotcraftPhysics implements IPhysics {
         } else {
           player.vel.y -= gravity;
         }
+
         player.vel.x *= inertia;
         player.vel.z *= inertia;
         // another magic number that I'm pretty sure is random/hardcoded.

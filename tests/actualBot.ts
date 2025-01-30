@@ -134,7 +134,6 @@ function buildBot() {
 
         for (let i = 0; i <= Number(time); i++) {
           console.log(bot.entity.position, bot.entity.velocity, i);
-          console.log()
           await bot.waitForTicks(1);
         }
         bot.clearControlStates();

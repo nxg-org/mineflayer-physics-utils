@@ -668,6 +668,7 @@ export class EntityPhysics implements IPhysics {
         else vel.y -= entity.gravity * gravityMultiplier;
       }
       
+      console.log(dragOrFriction)
       vel.x *= dragOrFriction;
       vel.z *= dragOrFriction;
   
