@@ -523,6 +523,7 @@ export class PlayerState implements IEntityState {
 
         this.yaw = Math.atan2(dz, dx) * 180 / Math.PI - 90;
         this.pitch = -Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)) * 180 / Math.PI;
+        console.log(this.yaw, this.pitch);
     }
 
     public look(yaw: number, pitch:number) {

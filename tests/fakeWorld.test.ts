@@ -234,18 +234,71 @@ describe("Physics Simulation Tests", () => {
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);
   });
 
-  it("horizonal collision detection", () => {
+  it("hCol-z", () => {
     setupEntity(0);
-    fakeWorld.setOverrideBlock(new Vec3(0, groundLevel + 1, -2), mcData.blocksByName.dirt.id);
+    const blockPos = new Vec3(0, groundLevel + 1, -2);
+    fakeWorld.setOverrideBlock(blockPos, mcData.blocksByName.dirt.id);
+    playerState.look(0, 0);
     playerState.control.forward = true;
 
     for (let i = 0; i < 10; i++) {
       physics.simulate(playerCtx, fakeWorld);
       playerState.apply(fakePlayer);
-      // console.log(fakePlayer.entity.position, playerState.isCollidedHorizontally);
+      console.log(fakePlayer.entity.position, playerState.isCollidedHorizontally);
     }
 
     expect(playerState.pos.z).toEqual(-0.7);
+    expect(playerState.isCollidedHorizontally).toEqual(true);
+  });
+
+  it("hCol--z", () => {
+    setupEntity(0);
+    const blockPos = new Vec3(0, groundLevel + 1, 1);
+    fakeWorld.setOverrideBlock(blockPos, mcData.blocksByName.dirt.id);
+    playerState.look(-359.9999 * (Math.PI / 360), 0);
+    playerState.control.forward = true;
+
+    for (let i = 0; i < 10; i++) {
+      physics.simulate(playerCtx, fakeWorld);
+      playerState.apply(fakePlayer);
+      console.log(fakePlayer.entity.position, playerState.isCollidedHorizontally);
+    }
+
+    expect(playerState.pos.z).toEqual(0.7);
+    expect(playerState.isCollidedHorizontally).toEqual(true);
+  });
+
+  it("hCol--x", () => {
+    setupEntity(0);
+    const blockPos = new Vec3(-2, groundLevel + 1, 0);
+    fakeWorld.setOverrideBlock(blockPos, mcData.blocksByName.dirt.id);
+    playerState.look(180 * (Math.PI / 360), 0)
+    playerState.control.forward = true;
+
+    for (let i = 0; i < 10; i++) {
+      physics.simulate(playerCtx, fakeWorld);
+      playerState.apply(fakePlayer);
+      console.log(fakePlayer.entity.position, playerState.isCollidedHorizontally);
+    }
+
+    expect(playerState.pos.x).toEqual(-0.7);
+    expect(playerState.isCollidedHorizontally).toEqual(true);
+  });
+
+  it("hCol-x", () => {
+    setupEntity(0);
+    const blockPos = new Vec3(1, groundLevel + 1, 0);
+    fakeWorld.setOverrideBlock(blockPos, mcData.blocksByName.dirt.id);
+    playerState.look(-180 * (Math.PI / 360), 0);
+    playerState.control.forward = true;
+
+    for (let i = 0; i < 10; i++) {
+      physics.simulate(playerCtx, fakeWorld);
+      playerState.apply(fakePlayer);
+      console.log(fakePlayer.entity.position, playerState.isCollidedHorizontally);
+    }
+
+    expect(playerState.pos.x).toEqual(0.7);
     expect(playerState.isCollidedHorizontally).toEqual(true);
   });
 });

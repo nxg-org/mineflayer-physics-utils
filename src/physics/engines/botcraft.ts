@@ -766,7 +766,7 @@ export class BotcraftPhysics implements IPhysics {
           }
 
           if (this.verLessThan("1.20.5")) {
-            player.vel.y = 0.42 * blockJumpFactor + jumpBoost;
+            player.vel.y = Math.fround(0.42) * blockJumpFactor + jumpBoost;
             if (player.sprinting) {
               const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
               // potential inconsistency here. This may not be accurate.
@@ -1310,8 +1310,7 @@ export class BotcraftPhysics implements IPhysics {
     if (Math.abs(movement) < 1e-7) {
       return 0.0;
     }
-    
-    
+
     movement = this.voxelShapeCollide(axis, bb, movement, colliders);
     
     return movement;
