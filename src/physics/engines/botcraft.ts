@@ -768,10 +768,12 @@ export class BotcraftPhysics implements IPhysics {
           if (this.verLessThan("1.20.5")) {
             player.vel.y = 0.42 * blockJumpFactor + jumpBoost;
             if (player.sprinting) {
-              const yawRad = player.yaw; // should already be in yaw.
+              const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
               // potential inconsistency here. This may not be accurate.
-              player.vel.x -= Math.fround(Math.sin(yawRad)) * 0.2;
-              player.vel.z += Math.fround(Math.cos(yawRad)) * 0.2;
+              const offsetX = Math.fround(Math.sin(yawRad)) * 0.2;
+              const offsetZ = Math.fround(Math.cos(yawRad)) * 0.2;
+              player.vel.x -= offsetX
+              player.vel.z += offsetZ
             }
           } else {
             // something about getting an attribute for jump strength?
@@ -779,7 +781,7 @@ export class BotcraftPhysics implements IPhysics {
             if (jumpPower > 1e-5) {
               player.vel.y = jumpPower;
               if (player.sprinting) {
-                const yawRad = player.yaw; // should already be in yaw.
+                const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
                 player.vel.x -= Math.sin(yawRad) * 0.2;
                 player.vel.z += Math.cos(yawRad) * 0.2;
               }
@@ -1027,9 +1029,9 @@ export class BotcraftPhysics implements IPhysics {
       player.vel.set(0, 0, 0);
     }
 
-    let maxStepUp = ctx.stepHeight;
+    let maxUpStep = ctx.stepHeight;
     if (!this.verLessThan("1.20.5")) {
-      maxStepUp = player.attributes[this.stepHeightAttribute].value;
+      maxUpStep = player.attributes[this.stepHeightAttribute].value;
     }
 
     // const playerAABB = player.getBB();
@@ -1044,88 +1046,82 @@ export class BotcraftPhysics implements IPhysics {
         return bb;
       };
 
-      while (movement.x != 0.0 && this.worldIsFree(world, prepare(movement.x, -maxStepUp, 0), false)) {
+      while (movement.x != 0.0 && this.worldIsFree(world, prepare(movement.x, -maxUpStep, 0), false)) {
         movement.x = movement.x < step && movement.x >= -step ? 0.0 : movement.x > 0.0 ? movement.x - step : movement.x + step;
       }
 
-      while (movement.z != 0.0 && this.worldIsFree(world, prepare(0, -maxStepUp, movement.z), false)) {
+      while (movement.z != 0.0 && this.worldIsFree(world, prepare(0, -maxUpStep, movement.z), false)) {
         movement.z = movement.z < step && movement.z >= -step ? 0.0 : movement.z > 0.0 ? movement.z - step : movement.z + step;
       }
 
-      while ((movement.x != 0.0 && movement.z != 0.0 && prepare(movement.x, -maxStepUp, movement.z), false)) {
+      while ((movement.x != 0.0 && movement.z != 0.0 && prepare(movement.x, -maxUpStep, movement.z), false)) {
         movement.x = movement.x < step && movement.x >= -step ? 0.0 : movement.x > 0.0 ? movement.x - step : movement.x + step;
         movement.z = movement.z < step && movement.z >= -step ? 0.0 : movement.z > 0.0 ? movement.z - step : movement.z + step;
       }
     }
 
     const movementBeforeCollisions = movement.clone();
-    {
-      // Entity::collide
-      if (movement.norm() ** 2 != 0.0) {
-        const playerAABB = player.getBB();
-        movement = this.collideBoundingBox(world, playerAABB, movement);
-      }
-
-      // Step up if block height delta is < max_up_step
-      // If already on ground (or collided with the ground while moving down) and horizontal collision
-      // TODO: changed in 1.21, check if this is still accurate
-
-      if (
-        (player.onGround || (movement.y != movementBeforeCollisions.y && movementBeforeCollisions.y < 0.0)) &&
-        (movement.x != movementBeforeCollisions.x || movement.z != movementBeforeCollisions.z)
-      ) {
-        let movementWithStepUp = this.collideBoundingBox(
+    { // Entity::collide
+      const playerAABB = player.getBB();
+      const hDist = (vec: Vec3) => Math.sqrt(vec.x * vec.x + vec.z * vec.z);
+      // const entityCollisions = world.getEntityCollisions(player, playerAABB.expand(movement));
+      
+      let newMovement = movement.norm() ** 2 === 0 ? movement : this.collideBoundingBox(world, playerAABB, movement);
+      
+      const collisionX = Math.abs(movement.x - newMovement.x) > 1e-7;
+      const collisionY = Math.abs(movement.y - newMovement.y) > 1e-7;
+      const collisionZ = Math.abs(movement.z - newMovement.z) > 1e-7;
+      const onGround = player.onGround || (collisionY && movement.y < 0);
+      
+      if (maxUpStep > 0 && onGround && (collisionX || collisionZ)) {
+        let stepUpMovement = this.collideBoundingBox(
           world,
-          player.getBB(),
-          new Vec3(movementBeforeCollisions.x, maxStepUp, movementBeforeCollisions.z)
+          playerAABB,
+          new Vec3(movement.x, maxUpStep, movement.z),
         );
-        const horizontalMovement = new Vec3(movementBeforeCollisions.x, 0, movementBeforeCollisions.z);
-
-        // TODO: this code might straight up be wrong. It looks wrong. But the way they wrote it is so awkward.
-        // update: is he trying to offset a change with these 0.5s?
-        // const stepUpBB = player.getBB();
-        // stepUpBB.translate(horizontalMovement.x * 0.5, 0, horizontalMovement.z * 0.5);
-        // stepUpBB.expand(horizontalMovement.x, 0, horizontalMovement.z);
-        // stepUpBB.translate(0, maxStepUp, 0);
-        // const movementStepUpOnly = this.collideBoundingBox(world, stepUpBB, horizontalMovement);
-
-        const movementStepUpOnly = this.collideBoundingBox(world, player.getBB(), new Vec3(0, maxStepUp, 0));
-
-        if (movementStepUpOnly.y < maxStepUp) {
-          const check = this.collideBoundingBox(world, player.getBB().translateVec(movementStepUpOnly), horizontalMovement).plus(
-            movementStepUpOnly
-          );
-          if (
-            check.x * check.x + check.z * check.z >
-            movementWithStepUp.x * movementWithStepUp.x + movementWithStepUp.z * movementWithStepUp.z
-          ) {
-            movementWithStepUp = check;
+        
+        const stepOnlyMovement = this.collideBoundingBox(
+          world,
+          playerAABB.expandTowardsCoords(movement.x, 0, movement.z),
+          new Vec3(0, maxUpStep, 0),
+        );
+        
+        if (stepOnlyMovement.y < maxUpStep) {
+          const adjustedStepUp = this.collideBoundingBox(
+            world,
+            
+            playerAABB.translateVec(stepOnlyMovement),
+            new Vec3(movement.x, 0, movement.z),
+          ).add(stepOnlyMovement);
+          
+          if (hDist(adjustedStepUp) > hDist(stepUpMovement)) {
+            stepUpMovement = adjustedStepUp;
           }
         }
-        if (
-          movementWithStepUp.x * movementWithStepUp.x + movementWithStepUp.z * movementWithStepUp.z >
-          movement.x * movement.x + movement.z * movement.z
-        ) {
-          movement = movementWithStepUp.plus(
+        
+        if (hDist(stepUpMovement) > hDist(newMovement)) {
+          newMovement = stepUpMovement.add(
             this.collideBoundingBox(
-              world,
-              player.getBB().translateVec(movementWithStepUp),
-              new Vec3(0.0, -movementWithStepUp.y + movementBeforeCollisions.y, 0.0)
+              world,     
+              playerAABB.translateVec(stepUpMovement),
+              new Vec3(0, -stepUpMovement.y + movement.y, 0),
             )
           );
         }
       }
+      movement = newMovement
     }
 
     if (movement.norm() ** 2 > 1e-7) {
       player.pos.add(movement);
     }
 
-    const collisionX = movement.x != movementBeforeCollisions.x;
-    const collisionY = movement.y != movementBeforeCollisions.y;
-    const collisionZ = movement.z != movementBeforeCollisions.z;
+    const collisionX = Math.abs(movement.x - movementBeforeCollisions.x) > 1e-7;
+    const collisionY = Math.abs(movement.y - movementBeforeCollisions.y) > 1e-7;
+    const collisionZ = Math.abs(movement.z - movementBeforeCollisions.z) > 1e-7;
 
     player.isCollidedHorizontally = collisionX || collisionZ;
+
     player.isCollidedVertically = collisionY;
 
     // TODO: add minor horizontal collision check
@@ -1259,31 +1255,134 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
-  collideBoundingBox(world: World, bb: AABB, movement: Vec3): Vec3 {
-    // BIG DEVIATION.
-    const newBB = bb.clone();
-    // newBB.translateVec(movement);
+  collideBoundingBox(world: World, bb: AABB, movement: Vec3,  colliders: AABB[] = []): Vec3 {
+    const queryBB = bb.clone().expandTowards(movement);
+    const combinedColliders = [...colliders];
 
-    const colliders = this.getSurroundingBBs(newBB, world);
+    const blockCollisions = this.getSurroundingBBs(queryBB, world);
+    for (const block of blockCollisions) {
+      combinedColliders.push(block);
+    }
 
+    return this.collideWithShapes(movement, bb, combinedColliders);
+  }
+
+  
+  private collideWithShapes(movement: Vec3, bb: AABB, colliders: AABB[] = []): Vec3 {
     if (colliders.length === 0) {
       return movement;
     }
+    
+    let dx = movement.x;
+    let dy = movement.y;
+    let dz = movement.z;
+    
+    if (dy !== 0.0) {
+      dy = this.shapeCollide(1, bb, colliders, dy);
+      if (dy !== 0.0) {
+        bb = bb.translate(0, dy, 0);
+      }
+    }
+    
+    const prioritizeZ = Math.abs(dx) < Math.abs(dz);
+    if (prioritizeZ && dz !== 0.0) {
+      dz = this.shapeCollide(2, bb, colliders, dz);
+      if (dz !== 0.0) {
+        bb = bb.translate(0, 0, dz);
+      }
+    }
+    
+    if (dx !== 0.0) {
+      dx = this.shapeCollide(0, bb, colliders, dx);
+      if (!prioritizeZ && dx !== 0.0) {
+        bb = bb.translate(dx, 0, 0);
+      }
+    }
+    
+    if (!prioritizeZ && dz !== 0.0) {
+      dz = this.shapeCollide(2, bb, colliders, dz);
+    }
+    
+    return new Vec3(dx, dy, dz);
+  }
 
-    let collidedMovement = movement;
-    let movedAABB = newBB.clone();
-    this.collideOneAxis(movedAABB, collidedMovement, 1, colliders);
-    // collision on X before Z
-    if (Math.abs(collidedMovement.x) > Math.abs(collidedMovement.z)) {
-      this.collideOneAxis(movedAABB, collidedMovement, 0, colliders);
-      this.collideOneAxis(movedAABB, collidedMovement, 2, colliders);
-    } else {
-      this.collideOneAxis(movedAABB, collidedMovement, 2, colliders);
-      this.collideOneAxis(movedAABB, collidedMovement, 0, colliders);
+  shapeCollide(axis: number, bb: AABB, colliders: AABB[], movement: number): number {
+    if (Math.abs(movement) < 1e-7) {
+      return 0.0;
+    }
+    
+    
+    movement = this.voxelShapeCollide(axis, bb, movement, colliders);
+    
+    return movement;
+  }
+
+
+
+  private voxelShapeCollide(axis: number, bb: AABB, movement: number, colliders: AABB[]): number {
+    if (Math.abs(movement) < 1e-7) {
+      return 0.0;
     }
 
-    return collidedMovement;
+    const [minBB, maxBB] = bb.minAndMaxArrays();
+    
+    const maxAxis = axis === 0 ? bb.maxX : axis === 1 ? bb.maxY : bb.maxZ;
+    const minAxis = axis === 0 ? bb.minX : axis === 1 ? bb.minY : bb.minZ;
+
+    const offAxis1 = (axis + 1) % 3;
+    const offAxis2 = (axis + 2) % 3;
+
+
+    
+    if (movement > 0.0) {
+      for (const collider of colliders) {
+        const colliderMin = axis === 0 ? collider.minX : axis === 1 ? collider.minY : collider.minZ;
+        
+        // verify that the other axis are colliding.
+        const [minPt, maxPt] = collider.minAndMaxArrays();
+
+        if (
+          maxBB[offAxis1] - 1e-7 <= minPt[offAxis1] || minBB[offAxis1] + 1e-7 >= maxPt[offAxis1] ||
+          maxBB[offAxis2] - 1e-7 <= minPt[offAxis2] || minBB[offAxis2] + 1e-7 >= maxPt[offAxis2]
+        ) {
+          continue;
+        }
+        
+        if (colliderMin >= maxAxis) {
+          const distance = colliderMin - maxAxis;
+          if (distance >= -1e-7) {
+            movement = Math.min(movement, distance);
+          }
+          // return movement;
+        }
+      }
+    } else if (movement < 0.0) {
+      for (const collider of colliders) {
+
+ // verify that the other axis are colliding.
+ const [minPt, maxPt] = collider.minAndMaxArrays();
+
+ if (
+   maxBB[offAxis1] - 1e-7 <= minPt[offAxis1] || minBB[offAxis1] + 1e-7 >= maxPt[offAxis1] ||
+   maxBB[offAxis2] - 1e-7 <= minPt[offAxis2] || minBB[offAxis2] + 1e-7 >= maxPt[offAxis2]
+ ) {
+   continue;
+ }
+
+        const colliderMax = axis === 0 ? collider.maxX : axis === 1 ? collider.maxY : collider.maxZ;
+        if (colliderMax <= minAxis) {
+          const distance = colliderMax - minAxis;
+          if (distance <= 1e-7) {
+            movement = Math.max(movement, distance);
+          }
+          // return movement;
+        }
+      }
+    }
+    return movement;
   }
+
+
   collideOneAxis(movedAABB: AABB, movement: Vec3, axis: number, colliders: AABB[]) {
     const minAABB = movedAABB.minPoint().toArray();
     const maxAABB = movedAABB.maxPoint().toArray();
@@ -1302,17 +1401,6 @@ export class BotcraftPhysics implements IPhysics {
 
       const cond1 = movementLst[thisAxis] > 0.0 && maxAABB[thisAxis] - 1e-7 <= minCollider[thisAxis];
       const cond2 = movementLst[thisAxis] < 0.0 && minAABB[thisAxis] + 1e-7 >= maxCollider[thisAxis];
-      // if (collider.minY === 5 && thisAxis === 2) {
-      //   console.log("collider", collider);
-      //   console.log("movement", movement);
-      //   console.log("movedAABB", movedAABB);
-      //   console.log("movementLst", movementLst);
-      //   console.log(minCollider, maxCollider);
-      //   console.log(minAABB, maxAABB);
-      //   console.log("axis", thisAxis);
-      //   console.log(movementLst[thisAxis], maxAABB[thisAxis] - 1e-7, minCollider[thisAxis], cond1);
-      //   console.log(movementLst[thisAxis], minAABB[thisAxis] + 1e-7, maxCollider[thisAxis], cond2);
-      // }
       if (
         maxAABB[axis1] - 1e-7 > minCollider[axis1] &&
         minAABB[axis1] + 1e-7 < maxCollider[axis1] &&
@@ -1343,7 +1431,7 @@ export class BotcraftPhysics implements IPhysics {
     if (sqrNorm > 1) {
       inputVector.normalize();
     }
-    inputVector.scale(inputStrength / Math.max(1, sqrNorm));
+    inputVector.scale(inputStrength);
 
     const yaw = Math.PI - player.yaw;
     const sinYaw = Math.sin(yaw);

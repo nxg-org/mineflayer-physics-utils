@@ -35,7 +35,7 @@ let wasOnGround = false;
 let printNextPos = false;
 bot.on("move", (pos) => {
   if (bot.entity.onGround && !wasOnGround) {
-    bot.chat("Hit the ground! " + bot.entity.position.toString());
+    // bot.chat("Hit the ground! " + bot.entity.position.toString());
   }
   wasOnGround = bot.entity.onGround;
 });

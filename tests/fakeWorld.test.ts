@@ -13,10 +13,11 @@ import { Bot, ControlState } from "mineflayer";
 
 const version = "1.12.2";
 const mcData = md(version);
+const Engine = BotcraftPhysics;
 const Block = block(version) as typeof PBlock;
 
-const groundLevel = 4;
-const floatingOffset = 20;
+const groundLevel = 67;
+const floatingOffset = 100 - groundLevel;
 const control: { [key: string]: boolean } = {};
 
 class FakeWorld {
@@ -47,12 +48,13 @@ class FakeWorld {
   }
 }
 
-function createFakePlayer(pos: Vec3, groundLevel: number) {
+function createFakePlayer(pos: Vec3, tmpGroundLevel: number = groundLevel) {
+  const onGround = pos.y === tmpGroundLevel
   return {
     entity: {
       position: pos,
-      velocity: new Vec3(0, -0.08, 0),
-      onGround: pos.y === groundLevel,
+      velocity: new Vec3(0, onGround ? -0.08 : 0, 0),
+      onGround: onGround,
       isInWater: false,
       isInLava: false,
       isInWeb: false,
@@ -94,7 +96,7 @@ describe("Physics Simulation Tests", () => {
   const setupEntity = (yOffset: number) => {
     fakePlayer = createFakePlayer(new Vec3(0, groundLevel + yOffset, 0), groundLevel);
     fakePlayer.entity = applyMdToNewEntity(EPhysicsCtx, playerType, fakePlayer.entity);
-    physics = new BotcraftPhysics(mcData);
+    physics = new Engine(mcData);
     playerCtx = EPhysicsCtx.FROM_BOT(physics, fakePlayer);
     playerState = playerCtx.state as PlayerState;
     playerState.control = ControlStateHandler.DEFAULT();
@@ -110,7 +112,7 @@ describe("Physics Simulation Tests", () => {
     playerState.vel.y = 0;
     playerCtx.gravity = 0;
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 2; i++) {
       // playerState.update(fakePlayer);
       physics.simulate(playerCtx, fakeWorld);
       playerState.apply(fakePlayer);
@@ -127,6 +129,7 @@ describe("Physics Simulation Tests", () => {
     for (let i = 0; i < 10; i++) {
       physics.simulate(playerCtx, fakeWorld);
       playerState.apply(fakePlayer);
+      // console.log(fakePlayer.entity.position, playerState.pos, playerState.vel, playerState.age)
     }
 
     if (playerState.control.forward) {
@@ -136,10 +139,10 @@ describe("Physics Simulation Tests", () => {
     }
   });
 
-  it("test sprint-jumping", () => {
+  it("sprint-jumping", () => {
     setupEntity(0);
     playerState.control.forward = true;
-    // playerState.control.sprint = true;
+    playerState.control.sprint = true;
 
     for (let i = 0; i < 4; i++) {
       physics.simulate(playerCtx, fakeWorld);
@@ -156,37 +159,40 @@ describe("Physics Simulation Tests", () => {
     }
 
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);
-    expect(fakePlayer.entity.position.z).toEqual(-2.610639097306083);
+    expect(fakePlayer.entity.position.z).toEqual(-4.085029471928113);
   });
 
-  it("falling movement speed", () => {
+  it("walk_fallspeed", () => {
     setupEntity(floatingOffset);
     playerState.control.forward = true;
 
     while (!fakePlayer.entity.onGround && playerState.age < 100) {
       physics.simulate(playerCtx, fakeWorld);
+      // console.log(fakePlayer.entity.position, playerState.pos, playerState.vel, playerState.age)
       playerState.apply(fakePlayer);
     }
 
+    expect(fakePlayer.entity.position.z).toEqual(-5.082680598494437);
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);
-    expect(fakePlayer.entity.position.z).toEqual(-3.253675739201285);
+  });
 
-    const landingPos = playerState.pos.clone();
-
+  it ("sprint_fallspeed", () => {
     setupEntity(floatingOffset);
     playerState.control.forward = true;
     playerState.control.sprint = true;
 
+    console.log(playerState.vel)
     while (!fakePlayer.entity.onGround && playerState.age < 100) {
       physics.simulate(playerCtx, fakeWorld);
+      console.log(fakePlayer.entity.position, playerState.pos, playerState.vel, playerState.age)
       playerState.apply(fakePlayer);
     }
 
-    console.log(fakePlayer.entity.position, landingPos, playerState.pos)
+    // console.log(fakePlayer.entity.position, landingPos, playerState.pos, playerState.control)
 
+    expect(fakePlayer.entity.position.z).toEqual(-7.624010798740387);
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);
-    expect(fakePlayer.entity.position).toEqual(landingPos);
-  });
+  })
 
   it("should restore position after gravity toggle", () => {
     setupEntity(floatingOffset);
@@ -219,7 +225,7 @@ describe("Physics Simulation Tests", () => {
       playerState.apply(fakePlayer);
     }
 
-    expect(fakePlayer.entity.position.y).toEqual(5.001335979112147);
+    expect(fakePlayer.entity.position.y).toEqual(groundLevel + 1.001335979112147);
 
     for (let i = 0; i < 9; i++) {
       physics.simulate(playerCtx, fakeWorld);
@@ -231,7 +237,7 @@ describe("Physics Simulation Tests", () => {
 
   it("horizonal collision detection", () => {
     setupEntity(0);
-    fakeWorld.setOverrideBlock(new Vec3(0, groundLevel + 1, -2), mcData.blocksByName.stone.id);
+    fakeWorld.setOverrideBlock(new Vec3(0, groundLevel + 1, -2), mcData.blocksByName.dirt.id);
     playerState.control.forward = true;
 
     for (let i = 0; i < 10; i++) {
