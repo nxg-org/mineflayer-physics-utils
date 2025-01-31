@@ -10,6 +10,7 @@ import { BotcraftPhysics, EntityPhysics, IPhysics } from "../src/physics/engines
 import { initSetup } from "../src/index";
 import { PlayerState } from "../src/physics/states";
 import { Bot, ControlState } from "mineflayer";
+import { AABB } from "@nxg-org/mineflayer-util-plugin";
 
 const version = "1.12.2";
 const mcData = md(version);
@@ -234,7 +235,7 @@ describe("Physics Simulation Tests", () => {
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);
   });
 
-  it("hCol-z", () => {
+  it("hCol--z", () => {
     setupEntity(0);
     const blockPos = new Vec3(0, groundLevel + 1, -2);
     fakeWorld.setOverrideBlock(blockPos, mcData.blocksByName.dirt.id);
@@ -251,7 +252,7 @@ describe("Physics Simulation Tests", () => {
     expect(playerState.isCollidedHorizontally).toEqual(true);
   });
 
-  it("hCol--z", () => {
+  it("hCol-z", () => {
     setupEntity(0);
     const blockPos = new Vec3(0, groundLevel + 1, 1);
     fakeWorld.setOverrideBlock(blockPos, mcData.blocksByName.dirt.id);
@@ -300,5 +301,55 @@ describe("Physics Simulation Tests", () => {
 
     expect(playerState.pos.x).toEqual(0.7);
     expect(playerState.isCollidedHorizontally).toEqual(true);
+  });
+
+  it("jumpIntoBlock", () => {
+    setupEntity(0);
+
+    const bl1 = new Vec3(0, groundLevel + 1, 1); 
+    fakeWorld.setOverrideBlock(bl1, mcData.blocksByName.dirt.id);
+
+    fakePlayer.entity.position = new Vec3(0.5, groundLevel, 0.7); // right up against a block
+    playerState.pos = fakePlayer.entity.position.clone();
+    playerState.look(-359.9999 * (Math.PI / 360), 0);
+
+    playerState.control.jump = true;
+    playerState.control.forward = true;
+    playerState.control.sprint = true;
+
+    for (let i = 0; i < 12; i++) {
+      physics.simulate(playerCtx, fakeWorld);
+      playerState.apply(fakePlayer);
+      // console.log(fakePlayer.entity.position, playerState.isCollidedHorizontally);
+    }
+
+    expect(playerState.pos.z).toEqual(0.7);
+    expect(playerState.isCollidedHorizontally).toEqual(true);
+  });
+
+  it("walkUpStairs", () => {
+    setupEntity(0);
+
+    const bl1 = new Vec3(0, groundLevel + 1, -1); 
+    fakeWorld.setOverrideBlock(bl1, mcData.blocksByName.stone_stairs.id);
+
+    const shapes = fakeWorld.getBlock(bl1).shapes;
+    const bbs = shapes.map((shape) => AABB.fromShape(shape, bl1));
+    console.log(bbs)
+
+    fakePlayer.entity.position = new Vec3(-0.3, groundLevel, -0.5); // right up against a block
+    playerState.pos = fakePlayer.entity.position.clone();
+    playerState.look(-180 * (Math.PI / 360), 0);
+
+    playerState.control.forward = true;
+    playerState.control.sprint = true;
+
+    for (let i = 0; i < 3; i++) {
+      console.log(fakePlayer.entity.position, playerState.pos, playerState.isCollidedHorizontally);
+      physics.simulate(playerCtx, fakeWorld);
+      playerState.apply(fakePlayer);
+    }
+
+    expect(playerState.pos.y).not.toEqual(groundLevel);
   });
 });

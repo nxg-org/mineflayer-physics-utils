@@ -1027,8 +1027,11 @@ export class BotcraftPhysics implements IPhysics {
       return;
     }
 
+    // console.log('wtf vel?', player.vel)
     // this might be a clone.
     let movement = player.vel.clone();
+
+
     // if a player is stuck, reset stuck multiplier and set velocity to 0.
     if (player.stuckSpeedMultiplier.norm() ** 2 > 1e-7) {
       movement.x *= player.stuckSpeedMultiplier.x;
@@ -1070,18 +1073,23 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     const movementBeforeCollisions = movement.clone();
+    // console.log('movement', movement.x, movement.y, movement.z)
+
     { // Entity::collide
       const playerAABB = player.getBB();
+      const fuck = playerAABB.clone();
       const hDist = (vec: Vec3) => Math.sqrt(vec.x * vec.x + vec.z * vec.z);
       // const entityCollisions = world.getEntityCollisions(player, playerAABB.expand(movement));
       
       let newMovement = movement.norm() ** 2 === 0 ? movement : this.collideBoundingBox(world, playerAABB, movement);
-      
+
+     
       const collisionX = Math.abs(movement.x - newMovement.x) > 1e-7;
       const collisionY = Math.abs(movement.y - newMovement.y) > 1e-7;
       const collisionZ = Math.abs(movement.z - newMovement.z) > 1e-7;
       const onGround = player.onGround || (collisionY && movement.y < 0);
-      
+
+
       if (maxUpStep > 0 && onGround && (collisionX || collisionZ)) {
         let stepUpMovement = this.collideBoundingBox(
           world,
@@ -1089,9 +1097,10 @@ export class BotcraftPhysics implements IPhysics {
           new Vec3(movement.x, maxUpStep, movement.z),
         );
         
+        const expand = playerAABB.expandTowardsCoords(movement.x, 0, movement.z)
         const stepOnlyMovement = this.collideBoundingBox(
           world,
-          playerAABB.expandTowardsCoords(movement.x, 0, movement.z),
+          expand,
           new Vec3(0, maxUpStep, 0),
         );
         
@@ -1120,7 +1129,7 @@ export class BotcraftPhysics implements IPhysics {
       }
       movement = newMovement
     }
-
+    // console.log('after all collision', movement)
     if (movement.norm() ** 2 > 1e-7) {
       player.pos.add(movement);
     }
@@ -1265,7 +1274,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   collideBoundingBox(world: World, bb: AABB, movement: Vec3,  colliders: AABB[] = []): Vec3 {
-    const queryBB = bb.clone().expandTowards(movement);
+    let queryBB = bb.expandTowards(movement);
     const combinedColliders = [...colliders];
 
     const blockCollisions = this.getSurroundingBBs(queryBB, world);
@@ -1281,7 +1290,7 @@ export class BotcraftPhysics implements IPhysics {
     if (colliders.length === 0) {
       return movement;
     }
-    
+
     let dx = movement.x;
     let dy = movement.y;
     let dz = movement.z;
@@ -1289,7 +1298,7 @@ export class BotcraftPhysics implements IPhysics {
     if (dy !== 0.0) {
       dy = this.shapeCollide(1, bb, colliders, dy);
       if (dy !== 0.0) {
-        bb = bb.translate(0, dy, 0);
+        bb = bb.moveCoords(0, dy, 0);
       }
     }
     
@@ -1297,14 +1306,14 @@ export class BotcraftPhysics implements IPhysics {
     if (prioritizeZ && dz !== 0.0) {
       dz = this.shapeCollide(2, bb, colliders, dz);
       if (dz !== 0.0) {
-        bb = bb.translate(0, 0, dz);
+        bb = bb.moveCoords(0, 0, dz);
       }
     }
     
     if (dx !== 0.0) {
       dx = this.shapeCollide(0, bb, colliders, dx);
       if (!prioritizeZ && dx !== 0.0) {
-        bb = bb.translate(dx, 0, 0);
+        bb = bb.moveCoords(dx, 0, 0);
       }
     }
     
