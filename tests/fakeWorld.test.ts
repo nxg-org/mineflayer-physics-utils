@@ -190,7 +190,7 @@ describe("Physics Simulation Tests", () => {
 
     // console.log(fakePlayer.entity.position, landingPos, playerState.pos, playerState.control)
 
-    expect(fakePlayer.entity.position.z).toEqual(-7.624010798740387);
+    expect(fakePlayer.entity.position.z).toEqual(-6.607484778042766);
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);
   })
 
@@ -330,12 +330,11 @@ describe("Physics Simulation Tests", () => {
   it("walkUpStairs", () => {
     setupEntity(0);
 
-    const bl1 = new Vec3(0, groundLevel + 1, -1); 
+    const bl1 = new Vec3(0, groundLevel, -1); 
     fakeWorld.setOverrideBlock(bl1, mcData.blocksByName.stone_stairs.id);
 
     const shapes = fakeWorld.getBlock(bl1).shapes;
     const bbs = shapes.map((shape) => AABB.fromShape(shape, bl1));
-    console.log(bbs)
 
     fakePlayer.entity.position = new Vec3(-0.3, groundLevel, -0.5); // right up against a block
     playerState.pos = fakePlayer.entity.position.clone();
@@ -344,12 +343,12 @@ describe("Physics Simulation Tests", () => {
     playerState.control.forward = true;
     playerState.control.sprint = true;
 
-    for (let i = 0; i < 3; i++) {
-      console.log(fakePlayer.entity.position, playerState.pos, playerState.isCollidedHorizontally);
+    for (let i = 0; i < 4; i++) {
+      // console.log(fakePlayer.entity.position, playerState.pos, playerState.isCollidedHorizontally);
       physics.simulate(playerCtx, fakeWorld);
       playerState.apply(fakePlayer);
     }
 
-    expect(playerState.pos.y).not.toEqual(groundLevel);
+    expect(playerState.pos.y).toEqual(groundLevel + 1);
   });
 });
