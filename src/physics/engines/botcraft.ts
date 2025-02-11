@@ -773,7 +773,8 @@ export class BotcraftPhysics implements IPhysics {
             }
           } else {
             // something about getting an attribute for jump strength?
-            const jumpPower = entity.attributes[this.jumpStrengthAttribute].value * blockJumpFactor + jumpBoost;
+            const value = entity.attributes[this.jumpStrengthAttribute]?.value ?? 1 // random value as default
+            const jumpPower = value * blockJumpFactor + jumpBoost;
             if (jumpPower > 1e-5) {
               player.vel.y = jumpPower;
               if (player.sprinting) {
@@ -861,12 +862,12 @@ export class BotcraftPhysics implements IPhysics {
           const depthStrider = player.depthStrider;
           depthStriderMult = Math.min(depthStrider, 3) / 3;
         } else {
-          depthStriderMult = player.attributes[this.waterMovementEfficiencyAttribute].value;
+          depthStriderMult = player.attributes[this.waterMovementEfficiencyAttribute]?.value ?? 0; // random value as default
         }
 
         if (!player.onGround) {
           waterSlowDown += (0.54600006 - waterSlowDown) * depthStriderMult; // magic number
-          const movementSpeed = player.attributes[this.movementSpeedAttribute].value;
+          const movementSpeed = this.getMovementSpeedAttribute(ctx); // slight deviation, using utility method
           inputStrength += Math.fround(movementSpeed - inputStrength) * depthStriderMult;
         }
 
@@ -1043,7 +1044,7 @@ export class BotcraftPhysics implements IPhysics {
 
     let maxUpStep = ctx.stepHeight;
     if (!this.verLessThan("1.20.5")) {
-      maxUpStep = player.attributes[this.stepHeightAttribute].value;
+      maxUpStep = player.attributes[this.stepHeightAttribute]?.value ?? ctx.stepHeight;
     }
 
     // const playerAABB = player.getBB();
@@ -1213,7 +1214,8 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     if (this.verGreaterThan("1.20.6")) {
-      blockSpeedFactor = blockSpeedFactor + player.attributes[this.movementEfficiencyAttribute].value * (1 - blockSpeedFactor);
+      const factor = player.attributes[this.movementEfficiencyAttribute]?.value ?? 1
+      blockSpeedFactor = blockSpeedFactor + factor  * (1 - blockSpeedFactor);
     }
 
     player.vel.x *= blockSpeedFactor;
