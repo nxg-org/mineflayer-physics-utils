@@ -130,7 +130,7 @@ export class PlayerState implements IEntityState {
     public slowFalling: number = 0;
     public levitation: number = 0;
     public blindness: number = 0;
-    
+
     public depthStrider: number = 0;
     public swiftSneak: number = 0;
     public soulSpeed: number = 0;
@@ -155,7 +155,7 @@ export class PlayerState implements IEntityState {
      */
     public flying: boolean = false;
 
- 
+
     /**
      * TODO: proper impl.
      */
@@ -260,7 +260,7 @@ export class PlayerState implements IEntityState {
         this.pitch = bot.entity.pitch;
         this.control = control ?? ControlStateHandler.COPY_BOT(bot); // prevControl only updated internally.
 
-        this.isUsingItem = isEntityUsingItem(bot.entity, this.ctx.supportFeature);
+        this.isUsingItem = bot.usingHeldItem/*  || isEntityUsingItem(bot.entity, this.ctx.supportFeature); */
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
         this.isUsingOffHand = whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
 
@@ -275,7 +275,7 @@ export class PlayerState implements IEntityState {
         this.slowFalling = this.ctx.getEffectLevel(CheapEffects.SLOW_FALLING, this.effects);
         this.levitation = this.ctx.getEffectLevel(CheapEffects.LEVITATION, this.effects);
 
-        
+
         // armour enchantments
         //const boots = bot.inventory.slots[8];
         const boots = bot.entity.equipment[5];
@@ -532,4 +532,3 @@ export class PlayerState implements IEntityState {
     }
 }
 export { ControlStateHandler };
-
