@@ -1354,6 +1354,7 @@ export class BotcraftPhysics implements IPhysics {
 
 
 
+
     if (movement > 0.0) {
       for (const collider of colliders) {
         const colliderMin = axis === 0 ? collider.minX : axis === 1 ? collider.minY : collider.minZ;
@@ -1442,10 +1443,14 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   applyInputs(inputStrength: number, player: PlayerState) {
-    // console.log("current input strength of normal movement", inputStrength, player.onGround, player.sprinting, player.control)
     // Add slowdown when using items (like food)
     if (player.isUsingItem) {
         inputStrength *= 0.2;
+    }
+
+    // Use flySpeed for horizontal movement when flying
+    if (player.flying) {
+        inputStrength *= player.flySpeed * 40;
     }
 
     const inputVector = new Vec3(player.heading.strafe, 0, player.heading.forward);
