@@ -130,7 +130,7 @@ export class PlayerState implements IEntityState {
     public slowFalling: number = 0;
     public levitation: number = 0;
     public blindness: number = 0;
-    
+
     public depthStrider: number = 0;
     public swiftSneak: number = 0;
     public soulSpeed: number = 0;
@@ -155,7 +155,7 @@ export class PlayerState implements IEntityState {
      */
     public flying: boolean = false;
 
- 
+
     /**
      * TODO: proper impl.
      */
@@ -260,7 +260,7 @@ export class PlayerState implements IEntityState {
         this.pitch = bot.entity.pitch;
         this.control = control ?? ControlStateHandler.COPY_BOT(bot); // prevControl only updated internally.
 
-        this.isUsingItem = isEntityUsingItem(bot.entity, this.ctx.supportFeature);
+        this.isUsingItem = bot.usingHeldItem/*  || isEntityUsingItem(bot.entity, this.ctx.supportFeature); */
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
         this.isUsingOffHand = whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
 
@@ -275,7 +275,7 @@ export class PlayerState implements IEntityState {
         this.slowFalling = this.ctx.getEffectLevel(CheapEffects.SLOW_FALLING, this.effects);
         this.levitation = this.ctx.getEffectLevel(CheapEffects.LEVITATION, this.effects);
 
-        
+
         // armour enchantments
         //const boots = bot.inventory.slots[8];
         const boots = bot.entity.equipment[5];
@@ -303,10 +303,9 @@ export class PlayerState implements IEntityState {
         this.food = bot.food;
 
         // TODO:
-        this.flying = (bot.entity as any).flying ?? false;
         this.swimming = (bot.entity as any).swimming ?? false;
-        this.sprinting = (bot.entity as any).sprinting ?? false;
-        this.crouching = (bot.entity as any).crouching ?? false;
+        this.sprinting = bot.controlState.sprint;
+        this.crouching = bot.controlState.sneak;
         this.fallFlying = (bot.entity as any).fallFlying ?? false;
 
         switch (bot.game.gameMode) {
@@ -321,11 +320,13 @@ export class PlayerState implements IEntityState {
             case "survival":
             case "adventure":
                 this.flySpeed = 0;
-                this.mayFly = false;
+                this.mayFly = bot.entity.canFly;
                 break;
             default:
                 throw new Error("Unknown game mode: " + bot.game.gameMode);
         }
+
+        this.flying = !!(bot.entity as any).flying && this.mayFly
 
 
         return this;
@@ -532,4 +533,3 @@ export class PlayerState implements IEntityState {
     }
 }
 export { ControlStateHandler };
-

@@ -523,7 +523,7 @@ export class BotcraftPhysics implements IPhysics {
       // player->inputs.left_axis *= 0.98f;
 
       // Compensate water downward speed depending on looking direction (?)
-    
+
       if (this.isSwimmingAndNotFlying(ctx, world)) {
         const mSinPitch = player.pitch;
         let condition = mSinPitch < 0.0 || player.control.jump;
@@ -806,6 +806,7 @@ export class BotcraftPhysics implements IPhysics {
    * @returns
    */
   getMovementSpeedAttribute(entity: EPhysicsCtx) {
+    const isSprinting = entity.state instanceof PlayerState && entity.state.sprinting;
     let attribute;
     if (entity.state.attributes && entity.state.attributes[this.movementSpeedAttribute]) {
       // Use server-side player attributes
@@ -819,7 +820,7 @@ export class BotcraftPhysics implements IPhysics {
     // setSprinting in Livingentity.state.java
     //TODO: Generalize to all entities.
     attribute = attributes.deleteAttributeModifier(attribute, entity.worldSettings.sprintingUUID); // always delete sprinting (if it exists)
-    if (entity.state.control.sprint) {
+    if (isSprinting) {
       if (!attributes.checkAttributeModifier(attribute, entity.worldSettings.sprintingUUID)) {
         attribute = attributes.addAttributeModifier(attribute, {
           uuid: entity.worldSettings.sprintingUUID,
@@ -979,12 +980,12 @@ export class BotcraftPhysics implements IPhysics {
           inputStrength = 0.02;
 
           // DEVIATION: taken from p-physics, fixes motion!
-          if (player.control.sprint) {
+          if (player.sprinting) {
             const airSprintFactor = ctx.airborneAccel * 0.3
             inputStrength += airSprintFactor
           }
         }
-            
+
         this.applyInputs(inputStrength, player);
 
         if (player.onClimbable) {
@@ -1081,10 +1082,10 @@ export class BotcraftPhysics implements IPhysics {
       const fuck = playerAABB.clone();
       const hDist = (vec: Vec3) => Math.sqrt(vec.x * vec.x + vec.z * vec.z);
       // const entityCollisions = world.getEntityCollisions(player, playerAABB.expand(movement));
-      
+
       let newMovement = movement.norm() ** 2 === 0 ? movement : this.collideBoundingBox(world, playerAABB, movement);
 
-     
+
       const collisionX = Math.abs(movement.x - newMovement.x) > 1e-7;
       const collisionY = Math.abs(movement.y - newMovement.y) > 1e-7;
       const collisionZ = Math.abs(movement.z - newMovement.z) > 1e-7;
@@ -1097,31 +1098,31 @@ export class BotcraftPhysics implements IPhysics {
           playerAABB,
           new Vec3(movement.x, maxUpStep, movement.z),
         );
-        
+
         const expand = playerAABB.expandTowardsCoords(movement.x, 0, movement.z)
         const stepOnlyMovement = this.collideBoundingBox(
           world,
           expand,
           new Vec3(0, maxUpStep, 0),
         );
-        
+
         if (stepOnlyMovement.y < maxUpStep) {
           const adjustedStepUp = this.collideBoundingBox(
             world,
-            
+
             playerAABB.translateVec(stepOnlyMovement),
             new Vec3(movement.x, 0, movement.z),
           ).add(stepOnlyMovement);
-          
+
           if (hDist(adjustedStepUp) > hDist(stepUpMovement)) {
             stepUpMovement = adjustedStepUp;
           }
         }
-        
+
         if (hDist(stepUpMovement) > hDist(newMovement)) {
           newMovement = stepUpMovement.add(
             this.collideBoundingBox(
-              world,     
+              world,
               playerAABB.translateVec(stepUpMovement),
               new Vec3(0, -stepUpMovement.y + movement.y, 0),
             )
@@ -1287,7 +1288,7 @@ export class BotcraftPhysics implements IPhysics {
     return this.collideWithShapes(movement, bb, combinedColliders);
   }
 
-  
+
   private collideWithShapes(movement: Vec3, bb: AABB, colliders: AABB[] = []): Vec3 {
     if (colliders.length === 0) {
       return movement;
@@ -1296,14 +1297,14 @@ export class BotcraftPhysics implements IPhysics {
     let dx = movement.x;
     let dy = movement.y;
     let dz = movement.z;
-    
+
     if (dy !== 0.0) {
       dy = this.shapeCollide(1, bb, colliders, dy);
       if (dy !== 0.0) {
         bb = bb.moveCoords(0, dy, 0);
       }
     }
-    
+
     const prioritizeZ = Math.abs(dx) < Math.abs(dz);
     if (prioritizeZ && dz !== 0.0) {
       dz = this.shapeCollide(2, bb, colliders, dz);
@@ -1311,18 +1312,18 @@ export class BotcraftPhysics implements IPhysics {
         bb = bb.moveCoords(0, 0, dz);
       }
     }
-    
+
     if (dx !== 0.0) {
       dx = this.shapeCollide(0, bb, colliders, dx);
       if (!prioritizeZ && dx !== 0.0) {
         bb = bb.moveCoords(dx, 0, 0);
       }
     }
-    
+
     if (!prioritizeZ && dz !== 0.0) {
       dz = this.shapeCollide(2, bb, colliders, dz);
     }
-    
+
     return new Vec3(dx, dy, dz);
   }
 
@@ -1332,7 +1333,7 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     movement = this.voxelShapeCollide(axis, bb, movement, colliders);
-    
+
     return movement;
   }
 
@@ -1344,7 +1345,7 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     const [minBB, maxBB] = bb.minAndMaxArrays();
-    
+
     const maxAxis = axis === 0 ? bb.maxX : axis === 1 ? bb.maxY : bb.maxZ;
     const minAxis = axis === 0 ? bb.minX : axis === 1 ? bb.minY : bb.minZ;
 
@@ -1352,11 +1353,12 @@ export class BotcraftPhysics implements IPhysics {
     const offAxis2 = (axis + 2) % 3;
 
 
-    
+
+
     if (movement > 0.0) {
       for (const collider of colliders) {
         const colliderMin = axis === 0 ? collider.minX : axis === 1 ? collider.minY : collider.minZ;
-        
+
         // verify that the other axis are colliding.
         const [minPt, maxPt] = collider.minAndMaxArrays();
 
@@ -1366,7 +1368,7 @@ export class BotcraftPhysics implements IPhysics {
         ) {
           continue;
         }
-        
+
         if (colliderMin >= maxAxis) {
           const distance = colliderMin - maxAxis;
           if (distance >= -1e-7) {
@@ -1441,7 +1443,16 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   applyInputs(inputStrength: number, player: PlayerState) {
-    // console.log("current input strength of normal movement", inputStrength, player.onGround, player.sprinting, player.control)
+    // Add slowdown when using items (like food)
+    if (player.isUsingItem) {
+        inputStrength *= 0.2;
+    }
+
+    // Use flySpeed for horizontal movement when flying
+    if (player.flying) {
+        inputStrength *= player.flySpeed * 40;
+    }
+
     const inputVector = new Vec3(player.heading.strafe, 0, player.heading.forward);
     const sqrNorm = inputVector.norm() ** 2;
     if (sqrNorm < 1e-7) {

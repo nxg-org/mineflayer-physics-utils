@@ -93,6 +93,13 @@
     "@jridgewell/resolve-uri" "^3.0.3"
     "@jridgewell/sourcemap-codec" "^1.4.10"
 
+"@nxg-org/mineflayer-physics-util@^1.7.13":
+  version "1.7.13"
+  resolved "https://registry.yarnpkg.com/@nxg-org/mineflayer-physics-util/-/mineflayer-physics-util-1.7.13.tgz#ab6c360a12ec43e100e4e165ba0fc61899a1ad7e"
+  integrity sha512-88JGHisrYTfoecXMwvwBhmo/IV2DXXvfoSLqhfOQUF2qOIdz0dA7bG1PdfAMehRvUkR0WFWoeQV3tqiiieIAHQ==
+  dependencies:
+    "@nxg-org/mineflayer-util-plugin" "^1.8.2"
+
 "@nxg-org/mineflayer-util-plugin@^1.8.2":
   version "1.8.3"
   resolved "https://registry.yarnpkg.com/@nxg-org/mineflayer-util-plugin/-/mineflayer-util-plugin-1.8.3.tgz#58716ccee7e1661a8c0dffb808bc058d5833546b"
@@ -904,11 +911,11 @@ mineflayer-pathfinder@^2.4.4:
     prismarine-physics "^1.5.2"
     vec3 "^0.1.7"
 
-mineflayer@^4.22.0:
-  version "4.26.0"
-  resolved "https://registry.yarnpkg.com/mineflayer/-/mineflayer-4.26.0.tgz#6aaeb52f235ca427bc2b60b95270af4b682028b8"
-  integrity sha512-1mCuyqIJUieq/ul7s7UUvcUvycYEMN7GFL5iCUB8DraDsJhj1waP74WkaMUMOKmNukv72T8+6S9O0Jaxer1QHw==
+"mineflayer@github:GenerelSchwerz/mineflayer":
+  version "4.25.0"
+  resolved "https://codeload.github.com/GenerelSchwerz/mineflayer/tar.gz/b56898490fb26dd78f532d916274b0e928953080"
   dependencies:
+    "@nxg-org/mineflayer-physics-util" "^1.7.13"
     minecraft-data "^3.76.0"
     minecraft-protocol "^1.51.0"
     prismarine-biome "^1.1.1"
