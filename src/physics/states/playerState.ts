@@ -71,7 +71,7 @@ export class EntityDimensions {
         return EntityDimensions.scalable(this.width * f, this.height * f2);
     }
 
-    public toString(): String {
+    public toString(): string {
         return "EntityDimensions w=" + this.width + ", h=" + this.height + ", fixed=" + this.fixed;
     }
 }

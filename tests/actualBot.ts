@@ -32,7 +32,7 @@ function buildBot() {
   });
 
   let wasOnGround = false;
-  let printNextPos = false;
+  const printNextPos = false;
 
   bot.on("move", (pos) => {
     // console.log(pos);
@@ -43,7 +43,7 @@ function buildBot() {
   });
 
   // print whenever another player hits the ground
-  let lastPositions: Record<string, boolean> = {};
+  const lastPositions: Record<string, boolean> = {};
   bot.on("entityMoved", (entity) => {
     if (entity.username && entity.username !== bot.username) {
       // check by seeing is y value is an integer

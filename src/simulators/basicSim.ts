@@ -1,4 +1,4 @@
-import loader, { Entity } from "prismarine-entity";
+import { Entity } from "prismarine-entity";
 
 import { applyMdToNewEntity } from "../util/physicsUtils";
 import { IPhysics } from "../physics/engines";

@@ -1277,7 +1277,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   collideBoundingBox(world: World, bb: AABB, movement: Vec3,  colliders: AABB[] = []): Vec3 {
-    let queryBB = bb.expandTowards(movement);
+    const queryBB = bb.expandTowards(movement);
     const combinedColliders = [...colliders];
 
     const blockCollisions = this.getSurroundingBBs(queryBB, world);
