@@ -11,10 +11,9 @@ const rl = require("readline").createInterface({
   output: process.stdout,
 });
 
-
 let bot1: Bot;
 function buildBot() {
-  console.log('hey!')
+  console.log("hey!");
 
   const bot = createBot({
     host: process.argv[2],
@@ -63,6 +62,7 @@ function buildBot() {
 
   let usingNew = false;
   let oldSimulate: any = null;
+  let state: PlayerState | null = null;
 
   function setupNewPhysics(bot: Bot) {
     if (usingNew) return;
@@ -72,12 +72,12 @@ function buildBot() {
     const val = new BotcraftPhysics(bot.registry);
 
     (EntityState.prototype as any).apply = function (this: EntityState, bot: Bot) {
-      // console.log(this.control, this.isUsingItem);
+      console.log(this.control, this.isUsingItem);
       this.applyToBot(bot);
     };
 
     const ctx = EPhysicsCtx.FROM_BOT(val, bot);
-    const state = ctx.state as PlayerState;
+    state = ctx.state as PlayerState;
 
     // EntityPhysics.prototype.simulate = function (ctx, world) {
     //   bot.physics.simulatePlayer(ctx.state, world);
@@ -87,7 +87,7 @@ function buildBot() {
     // (bot.physics).jumpTicks = 0;
 
     (bot.physics as any).simulatePlayer = (...args: any[]) => {
-      state.update(bot);
+      state!.update(bot);
       ctx.state.jumpTicks = 0; // allow immediate jumping
       return val.simulate(ctx, bot.world);
     };
@@ -106,10 +106,15 @@ function buildBot() {
         bot.lookAt(author.position.offset(0, author.height, 0));
         break;
       case "status":
-        const str = `onGround: ${bot.entity.onGround}, hCol:${(bot.entity as any).isCollidedHorizontally}, vCol:${
+        const str = `onGround: ${bot.entity.onGround}, hCol: ${(bot.entity as any).isCollidedHorizontally}, vCol: ${
           (bot.entity as any).isCollidedVertically
-        }, inWater:${(bot.entity as any).isInWater}, inLava:${(bot.entity as any).isInLava}`;
+        }, inWater: ${(bot.entity as any).isInWater}, inLava: ${(bot.entity as any).isInLava}`;
         bot.chat(str);
+
+        if (state != null) {
+          const str1 = `crouching: ${state.crouching}, sprinting: ${state.sprinting}`;
+          bot.chat(str1);
+        }
         break;
       case "use":
         if (bot.usingHeldItem) bot.deactivateItem();
@@ -144,7 +149,7 @@ function buildBot() {
         bot.quit();
         await new Promise((res) => setTimeout(res, 3000));
         bot1 = buildBot();
-       
+
         break;
       case "new":
         setupNewPhysics(bot);
@@ -172,12 +177,9 @@ function buildBot() {
     }
   });
 
-  
   rl.on("line", (line: any) => bot.chat(line));
 
   return bot;
 }
-
-
 
 bot1 = buildBot();

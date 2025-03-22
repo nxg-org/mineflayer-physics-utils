@@ -26,8 +26,8 @@
     "devDependencies": {
         "@types/mocha": "^10.0.10",
         "expect": "^29.7.0",
+        "mineflayer": "^4.26.0",
         "minecraft-data": "^3.83.1",
-        "mineflayer": "github:GenerelSchwerz/mineflayer",
         "mineflayer-pathfinder": "^2.4.4",
         "mocha": "^11.1.0",
         "prismarine-entity": "^2.4.0",

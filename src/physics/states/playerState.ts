@@ -304,8 +304,8 @@ export class PlayerState implements IEntityState {
 
         // TODO:
         this.swimming = (bot.entity as any).swimming ?? false;
-        this.sprinting = bot.controlState.sprint;
-        this.crouching = bot.controlState.sneak;
+        this.sprinting = (bot.entity as any).sprinting ?? false; 
+        this.crouching = (bot.entity as any).crouching ?? false;
         this.fallFlying = (bot.entity as any).fallFlying ?? false;
 
         switch (bot.game.gameMode) {
@@ -320,7 +320,7 @@ export class PlayerState implements IEntityState {
             case "survival":
             case "adventure":
                 this.flySpeed = 0;
-                this.mayFly = bot.entity.canFly;
+                this.mayFly = (bot.entity as any).canFly;
                 break;
             default:
                 throw new Error("Unknown game mode: " + bot.game.gameMode);

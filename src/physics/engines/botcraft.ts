@@ -141,10 +141,10 @@ export class BotcraftPhysics implements IPhysics {
     pos.z = bb.minZ + halfWidth;
   }
 
-  getSurroundingBBs(queryBB: AABB, world: World): AABB[] {
+  getSurroundingBBs(queryBB: AABB, world: World, underlying=true): AABB[] {
     const surroundingBBs = [];
     const cursor = new Vec3(0, 0, 0);
-    for (cursor.y = Math.floor(queryBB.minY) - 1; cursor.y <= Math.floor(queryBB.maxY); ++cursor.y) {
+    for (cursor.y = Math.floor(queryBB.minY) - Number(underlying); cursor.y <= Math.floor(queryBB.maxY); ++cursor.y) {
       for (cursor.z = Math.floor(queryBB.minZ); cursor.z <= Math.floor(queryBB.maxZ); ++cursor.z) {
         for (cursor.x = Math.floor(queryBB.minX); cursor.x <= Math.floor(queryBB.maxX); ++cursor.x) {
           const block = world.getBlock(cursor);
@@ -219,8 +219,8 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   private worldIsFree(world: World, bb: AABB, ignoreLiquid: boolean) {
-    if (ignoreLiquid) return this.getSurroundingBBs(bb, world).length === 0;
-    else return this.getSurroundingBBs(bb, world).length === 0 && this.getWaterInBB(bb, world).length === 0;
+    if (ignoreLiquid) return this.getSurroundingBBs(bb, world, false).length === 0;
+    else return this.getSurroundingBBs(bb, world, false).length === 0 && this.getWaterInBB(bb, world).length === 0;
   }
 
   /**
@@ -315,7 +315,7 @@ export class BotcraftPhysics implements IPhysics {
 
     const minAABB = aabb.minPoint();
     const maxAABB = aabb.maxPoint();
-    const eyeHeight = player.eyeHeight;
+    const eyeHeight = player.eyeHeight + player.pos.y;
 
     const waterCond = (block: Block) => block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged;
     const lavaCond = (block: Block) => block.type === this.lavaId;
@@ -607,7 +607,7 @@ export class BotcraftPhysics implements IPhysics {
         sneakCoefficient = 0.3 + player.swiftSneak * 0.15;
         sneakCoefficient = Math.min(Math.max(0.0, sneakCoefficient), 1.0);
       } else {
-        sneakCoefficient = player.attributes?.sneakingSpeed.value ?? 0.3;
+        sneakCoefficient = player.attributes?.sneakingSpeed?.value ?? 0.3; // TODO: this shouldn't be happening!
       }
       heading.forward *= sneakCoefficient;
       heading.strafe *= sneakCoefficient;
@@ -653,7 +653,7 @@ export class BotcraftPhysics implements IPhysics {
         player.isUnderWater) ||
         ((player.onGround || player.isUnderWater) && !player.prevControl.sneak && !couldSprintPrevious))
     ) {
-      this.setSprinting(ctx, true);
+            this.setSprinting(ctx, true);
     }
 
     // stop sprinting if necessary
