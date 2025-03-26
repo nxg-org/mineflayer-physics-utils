@@ -577,15 +577,10 @@ export class BotcraftPhysics implements IPhysics {
       sneakBb.expand(-1e-7, -1e-7, -1e-7);
       standBb.expand(-1e-7, -1e-7, -1e-7);
 
-
-      console.log(  this.worldIsFree(world, sneakBb, false))
-
       player.crouching =
         !this.isSwimmingAndNotFlying(ctx, world) &&
         this.worldIsFree(world, sneakBb, false) &&
         (player.prevControl.sneak || !this.worldIsFree(world, standBb, false));
-
-      console.log(player.crouching)
     } else {
       player.crouching = !this.isSwimmingAndNotFlying(ctx, world) && player.prevControl.sneak;
     }
@@ -644,55 +639,87 @@ export class BotcraftPhysics implements IPhysics {
   private inputsToSprint(ctx: EPhysicsCtx, heading: Heading, world: World) {
     const player = ctx.state as PlayerState;
     
-    // Check if player can start sprinting based on conditions from LocalPlayer.java
-    const canStartSprinting = 
-      !player.sprinting &&
-      heading.forward > 0 &&  // input.hasForwardImpulse()
-      (player.mayFly || player.food > 6) && // hasEnoughFoodToSprint()
-      !player.isUsingItem && // !this.isUsingItem()
-      !player.blindness && // !this.hasBlindness()
-      // (!player.isPassenger || (player.vehicle && player.vehicle.canSprint && player.vehicle.isLocalInstanceAuthoritative)) && // vehicle checks
-      (!player.fallFlying || player.isUnderWater) && // !this.isFallFlying() || this.isUnderWater()
-      (!player.crouching || player.isUnderWater) && // !this.isMovingSlowly() || this.isUnderWater()
-      (!player.isInWater || player.isUnderWater); // !this.isInWater() || this.isUnderWater()
 
-    // Start sprinting if conditions are met
-    if (canStartSprinting && 
-        (player.control.sprint || // if sprint key is pressed
-         (player.sprintTriggerTime > 0 && heading.forward > 0))) { // or double tap forward
+    console.log(this.canStartSprinting(ctx, heading), player.control.sprint, player.sprintTriggerTime,  heading.forward)
+    // Start sprinting if possible
+    if (this.canStartSprinting(ctx, heading) && 
+        (player.control.sprint || 
+        (player.sprintTriggerTime > 0 && heading.forward >= (player.isInWater ? 1e-5 : 0.8)))) {
+          console.log('setting sprinting!')
       this.setSprinting(ctx, true);
     }
 
-    // Stop sprinting conditions
+    // Stop sprinting if necessary
     if (player.sprinting) {
-      // Check if should stop sprinting while running on ground
-      if (!player.isInWater || !player.isUnderWater) {
-        const shouldStopRunSprinting = 
-          player.blindness || // this.hasBlindness()
-          // (player.isPassenger && (!player.vehicle || !player.vehicle.canSprint)) || // passenger vehicle check
-          !heading.forward || // !this.input.hasForwardImpulse()
-          (!player.mayFly && player.food <= 6) || // !this.hasEnoughFoodToSprint()
-          (player.isCollidedHorizontally && !player.isCollidedHorizontallyMinor) || // horizontal collision check
-          (player.isInWater && !player.isUnderWater); // swimming but not underwater
-        
-        if (shouldStopRunSprinting) {
+      if (this.isSwimming(ctx)) {
+        if (this.shouldStopSwimSprinting(ctx, heading)) {
           this.setSprinting(ctx, false);
         }
-      } 
-      // Check if should stop sprinting while swimming
-      else if (player.isInWater) {
-        const shouldStopSwimSprinting = 
-          player.blindness || // this.hasBlindness()
-          // (player.isPassenger && (!player.vehicle || !player.vehicle.canSprint)) || // passenger vehicle check
-          !player.isInWater || // !this.isInWater()
-          (!heading.forward && !player.onGround && !player.control.sneak) || // complex forward impulse check
-          (!player.mayFly && player.food <= 6); // !this.hasEnoughFoodToSprint()
-        
-        if (shouldStopSwimSprinting) {
-          this.setSprinting(ctx, false);
-        }
+      } else if (this.shouldStopRunSprinting(ctx, heading)) {
+        this.setSprinting(ctx, false);
       }
     }
+    console.log('we are sprinting?', player.sprinting)
+}
+
+private canStartSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
+    const player = ctx.state as PlayerState;
+    return !player.sprinting &&
+           heading.forward >= (player.isInWater ? 1e-5 : 0.8) &&
+           this.hasEnoughFoodToSprint(ctx) &&
+           !player.isUsingItem &&
+           !player.blindness &&
+          //  (!player.isPassenger || this.vehicleCanSprint(ctx)) &&
+           (!player.fallFlying || player.isUnderWater) &&
+           (!player.crouching || player.isUnderWater) &&
+           (!player.isInWater || player.isUnderWater);
+}
+
+private hasEnoughFoodToSprint(ctx: EPhysicsCtx): boolean {
+    const player = ctx.state as PlayerState;
+    return /* player.isPassenger ||*/ player.food > 6 || player.mayFly;
+}
+
+private vehicleCanSprint(ctx: EPhysicsCtx): boolean {
+  return false;
+    // const player = ctx.state as PlayerState;
+    // return player.vehicle && 
+    //        player.vehicle.canSprint && 
+    //        player.vehicle.isLocalInstanceAuthoritative;
+}
+
+private isSwimming(ctx: EPhysicsCtx): boolean {
+    const player = ctx.state as PlayerState;
+    return player.isInWater && player.isUnderWater;
+}
+
+private shouldStopRunSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
+    const player = ctx.state as PlayerState;
+    console.log(
+      player.blindness > 0,
+      heading.forward < 1e-5,
+      !this.hasEnoughFoodToSprint(ctx),
+      player.isCollidedHorizontally,
+      player.isCollidedHorizontallyMinor,
+      player.isInWater && !player.isUnderWater
+
+
+    )
+    return player.blindness > 0 ||
+          //  (player.isPassenger && !this.vehicleCanSprint(ctx)) ||
+           heading.forward < 1e-5 ||
+           !this.hasEnoughFoodToSprint(ctx) ||
+           (player.isCollidedHorizontally && !player.isCollidedHorizontallyMinor) ||
+           (player.isInWater && !player.isUnderWater);
+}
+
+private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
+    const player = ctx.state as PlayerState;
+    return player.blindness > 0 ||
+          //  (player.isPassenger && !this.vehicleCanSprint(ctx)) ||
+           !player.isInWater ||
+           (heading.forward <= 1e-5 && !player.onGround && !player.control.sneak) ||
+           !this.hasEnoughFoodToSprint(ctx);
 }
 
   /**
@@ -857,6 +884,7 @@ export class BotcraftPhysics implements IPhysics {
     }
     // Calculate what the speed is (0.1 if no modification)
     const attributeSpeed = attributes.getAttributeValue(attribute);
+    console.log(attributeSpeed);
     return attributeSpeed;
   }
 
@@ -1300,7 +1328,6 @@ export class BotcraftPhysics implements IPhysics {
 
       } else return false;
     }
-
     return false;
 
   }
