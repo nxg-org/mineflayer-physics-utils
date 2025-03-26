@@ -220,7 +220,7 @@ export class BotcraftPhysics implements IPhysics {
 
   private worldIsFree(world: World, bb: AABB, ignoreLiquid: boolean) {
     const bbs = ignoreLiquid ? this.getSurroundingBBs(bb, world, false) : [...this.getSurroundingBBs(bb, world, false), ...this.getWaterInBB(bb, world)];
-    
+
     // now we have to actually check for collisions.
     for (const blockBB of bbs) {
       if (blockBB.intersects(bb)) {
@@ -477,6 +477,7 @@ export class BotcraftPhysics implements IPhysics {
 
   private localPlayerAIStep(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
+    player.attributes ??= {}
     const heading = convInpToAxes(player);
     player.heading = heading;
 
@@ -585,7 +586,7 @@ export class BotcraftPhysics implements IPhysics {
       player.crouching = !this.isSwimmingAndNotFlying(ctx, world) && player.prevControl.sneak;
     }
 
-    
+
 
     // Determine if moving slowly
     let isMovingSlowly: boolean;
@@ -638,10 +639,10 @@ export class BotcraftPhysics implements IPhysics {
 
   private inputsToSprint(ctx: EPhysicsCtx, heading: Heading, world: World) {
     const player = ctx.state as PlayerState;
-    
+
     // Start sprinting if possible
-    if (this.canStartSprinting(ctx, heading) && 
-        (player.control.sprint || 
+    if (this.canStartSprinting(ctx, heading) &&
+        (player.control.sprint ||
         (player.sprintTriggerTime > 0 && heading.forward >= (player.isInWater ? 1e-5 : 0.8)))) {
       this.setSprinting(ctx, true);
     }
@@ -679,8 +680,8 @@ private hasEnoughFoodToSprint(ctx: EPhysicsCtx): boolean {
 private vehicleCanSprint(ctx: EPhysicsCtx): boolean {
   return false;
     // const player = ctx.state as PlayerState;
-    // return player.vehicle && 
-    //        player.vehicle.canSprint && 
+    // return player.vehicle &&
+    //        player.vehicle.canSprint &&
     //        player.vehicle.isLocalInstanceAuthoritative;
 }
 
@@ -1115,7 +1116,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
 
     // 1.20.5: this is var2 in entity::move
     const movementBeforeCollisions = movement.clone();
- 
+
     { // Entity::collide
       const playerAABB = player.getBB();
       const fuck = playerAABB.clone();
@@ -1276,7 +1277,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
 
     if (this.verGreaterThan("1.20.3")) { // apparently 1.20.4+ {
       const player = state as PlayerState;
- 
+
       // @Override
       // protected boolean isHorizontalCollisionMinor(Vec3 var1) {
       //    float var2 = this.getYRot() * (float) (Math.PI / 180.0);
