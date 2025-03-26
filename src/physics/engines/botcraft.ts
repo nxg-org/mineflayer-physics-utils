@@ -639,13 +639,10 @@ export class BotcraftPhysics implements IPhysics {
   private inputsToSprint(ctx: EPhysicsCtx, heading: Heading, world: World) {
     const player = ctx.state as PlayerState;
     
-
-    console.log(this.canStartSprinting(ctx, heading), player.control.sprint, player.sprintTriggerTime,  heading.forward)
     // Start sprinting if possible
     if (this.canStartSprinting(ctx, heading) && 
         (player.control.sprint || 
         (player.sprintTriggerTime > 0 && heading.forward >= (player.isInWater ? 1e-5 : 0.8)))) {
-          console.log('setting sprinting!')
       this.setSprinting(ctx, true);
     }
 
@@ -659,7 +656,6 @@ export class BotcraftPhysics implements IPhysics {
         this.setSprinting(ctx, false);
       }
     }
-    console.log('we are sprinting?', player.sprinting)
 }
 
 private canStartSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
@@ -695,16 +691,6 @@ private isSwimming(ctx: EPhysicsCtx): boolean {
 
 private shouldStopRunSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
     const player = ctx.state as PlayerState;
-    console.log(
-      player.blindness > 0,
-      heading.forward < 1e-5,
-      !this.hasEnoughFoodToSprint(ctx),
-      player.isCollidedHorizontally,
-      player.isCollidedHorizontallyMinor,
-      player.isInWater && !player.isUnderWater
-
-
-    )
     return player.blindness > 0 ||
           //  (player.isPassenger && !this.vehicleCanSprint(ctx)) ||
            heading.forward < 1e-5 ||
@@ -884,7 +870,6 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
     }
     // Calculate what the speed is (0.1 if no modification)
     const attributeSpeed = attributes.getAttributeValue(attribute);
-    console.log(attributeSpeed);
     return attributeSpeed;
   }
 
