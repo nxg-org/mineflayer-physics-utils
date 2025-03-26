@@ -259,6 +259,7 @@ export class PlayerState implements IEntityState {
         this.yaw = bot.entity.yaw;
         this.pitch = bot.entity.pitch;
         this.control = control ?? ControlStateHandler.COPY_BOT(bot); // prevControl only updated internally.
+        
 
         this.isUsingItem = bot.usingHeldItem/*  || isEntityUsingItem(bot.entity, this.ctx.supportFeature); */
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
@@ -371,6 +372,7 @@ export class PlayerState implements IEntityState {
         bot.entity.attributes = this.attributes;
 
         this.control.applyControls(bot);
+        (bot.entity as any).prevControl = this.prevControl;
     }
 
     public clone() {
@@ -470,6 +472,7 @@ export class PlayerState implements IEntityState {
         this.yaw = other.yaw;
         this.pitch = other.pitch;
         this.control = other.control.clone();
+        this.prevControl = other.prevControl.clone();
 
         this.isUsingItem = other.isUsingItem;
         this.isUsingMainHand = other.isUsingMainHand;

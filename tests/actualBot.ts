@@ -28,6 +28,7 @@ function buildBot() {
     await bot.waitForTicks(20);
     (bot as any).physics.yawSpeed = 50;
     (bot as any).physics.pitchSpeed = 50;
+    setupNewPhysics(bot);
     // setupNewPhysics(bot);
   });
 

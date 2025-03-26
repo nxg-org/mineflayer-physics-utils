@@ -219,8 +219,15 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   private worldIsFree(world: World, bb: AABB, ignoreLiquid: boolean) {
-    if (ignoreLiquid) return this.getSurroundingBBs(bb, world, false).length === 0;
-    else return this.getSurroundingBBs(bb, world, false).length === 0 && this.getWaterInBB(bb, world).length === 0;
+    const bbs = ignoreLiquid ? this.getSurroundingBBs(bb, world, false) : [...this.getSurroundingBBs(bb, world, false), ...this.getWaterInBB(bb, world)];
+    
+    // now we have to actually check for collisions.
+    for (const blockBB of bbs) {
+      if (blockBB.intersects(bb)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -570,13 +577,20 @@ export class BotcraftPhysics implements IPhysics {
       sneakBb.expand(-1e-7, -1e-7, -1e-7);
       standBb.expand(-1e-7, -1e-7, -1e-7);
 
+
+      console.log(  this.worldIsFree(world, sneakBb, false))
+
       player.crouching =
         !this.isSwimmingAndNotFlying(ctx, world) &&
         this.worldIsFree(world, sneakBb, false) &&
         (player.prevControl.sneak || !this.worldIsFree(world, standBb, false));
+
+      console.log(player.crouching)
     } else {
       player.crouching = !this.isSwimmingAndNotFlying(ctx, world) && player.prevControl.sneak;
     }
+
+    
 
     // Determine if moving slowly
     let isMovingSlowly: boolean;
