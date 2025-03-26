@@ -14,7 +14,7 @@ import {
 import * as math from "../info/math";
 import * as attributes from "../info/attributes";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
-import { IEntityState } from "../states";
+import { EntityState, IEntityState } from "../states";
 import { IPhysics } from "./IPhysics";
 import { PlayerPoses, PlayerState, convInpToAxes, getCollider } from "../states";
 import { PhysicsWorldSettings } from "../settings";
@@ -643,45 +643,57 @@ export class BotcraftPhysics implements IPhysics {
 
   private inputsToSprint(ctx: EPhysicsCtx, heading: Heading, world: World) {
     const player = ctx.state as PlayerState;
-    const canStartSprinting =
-      /* !player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::Sprinting) */ !player.sprinting &&
-      heading.forward >= (player.isInWater ? 1e-5 : 0.8) &&
-      (player.mayFly || player.food > 6) &&
-      /* !player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying)*/ !player.fallFlying &&
-      !player.blindness;
+    
+    // Check if player can start sprinting based on conditions from LocalPlayer.java
+    const canStartSprinting = 
+      !player.sprinting &&
+      heading.forward > 0 &&  // input.hasForwardImpulse()
+      (player.mayFly || player.food > 6) && // hasEnoughFoodToSprint()
+      !player.isUsingItem && // !this.isUsingItem()
+      !player.blindness && // !this.hasBlindness()
+      // (!player.isPassenger || (player.vehicle && player.vehicle.canSprint && player.vehicle.isLocalInstanceAuthoritative)) && // vehicle checks
+      (!player.fallFlying || player.isUnderWater) && // !this.isFallFlying() || this.isUnderWater()
+      (!player.crouching || player.isUnderWater) && // !this.isMovingSlowly() || this.isUnderWater()
+      (!player.isInWater || player.isUnderWater); // !this.isInWater() || this.isUnderWater()
 
-    // TODO: keep track of previous movement values?
-    // const couldSprintPrevious = player.prevControl.forward >= (!!player.isUnderWater ? 1e-5 : 0.8); /*  player->previous_forward >= (player->under_water ? 1e-5f : 0.8f); */
-
-    let couldSprintPrevious;
-    if (player.isUnderWater) {
-      couldSprintPrevious = player.prevHeading.forward >= 1e-5;
-    } else {
-      couldSprintPrevious = player.prevHeading.forward >= 0.8;
-    }
-    // start sprinting if possible
-    if (
-      canStartSprinting &&
-      player.control.sprint &&
-      ((!player.isInWater ||
-        player.isUnderWater) ||
-        ((player.onGround || player.isUnderWater) && !player.prevControl.sneak && !couldSprintPrevious))
-    ) {
-            this.setSprinting(ctx, true);
+    // Start sprinting if conditions are met
+    if (canStartSprinting && 
+        (player.control.sprint || // if sprint key is pressed
+         (player.sprintTriggerTime > 0 && heading.forward > 0))) { // or double tap forward
+      this.setSprinting(ctx, true);
     }
 
-    // stop sprinting if necessary
+    // Stop sprinting conditions
     if (player.sprinting) {
-      const stopSprintCond = heading.forward <= 1e-5 || (player.food <= 6 && !player.mayFly);
-      if (this.isSwimmingAndNotFlying(ctx, world)) {
-        if ((!player.onGround && !player.control.sneak && stopSprintCond) || !player.isInWater) {
+      // Check if should stop sprinting while running on ground
+      if (!player.isInWater || !player.isUnderWater) {
+        const shouldStopRunSprinting = 
+          player.blindness || // this.hasBlindness()
+          // (player.isPassenger && (!player.vehicle || !player.vehicle.canSprint)) || // passenger vehicle check
+          !heading.forward || // !this.input.hasForwardImpulse()
+          (!player.mayFly && player.food <= 6) || // !this.hasEnoughFoodToSprint()
+          (player.isCollidedHorizontally && !player.isCollidedHorizontallyMinor) || // horizontal collision check
+          (player.isInWater && !player.isUnderWater); // swimming but not underwater
+        
+        if (shouldStopRunSprinting) {
           this.setSprinting(ctx, false);
         }
-      } else if (stopSprintCond || player.isCollidedHorizontally || (player.isInWater && !player.isUnderWater)) {
-        this.setSprinting(ctx, false);
+      } 
+      // Check if should stop sprinting while swimming
+      else if (player.isInWater) {
+        const shouldStopSwimSprinting = 
+          player.blindness || // this.hasBlindness()
+          // (player.isPassenger && (!player.vehicle || !player.vehicle.canSprint)) || // passenger vehicle check
+          !player.isInWater || // !this.isInWater()
+          (!heading.forward && !player.onGround && !player.control.sneak) || // complex forward impulse check
+          (!player.mayFly && player.food <= 6); // !this.hasEnoughFoodToSprint()
+        
+        if (shouldStopSwimSprinting) {
+          this.setSprinting(ctx, false);
+        }
       }
     }
-  }
+}
 
   /**
    * TODO: almost certainly unfinished.
@@ -1088,9 +1100,9 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
 
+    // 1.20.5: this is var2 in entity::move
     const movementBeforeCollisions = movement.clone();
-    // console.log('movement', movement.x, movement.y, movement.z)
-
+ 
     { // Entity::collide
       const playerAABB = player.getBB();
       const fuck = playerAABB.clone();
@@ -1150,13 +1162,21 @@ export class BotcraftPhysics implements IPhysics {
       player.pos.add(movement);
     }
 
+    // 1.20.5: movement is now considered var4.
+
     const collisionX = Math.abs(movement.x - movementBeforeCollisions.x) > 1e-7;
     const collisionY = Math.abs(movement.y - movementBeforeCollisions.y) > 1e-7;
     const collisionZ = Math.abs(movement.z - movementBeforeCollisions.z) > 1e-7;
 
     player.isCollidedHorizontally = collisionX || collisionZ;
-
     player.isCollidedVertically = collisionY;
+
+    if (player.isCollidedHorizontally) {
+      player.isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor(player, movement);
+
+    } else {
+      player.isCollidedHorizontallyMinor = false;
+    }
 
     // TODO: add minor horizontal collision check
     {
@@ -1235,6 +1255,54 @@ export class BotcraftPhysics implements IPhysics {
 
     player.vel.x *= blockSpeedFactor;
     player.vel.z *= blockSpeedFactor;
+  }
+
+  // localPlayer.java
+  isCollidedHorizontallyMinor(state: IEntityState, var1: Vec3): boolean {
+    if (!(state instanceof PlayerState)) return false;
+
+    if (this.verGreaterThan("1.20.3")) { // apparently 1.20.4+ {
+      const player = state as PlayerState;
+ 
+      // @Override
+      // protected boolean isHorizontalCollisionMinor(Vec3 var1) {
+      //    float var2 = this.getYRot() * (float) (Math.PI / 180.0);
+      //    double var3 = (double)Mth.sin(var2);
+      //    double var5 = (double)Mth.cos(var2);
+      //    double var7 = (double)this.xxa * var5 - (double)this.zza * var3;
+      //    double var9 = (double)this.zza * var5 + (double)this.xxa * var3;
+      //    double var11 = Mth.square(var7) + Mth.square(var9);
+      //    double var13 = Mth.square(var1.x) + Mth.square(var1.z);
+      //    if (!(var11 < 1.0E-5F) && !(var13 < 1.0E-5F)) {
+      //       double var15 = var7 * var1.x + var9 * var1.z;
+      //       double var17 = Math.acos(var15 / Math.sqrt(var11 * var13));
+      //       return var17 < 0.13962634F;
+      //    } else {
+      //       return false;
+      //    }
+      // }
+
+      const yawRad = player.yaw * (Math.PI / 180);
+      const sinYaw = Math.sin(yawRad);
+      const cosYaw = Math.cos(yawRad);
+      const xxa = player.prevHeading.forward
+      const zza = player.prevHeading.strafe
+
+      const xxaRot = xxa * cosYaw - zza * sinYaw;
+      const zzaRot = zza * cosYaw + xxa * sinYaw;
+
+      const horizSpeed = xxaRot ** 2 + zzaRot ** 2;
+      const horizMovement = var1.x ** 2 + var1.z ** 2;
+      if (horizSpeed >= 1e-5 && horizMovement >= 1e-5) {
+        const dot = xxaRot * var1.x + zzaRot * var1.z;
+        const angle = Math.acos(dot / Math.sqrt(horizSpeed * horizMovement));
+        return angle < 0.13962634; // magic number
+
+      } else return false;
+    }
+
+    return false;
+
   }
 
   checkInsideBlocks(player: PlayerState, world: World) {

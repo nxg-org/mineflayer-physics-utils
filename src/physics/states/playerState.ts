@@ -101,12 +101,14 @@ export class PlayerState implements IEntityState {
     public elytraEquipped: boolean = false;
     public fireworkRocketDuration: number = 0;
     public isCollidedHorizontally: boolean = false;
+    public isCollidedHorizontallyMinor: boolean = false;
     public isCollidedVertically: boolean = false;
     public supportingBlockPos: Vec3 | null = null;
     public stuckSpeedMultiplier: Vec3 = new Vec3(0, 0, 0);
 
     public jumpTicks: number = 0;
     public jumpQueued: boolean = false;
+    public sprintTriggerTime: number = 0;
     public flyJumpTriggerTime: number = 0;
 
     public sneakCollision: boolean = false;
@@ -247,19 +249,21 @@ export class PlayerState implements IEntityState {
         this.elytraEquipped = bot.inventory.slots[bot.getEquipmentDestSlot('torso')]?.name === 'elytra';
         this.fireworkRocketDuration = bot.fireworkRocketDuration;
         this.isCollidedHorizontally = (bot.entity as any).isCollidedHorizontally;
+        this.isCollidedHorizontallyMinor = (bot.entity as any).isCollidedHorizontallyMinor;
         this.isCollidedVertically = (bot.entity as any).isCollidedVertically;
 
         // dunno what to do about these, ngl.
         this.jumpTicks = (bot as any).jumpTicks ?? 0;
         this.jumpQueued = (bot as any).jumpQueued ?? false;
         this.flyJumpTriggerTime = (bot as any).flyJumpTriggerTime ?? 0;
+        this.sprintTriggerTime = (bot as any).sprintTriggerTime ?? 0;
 
         // Input only (not modified)
         this.attributes = bot.entity.attributes;
         this.yaw = bot.entity.yaw;
         this.pitch = bot.entity.pitch;
         this.control = control ?? ControlStateHandler.COPY_BOT(bot); // prevControl only updated internally.
-        
+
 
         this.isUsingItem = bot.usingHeldItem/*  || isEntityUsingItem(bot.entity, this.ctx.supportFeature); */
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
@@ -348,6 +352,7 @@ export class PlayerState implements IEntityState {
         (bot.entity as any).elytraEquipped = this.elytraEquipped;
         bot.fireworkRocketDuration = this.fireworkRocketDuration;
         (bot.entity as any).isCollidedHorizontally = this.isCollidedHorizontally;
+        (bot.entity as any).isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         (bot.entity as any).isCollidedVertically = this.isCollidedVertically;
         (bot.entity as any).supportingBlockPos = this.supportingBlockPos;
 
@@ -355,6 +360,7 @@ export class PlayerState implements IEntityState {
         (bot as any).jumpTicks = this.jumpTicks;
         (bot as any).jumpQueued = this.jumpQueued;
         (bot as any).flyJumpTriggerTime = this.flyJumpTriggerTime;
+        (bot as any).sprintTriggerTime = this.sprintTriggerTime;
 
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;
@@ -390,6 +396,7 @@ export class PlayerState implements IEntityState {
         tmp.elytraEquipped = this.elytraEquipped;
         tmp.fireworkRocketDuration = this.fireworkRocketDuration;
         tmp.isCollidedHorizontally = this.isCollidedHorizontally;
+        tmp.isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         tmp.isCollidedVertically = this.isCollidedVertically;
         tmp.supportingBlockPos = this.supportingBlockPos;
 
@@ -399,6 +406,7 @@ export class PlayerState implements IEntityState {
         tmp.jumpTicks = this.jumpTicks ?? 0;
         tmp.jumpQueued = this.jumpQueued ?? false;
         tmp.flyJumpTriggerTime = this.flyJumpTriggerTime ?? 0;
+        tmp.sprintTriggerTime = this.sprintTriggerTime ?? 0;
 
         // Input only (not modified)
         tmp.attributes = this.attributes;
@@ -457,6 +465,7 @@ export class PlayerState implements IEntityState {
         this.elytraEquipped = other.elytraEquipped;
         this.fireworkRocketDuration = other.fireworkRocketDuration;
         this.isCollidedHorizontally = other.isCollidedHorizontally;
+        this.isCollidedHorizontallyMinor = other.isCollidedHorizontallyMinor
         this.isCollidedVertically = other.isCollidedVertically;
         this.supportingBlockPos = other.supportingBlockPos;
 
@@ -466,6 +475,7 @@ export class PlayerState implements IEntityState {
         this.jumpTicks = other.jumpTicks ?? 0;
         this.jumpQueued = other.jumpQueued ?? false;
         this.flyJumpTriggerTime = other.flyJumpTriggerTime ?? 0;
+        this.sprintTriggerTime = other.sprintTriggerTime ?? 0;
 
         // Input only (not modified)
         this.attributes = other.attributes;
