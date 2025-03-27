@@ -162,8 +162,8 @@ export class BotcraftPhysics implements IPhysics {
     return surroundingBBs;
   }
 
-  getWaterInBB(bb: AABB, world: any /*prismarine-world*/) {
-    const waterBlocks = [];
+  getWaterInBBs(bb: AABB, world: World) {
+    const bbs = [];
     const cursor = new Vec3(0, 0, 0);
     for (cursor.y = Math.floor(bb.minY); cursor.y <= Math.floor(bb.maxY); cursor.y++) {
       for (cursor.z = Math.floor(bb.minZ); cursor.z <= Math.floor(bb.maxZ); cursor.z++) {
@@ -171,12 +171,14 @@ export class BotcraftPhysics implements IPhysics {
           const block = world.getBlock(cursor);
           if (block && (block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged)) {
             const waterLevel = cursor.y + 1 - this.getLiquidHeightPcent(block);
-            if (Math.ceil(bb.maxY) >= waterLevel) waterBlocks.push(block);
+            if (Math.ceil(bb.maxY) >= waterLevel) {
+              bbs.push(new AABB(cursor.x, cursor.y, cursor.z, cursor.x + 1, cursor.y + 1, cursor.z + 1));
           }
         }
       }
     }
-    return waterBlocks;
+    }
+    return bbs;
   }
 
   getEffectLevel(wantedEffect: CheapEffects, effects: Effect[]) {
@@ -219,7 +221,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   private worldIsFree(world: World, bb: AABB, ignoreLiquid: boolean) {
-    const bbs = ignoreLiquid ? this.getSurroundingBBs(bb, world, false) : [...this.getSurroundingBBs(bb, world, false), ...this.getWaterInBB(bb, world)];
+    const bbs = ignoreLiquid ? this.getSurroundingBBs(bb, world, false) : [...this.getSurroundingBBs(bb, world, false), ...this.getWaterInBBs(bb, world)];
 
     // now we have to actually check for collisions.
     for (const blockBB of bbs) {
