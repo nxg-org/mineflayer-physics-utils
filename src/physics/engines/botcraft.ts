@@ -479,7 +479,6 @@ export class BotcraftPhysics implements IPhysics {
 
   private localPlayerAIStep(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
-    player.attributes ??= {}
     const heading = convInpToAxes(player);
     player.heading = heading;
 
@@ -1611,6 +1610,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
   }
 
   simulate(entity: EPhysicsCtx, world: World): IEntityState {
+    entity.state.attributes ??= {}
     this.physicsTick(entity, world);
     entity.state.age++;
     return entity.state;
