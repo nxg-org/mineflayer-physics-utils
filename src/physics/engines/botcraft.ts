@@ -108,6 +108,7 @@ export class BotcraftPhysics implements IPhysics {
     if (blocksByName.seagrass) this.waterLike.add(blocksByName.seagrass.id); // 1.13+
     if (blocksByName.tall_seagrass) this.waterLike.add(blocksByName.tall_seagrass.id); // 1.13+
     if (blocksByName.kelp) this.waterLike.add(blocksByName.kelp.id); // 1.13+
+    if (blocksByName.kelp_plant) this.waterLike.add(blocksByName.kelp_plant.id); // 1.13+
     this.bubblecolumnId = blocksByName.bubble_column ? blocksByName.bubble_column.id : -1; // 1.13+
     if (blocksByName.bubble_column) this.waterLike.add(this.bubblecolumnId);
 
