@@ -338,9 +338,11 @@ export class BotcraftPhysics implements IPhysics {
       for (blockPos.y = Math.floor(minAABB.y); blockPos.y <= Math.floor(maxAABB.y); ++blockPos.y) {
         for (blockPos.z = Math.floor(minAABB.z); blockPos.z <= Math.floor(maxAABB.z); ++blockPos.z) {
           const block = world.getBlock(blockPos);
+          if (block == null) continue;
+          
           const waterRes = waterCond(block);
           const lavaRes = lavaCond(block);
-          if (block == null || (waterRes && !water) || (lavaRes && water) || (!waterRes && !lavaRes)) {
+          if ((waterRes && !water) || (lavaRes && water) || (!waterRes && !lavaRes)) {
             continue;
           }
 
@@ -642,15 +644,20 @@ export class BotcraftPhysics implements IPhysics {
   private inputsToSprint(ctx: EPhysicsCtx, heading: Heading, world: World) {
     const player = ctx.state as PlayerState;
 
-    // Start sprinting if possible
+    // console.log('is sprinting', player.sprinting, 'can sprint', this.canStartSprinting(ctx, heading), player.sprinting)
     if (this.canStartSprinting(ctx, heading) &&
-        (player.control.sprint ||
-        (player.sprintTriggerTime > 0 && heading.forward >= (player.isInWater ? 1e-5 : 0.8)))) {
+        (player.control.sprint || (player.sprintTriggerTime > 0 && heading.forward >= (player.isInWater ? 1e-5 : 0.8)))) {
       this.setSprinting(ctx, true);
-    }
+    } 
 
+
+    // console.log('should stop', this.shouldStopRunSprinting(ctx, heading), 'minor collision', player.isCollidedHorizontallyMinor)
     // Stop sprinting if necessary
     if (player.sprinting) {
+      if (!player.control.sprint) {
+        this.setSprinting(ctx, false);
+      }
+
       if (this.isSwimming(ctx)) {
         if (this.shouldStopSwimSprinting(ctx, heading)) {
           this.setSprinting(ctx, false);
@@ -720,7 +727,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
     const player = ctx.state as PlayerState;
     let attr = player.attributes[this.movementSpeedAttribute];
     if (attr != null) attributes.deleteAttributeModifier(attr, ctx.worldSettings.sprintingUUID);
-    else attr = attributes.createAttributeValue(ctx.worldSettings.playerSpeed);
+    attr = attributes.createAttributeValue(ctx.worldSettings.playerSpeed);
     if (value) {
       attributes.addAttributeModifier(attr, {
         uuid: ctx.worldSettings.sprintingUUID,
@@ -728,6 +735,11 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
         operation: 2,
       });
     }
+
+    // potential deviation from vanilla.
+    // if (value != player.sprinting) {
+    //   player.sprintTriggerTime = ctx.worldSettings.sprintTimeTriggerCooldown;
+    // }
 
     player.attributes[this.movementSpeedAttribute] = attr;
     player.sprinting = value;
@@ -746,7 +758,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
         // If double jump in creative, swap flying mode
         if (player.prevControl.jump && player.control.jump) {
           if (player.flyJumpTriggerTime === 0) {
-            player.flyJumpTriggerTime = 7;
+            player.flyJumpTriggerTime = ctx.worldSettings.flyJumpTriggerCooldown;
           } else if (this.isSwimmingAndNotFlying(ctx, world)) {
             player.flying = !player.flying;
             flyChanged = true;
@@ -804,6 +816,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
           }
 
           if (this.verLessThan("1.20.5")) {
+            console.log(blockJumpFactor)
             player.vel.y = Math.fround(0.42) * blockJumpFactor + jumpBoost;
             if (player.sprinting) {
               const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
@@ -815,7 +828,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
             }
           } else {
             // something about getting an attribute for jump strength?
-            const value = entity.attributes[this.jumpStrengthAttribute]?.value ?? 1 // random value as default
+            const value = entity.attributes[this.jumpStrengthAttribute]?.value ?? Math.fround(0.42) // default value from previous versions
             const jumpPower = value * blockJumpFactor + jumpBoost;
             if (jumpPower > 1e-5) {
               player.vel.y = jumpPower;
@@ -1298,7 +1311,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
       //    }
       // }
 
-      const yawRad = player.yaw * (Math.PI / 180);
+      const yawRad = Math.PI - player.yaw //* (Math.PI / 180);
       const sinYaw = Math.sin(yawRad);
       const cosYaw = Math.cos(yawRad);
       const xxa = player.prevHeading.forward
@@ -1311,7 +1324,10 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
       const horizMovement = var1.x ** 2 + var1.z ** 2;
       if (horizSpeed >= 1e-5 && horizMovement >= 1e-5) {
         const dot = xxaRot * var1.x + zzaRot * var1.z;
-        const angle = Math.acos(dot / Math.sqrt(horizSpeed * horizMovement));
+        let angle = Math.acos(dot / Math.sqrt(horizSpeed * horizMovement));
+        
+        // unsure why this is needed, but this ends up matching.
+        angle = Math.abs(angle - Math.PI / 2)
         return angle < 0.13962634; // magic number
 
       } else return false;

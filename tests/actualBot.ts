@@ -16,11 +16,15 @@ function buildBot() {
   console.log("hey!");
 
   const bot = createBot({
-    host: process.argv[2],
+    host: process.argv[2] || 'localhost',
     port: Number(process.argv[3]),
     username: "testingbot",
     version: process.argv[4],
   });
+
+  bot.on('login', () => {
+    bot.chat("Hello! I am a testing bot!");
+  })
 
   bot.once("spawn", async () => {
     bot.loadPlugin(loader);

@@ -206,6 +206,8 @@ export class PlayerState implements IEntityState {
                 return 1.62;
             case PlayerPoses.SNEAKING:
                 return 1.27;
+            case PlayerPoses.DYING:
+            case PlayerPoses.SLEEPING:
             case PlayerPoses.SWIMMING:
             case PlayerPoses.FALL_FLYING:
             case PlayerPoses.SPIN_ATTACK:

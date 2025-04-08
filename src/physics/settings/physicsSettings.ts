@@ -34,6 +34,8 @@ export class PhysicsWorldSettings {
     // public liquidAcceleration: number = 0.02;
     public defaultSlipperiness: number = 0.6;
     public outOfLiquidImpulse: number = Math.fround(0.3);
+    public sprintTimeTriggerCooldown: number = 2;
+    public flyJumpTriggerCooldown: number = 7;
     public autojumpCooldown: number = 10; // ticks (0.5s)
     public bubbleColumnSurfaceDrag: BubbleColumnInfo = {
         down: 0.03,
