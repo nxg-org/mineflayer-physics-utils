@@ -258,7 +258,6 @@ export class BotcraftPhysics implements IPhysics {
     this.fluidPhysics(ctx, world, true);
     this.fluidPhysics(ctx, world, false);
 
-    console.log("pVel", ctx.state.vel);
     // updateSwimming moved into AiStep.
 
     // separation into a new function
@@ -266,8 +265,6 @@ export class BotcraftPhysics implements IPhysics {
     if (playerFlag) {
       this.localPlayerAIStep(ctx, world);
     }
-
-    console.log("pVel (final)", ctx.state.vel);
   }
 
   /**
@@ -491,13 +488,10 @@ export class BotcraftPhysics implements IPhysics {
 
     // moved into AiStep since it's tied to player behavior. Strictly, is Player::updateSwimming.
     this.updateSwimming(player, world);
-    console.log("pVel 1", ctx.state.vel);
 
     this.inputsToCrouch(ctx, heading, world);
     this.inputsToSprint(ctx, heading, world);
     this.inputsToFly(ctx, heading, world);
-
-    console.log("pVel 2", ctx.state.vel);
 
     // If sneaking in water, add downward speed
     if (player.isInWater && player.control.sneak && !player.flying) {
@@ -557,7 +551,6 @@ export class BotcraftPhysics implements IPhysics {
         }
       }
 
-      console.log("pVel 3", ctx.state.vel);
 
       const velY = player.vel.y;
       this.movePlayer(ctx, world); // TODO: should be in player-specific logic??
@@ -565,8 +558,6 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.y = 0.6 * velY;
         /* player->SetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying, false); */ player.fallFlying = false;
       }
-
-      console.log("pVel 4", ctx.state.vel);
 
       player.onClimbable = this.isInClimbable(player, world);
     } // !livingplayer::AiStep
@@ -949,13 +940,10 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
         this.applyInputs(inputStrength, player);
         this.applyMovement(ctx, world);
 
-        console.log("pVel 5", ctx.state.vel);
-
         if (player.isCollidedHorizontally && player.onClimbable) {
           player.vel.y = 0.2;
         }
 
-        console.log("pVel 6", ctx.state.vel);
         player.vel.x *= waterSlowDown;
         player.vel.y *= 0.800000011920929; // magic number, pretty sure this is wrong.
         player.vel.z *= waterSlowDown;
