@@ -1595,7 +1595,7 @@ private voxelShapeCollide(axis: number, bb: AABB, movement: number, colliders: A
   applyInputs(inputStrength: number, player: PlayerState) {
     // Add slowdown when using items (like food)
     if (player.isUsingItem) {
-        inputStrength *= 0.2;
+        inputStrength *= Math.fround(0.2);
     }
 
     // Use flySpeed for horizontal movement when flying
