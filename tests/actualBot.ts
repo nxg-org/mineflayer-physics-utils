@@ -111,6 +111,9 @@ function buildBot() {
         bot.lookAt(author.position.offset(0, author.height, 0));
         break;
       case "status":
+        const str0 = `pos: ${bot.entity.position.toString()}, vel: ${bot.entity.velocity.toString()}, yaw: ${bot.entity.yaw}, pitch: ${bot.entity.pitch}`;
+        bot.chat(str0);
+        
         const str = `onGround: ${bot.entity.onGround}, hCol: ${(bot.entity as any).isCollidedHorizontally}, vCol: ${
           (bot.entity as any).isCollidedVertically
         }, inWater: ${(bot.entity as any).isInWater}, inLava: ${(bot.entity as any).isInLava}`;

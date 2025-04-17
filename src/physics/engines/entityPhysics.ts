@@ -630,6 +630,7 @@ export class EntityPhysics implements IPhysics {
         }
         // Calculate what the speed is (0.1 if no modification)
         const attributeSpeed = attributes.getAttributeValue(playerSpeedAttribute);
+
         dragOrFriction = (this.blockSlipperiness[blockUnder.type] || entity.worldSettings.defaultSlipperiness) * 0.91;
         acceleration = attributeSpeed * (0.1627714 / (dragOrFriction * dragOrFriction * dragOrFriction));
         if (acceleration < 0) acceleration = 0; // acceleration should not be negative
@@ -668,7 +669,7 @@ export class EntityPhysics implements IPhysics {
         else vel.y -= entity.gravity * gravityMultiplier;
       }
       
-      console.log(dragOrFriction)
+      // console.log(dragOrFriction)
       vel.x *= dragOrFriction;
       vel.z *= dragOrFriction;
   
@@ -708,7 +709,9 @@ export class EntityPhysics implements IPhysics {
         entity.state.isCollidedHorizontally &&
         this.doesNotCollide(entity, pos.offset(vel.x, vel.y + 0.6 - pos.y + lastY, vel.z), world)
       ) {
+
         vel.y = entity.worldSettings.outOfLiquidImpulse; // jump out of liquid
+        // console.log('fuck?')
       }
     }
   }

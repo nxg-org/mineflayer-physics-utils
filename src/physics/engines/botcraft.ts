@@ -257,6 +257,8 @@ export class BotcraftPhysics implements IPhysics {
 
     this.fluidPhysics(ctx, world, true);
     this.fluidPhysics(ctx, world, false);
+
+    console.log("pVel", ctx.state.vel);
     // updateSwimming moved into AiStep.
 
     // separation into a new function
@@ -264,6 +266,8 @@ export class BotcraftPhysics implements IPhysics {
     if (playerFlag) {
       this.localPlayerAIStep(ctx, world);
     }
+
+    console.log("pVel (final)", ctx.state.vel);
   }
 
   /**
@@ -487,10 +491,13 @@ export class BotcraftPhysics implements IPhysics {
 
     // moved into AiStep since it's tied to player behavior. Strictly, is Player::updateSwimming.
     this.updateSwimming(player, world);
+    console.log("pVel 1", ctx.state.vel);
 
     this.inputsToCrouch(ctx, heading, world);
     this.inputsToSprint(ctx, heading, world);
     this.inputsToFly(ctx, heading, world);
+
+    console.log("pVel 2", ctx.state.vel);
 
     // If sneaking in water, add downward speed
     if (player.isInWater && player.control.sneak && !player.flying) {
@@ -550,12 +557,16 @@ export class BotcraftPhysics implements IPhysics {
         }
       }
 
+      console.log("pVel 3", ctx.state.vel);
+
       const velY = player.vel.y;
       this.movePlayer(ctx, world); // TODO: should be in player-specific logic??
       if (player.flying) {
         player.vel.y = 0.6 * velY;
         /* player->SetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying, false); */ player.fallFlying = false;
       }
+
+      console.log("pVel 4", ctx.state.vel);
 
       player.onClimbable = this.isInClimbable(player, world);
     } // !livingplayer::AiStep
@@ -572,6 +583,7 @@ export class BotcraftPhysics implements IPhysics {
     if (this.verGreaterThan("1.13.2")) {
       this.updatePoses(ctx, world);
     }
+
   }
 
   private inputsToCrouch(ctx: EPhysicsCtx, heading: Heading, world: World) {
@@ -816,7 +828,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
           }
 
           if (this.verLessThan("1.20.5")) {
-            console.log(blockJumpFactor)
+            // console.log(blockJumpFactor)
             player.vel.y = Math.fround(0.42) * blockJumpFactor + jumpBoost;
             if (player.sprinting) {
               const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
@@ -849,7 +861,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
 
   private getBlockBelowAffectingMovement(entity: IEntityState, world: World) {
     if (entity.supportingBlockPos != null) {
-      return entity.supportingBlockPos.offset(0, -0.500001, 0);
+      return entity.supportingBlockPos //.offset(0, -0.500001, 0);
     } else {
       return entity.pos.offset(0, -0.500001, 0);
     }
@@ -863,6 +875,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
   getMovementSpeedAttribute(entity: EPhysicsCtx) {
     const isSprinting = entity.state instanceof PlayerState && entity.state.sprinting;
     let attribute;
+    // console.log(JSON.stringify(entity.state.attributes), this.movementSpeedAttribute, entity.state.attributes[this.movementSpeedAttribute])
     if (entity.state.attributes && entity.state.attributes[this.movementSpeedAttribute]) {
       // Use server-side player attributes
       attribute = entity.state.attributes[this.movementSpeedAttribute];
@@ -936,9 +949,13 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
         this.applyInputs(inputStrength, player);
         this.applyMovement(ctx, world);
 
+        console.log("pVel 5", ctx.state.vel);
+
         if (player.isCollidedHorizontally && player.onClimbable) {
           player.vel.y = 0.2;
         }
+
+        console.log("pVel 6", ctx.state.vel);
         player.vel.x *= waterSlowDown;
         player.vel.y *= 0.800000011920929; // magic number, pretty sure this is wrong.
         player.vel.z *= waterSlowDown;
@@ -963,7 +980,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
         const bb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
         bb.translate(0, 0.6000000238418579 - player.pos.y + initY, 0);
         bb.translateVec(player.vel);
-        if (player.isCollidedHorizontally && this.worldIsFree(world, bb, true)) {
+        if (player.isCollidedHorizontally && this.worldIsFree(world, bb, false)) {
           player.vel.y = ctx.worldSettings.outOfLiquidImpulse;
         }
       } else if (player.isInLava && !player.flying) {
@@ -976,7 +993,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
         const bb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
         bb.translate(0, 0.6000000238418579 - player.pos.y + initY, 0); // Math.fround(0.60)
         bb.translateVec(player.vel);
-        if (player.isCollidedHorizontally && this.worldIsFree(world, bb, true)) {
+        if (player.isCollidedHorizontally && this.worldIsFree(world, bb, false)) {
           player.vel.y = ctx.worldSettings.outOfLiquidImpulse;
         }
       }
@@ -1019,10 +1036,13 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
         }
       } else {
         const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
+      
         // deviation. using our stores slipperiness values.
         const friction = blockBelow
           ? this.blockSlipperiness[blockBelow.type] ?? ctx.worldSettings.defaultSlipperiness
           : ctx.worldSettings.defaultSlipperiness;
+
+          // console.log(blockBelow.name, blockBelow.position, player.supportingBlockPos, friction)
         const inertia = player.onGround ? friction * ctx.airborneInertia : ctx.airborneInertia;
 
         // deviation, adding additional logic for changing attribute values.
@@ -1144,6 +1164,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
       const collisionX = Math.abs(movement.x - newMovement.x) > 1e-7;
       const collisionY = Math.abs(movement.y - newMovement.y) > 1e-7;
       const collisionZ = Math.abs(movement.z - newMovement.z) > 1e-7;
+      // console.log('internal collisions', collisionX, collisionY, collisionZ);
       const onGround = player.onGround || (collisionY && movement.y < 0);
 
 
@@ -1197,6 +1218,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
     const collisionY = Math.abs(movement.y - movementBeforeCollisions.y) > 1e-7;
     const collisionZ = Math.abs(movement.z - movementBeforeCollisions.z) > 1e-7;
 
+    // console.log('collisions', collisionX, collisionY, collisionZ, movementBeforeCollisions, movement, player.vel, player.pos, player.getBB())
     player.isCollidedHorizontally = collisionX || collisionZ;
     player.isCollidedVertically = collisionY;
 
@@ -1222,9 +1244,11 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
           player.pos.z + halfWidth
         );
         const supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB);
+        // console.log("sBlockPos", feetSliceAABB, supportingBlockPos);
         if (supportingBlockPos != null || player.onGroundWithoutSupportingBlock) {
           player.supportingBlockPos = supportingBlockPos;
         } else {
+      
           player.supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB.translate(-movement.x, 0.0, -movement.z));
         }
         // unnecessary due to it being a getter.
@@ -1391,12 +1415,15 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
 
   collideBoundingBox(world: World, bb: AABB, movement: Vec3,  colliders: AABB[] = []): Vec3 {
     const queryBB = bb.expandTowards(movement);
+
     const combinedColliders = [...colliders];
 
     const blockCollisions = this.getSurroundingBBs(queryBB, world);
     for (const block of blockCollisions) {
       combinedColliders.push(block);
     }
+
+    // console.log('queryBB', queryBB, combinedColliders.length)
 
     return this.collideWithShapes(movement, bb, combinedColliders);
   }
@@ -1437,6 +1464,8 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
       dz = this.shapeCollide(2, bb, colliders, dz);
     }
 
+    // console.log('shift', dx, dy, dz)
+
     return new Vec3(dx, dy, dz);
   }
 
@@ -1452,69 +1481,89 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
 
 
 
-  private voxelShapeCollide(axis: number, bb: AABB, movement: number, colliders: AABB[]): number {
-    if (Math.abs(movement) < 1e-7) {
-      return 0.0;
-    }
-
-    const [minBB, maxBB] = bb.minAndMaxArrays();
-
-    const maxAxis = axis === 0 ? bb.maxX : axis === 1 ? bb.maxY : bb.maxZ;
-    const minAxis = axis === 0 ? bb.minX : axis === 1 ? bb.minY : bb.minZ;
-
-    const offAxis1 = (axis + 1) % 3;
-    const offAxis2 = (axis + 2) % 3;
-
-
-
-
-    if (movement > 0.0) {
-      for (const collider of colliders) {
-        const colliderMin = axis === 0 ? collider.minX : axis === 1 ? collider.minY : collider.minZ;
-
-        // verify that the other axis are colliding.
-        const [minPt, maxPt] = collider.minAndMaxArrays();
-
-        if (
-          maxBB[offAxis1] - 1e-7 <= minPt[offAxis1] || minBB[offAxis1] + 1e-7 >= maxPt[offAxis1] ||
-          maxBB[offAxis2] - 1e-7 <= minPt[offAxis2] || minBB[offAxis2] + 1e-7 >= maxPt[offAxis2]
-        ) {
-          continue;
-        }
-
-        if (colliderMin >= maxAxis) {
-          const distance = colliderMin - maxAxis;
-          if (distance >= -1e-7) {
-            movement = Math.min(movement, distance);
-          }
-          // return movement;
-        }
-      }
-    } else if (movement < 0.0) {
-      for (const collider of colliders) {
-
- // verify that the other axis are colliding.
- const [minPt, maxPt] = collider.minAndMaxArrays();
-
- if (
-   maxBB[offAxis1] - 1e-7 <= minPt[offAxis1] || minBB[offAxis1] + 1e-7 >= maxPt[offAxis1] ||
-   maxBB[offAxis2] - 1e-7 <= minPt[offAxis2] || minBB[offAxis2] + 1e-7 >= maxPt[offAxis2]
- ) {
-   continue;
- }
-
-        const colliderMax = axis === 0 ? collider.maxX : axis === 1 ? collider.maxY : collider.maxZ;
-        if (colliderMax <= minAxis) {
-          const distance = colliderMax - minAxis;
-          if (distance <= 1e-7) {
-            movement = Math.max(movement, distance);
-          }
-          // return movement;
-        }
-      }
-    }
-    return movement;
+  /**
+ * Handles collision detection and response along a single axis.
+ * @param axis The axis to check for collision (0 = X, 1 = Y, 2 = Z)
+ * @param bb The bounding box that's moving
+ * @param movement The proposed movement amount along the specified axis
+ * @param colliders Array of AABBs to check for collisions with
+ * @returns The adjusted movement amount that prevents collisions
+ */
+/**
+ * Handles collision detection and response along a single axis.
+ * @param axis The axis to check for collision (0 = X, 1 = Y, 2 = Z)
+ * @param bb The bounding box that's moving
+ * @param movement The proposed movement amount along the specified axis
+ * @param colliders Array of AABBs to check for collisions with
+ * @returns The adjusted movement amount that prevents collisions
+ */
+private voxelShapeCollide(axis: number, bb: AABB, movement: number, colliders: AABB[]): number {
+  // If there's no movement or no colliders, return the original movement
+  if (movement === 0 || colliders.length === 0) {
+      return movement;
   }
+
+  let adjustedMovement = movement;
+  
+  for (const collider of colliders) {
+      // Calculate offset manually based on the axis
+      if (axis === 0) { // X axis
+          // Check if there's overlap in Y and Z axes
+          if (bb.maxY > collider.minY && bb.minY < collider.maxY && 
+              bb.maxZ > collider.minZ && bb.minZ < collider.maxZ) {
+              
+              if (movement > 0 && bb.maxX + movement > collider.minX && bb.maxX <= collider.minX) {
+                  // Moving right and will collide
+                  adjustedMovement = Math.min(adjustedMovement, collider.minX - bb.maxX);
+              } 
+              else if (movement < 0 && bb.minX + movement < collider.maxX && bb.minX >= collider.maxX) {
+                  // Moving left and will collide
+                  adjustedMovement = Math.max(adjustedMovement, collider.maxX - bb.minX);
+              }
+          }
+      } 
+      else if (axis === 1) { // Y axis
+          // Check if there's overlap in X and Z axes
+          if (bb.maxX > collider.minX && bb.minX < collider.maxX && 
+              bb.maxZ > collider.minZ && bb.minZ < collider.maxZ) {
+              
+              if (movement > 0 && bb.maxY + movement > collider.minY && bb.maxY <= collider.minY) {
+                  // Moving up and will collide
+                  adjustedMovement = Math.min(adjustedMovement, collider.minY - bb.maxY);
+              } 
+              else if (movement < 0 && bb.minY + movement < collider.maxY && bb.minY >= collider.maxY) {
+                  // Moving down and will collide
+                  adjustedMovement = Math.max(adjustedMovement, collider.maxY - bb.minY);
+              }
+          }
+      } 
+      else { // Z axis
+          // Check if there's overlap in X and Y axes
+          if (bb.maxX > collider.minX && bb.minX < collider.maxX && 
+              bb.maxY > collider.minY && bb.minY < collider.maxY) {
+              
+              if (movement > 0 && bb.maxZ + movement > collider.minZ && bb.maxZ <= collider.minZ) {
+                  // Moving forward and will collide
+                  adjustedMovement = Math.min(adjustedMovement, collider.minZ - bb.maxZ);
+              } 
+              else if (movement < 0 && bb.minZ + movement < collider.maxZ && bb.minZ >= collider.maxZ) {
+                  // Moving backward and will collide
+                  adjustedMovement = Math.max(adjustedMovement, collider.maxZ - bb.minZ);
+              }
+          }
+      }
+  }
+
+  // if (axis === 0) {
+  //   ('test')
+  //   console.log(bb, colliders,)
+  //   console.log('movement:', movement, 'adjustedMovement', adjustedMovement)
+  //   console.log('end test')
+  //   console.log
+  // }
+
+  return adjustedMovement;
+}
 
 
   collideOneAxis(movedAABB: AABB, movement: Vec3, axis: number, colliders: AABB[]) {
@@ -1610,13 +1659,14 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
         for (blockPos.z = Math.floor(minAABB[2]); blockPos.z <= Math.floor(maxAABB[2]); ++blockPos.z) {
           const block = world.getBlock(blockPos);
           if (block == null || block.boundingBox === "empty") continue;
+          // console.log('checking block', block.name, block.position)
           for (const shape of block.shapes) {
             const bb1 = AABB.fromShape(shape).translateVec(blockPos);
             if (aabb.collides(bb1)) {
               const distance = aabb.getCenter().distanceTo(bb1.getCenter());
               if (distance < minDistance) {
                 minDistance = distance;
-                ret = blockPos;
+                ret = blockPos.clone();
               }
             }
           }
