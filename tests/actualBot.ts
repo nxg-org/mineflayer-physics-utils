@@ -36,6 +36,11 @@ function buildBot() {
     // setupNewPhysics(bot);
   });
 
+  bot.on('entityMoved', (entity => {
+    // if (entity !== bot.entity)
+    // console.log(entity.attributes) 
+  }))
+
   let wasOnGround = false;
   const printNextPos = false;
 

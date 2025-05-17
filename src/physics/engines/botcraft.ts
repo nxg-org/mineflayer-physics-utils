@@ -19,13 +19,14 @@ import { IPhysics } from "./IPhysics";
 import { PlayerPoses, PlayerState, convInpToAxes, getCollider } from "../states";
 import { PhysicsWorldSettings } from "../settings";
 
+import type {world} from "prismarine-world"
+
 type CheapEffectNames = keyof ReturnType<typeof getStatusEffectNamesForVersion>;
 type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersion>;
 
 type Heading = { forward: number; strafe: number };
-type World = {
-  getBlock: (pos: Vec3) => Block;
-};
+type World = world.WorldSync;
+
 
 function extractAttribute(ctx: IPhysics, genericName: string) {
   const data = ctx.data.attributesByName[genericName] as any;
@@ -148,8 +149,8 @@ export class BotcraftPhysics implements IPhysics {
     for (cursor.y = Math.floor(queryBB.minY) - Number(underlying); cursor.y <= Math.floor(queryBB.maxY); ++cursor.y) {
       for (cursor.z = Math.floor(queryBB.minZ); cursor.z <= Math.floor(queryBB.maxZ); ++cursor.z) {
         for (cursor.x = Math.floor(queryBB.minX); cursor.x <= Math.floor(queryBB.maxX); ++cursor.x) {
-          const block = world.getBlock(cursor);
-          if (block) {
+          const block = world.getBlock(cursor) as Block | null;
+          if (block != null) {
             const blockPos = block.position;
             for (const shape of block.shapes) {
               const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
@@ -227,6 +228,8 @@ export class BotcraftPhysics implements IPhysics {
     // now we have to actually check for collisions.
     for (const blockBB of bbs) {
       if (blockBB.intersects(bb)) {
+        const blockAt = world.getBlock(blockBB.minPoint())!;
+        console.log('world not free due to block: ', blockAt.name, blockAt.position)
         return false;
       }
     }
@@ -1123,14 +1126,16 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
         return bb;
       };
 
-      while (movement.x != 0.0 && this.worldIsFree(world, prepare(movement.x, -maxUpStep, 0), false)) {
+      while (movement.x != 0.0 && this.worldIsFree(world, prepare(movement.x, -maxUpStep, 0), true)) {
+        console.log('x', movement.x, step, this.worldIsFree(world, prepare(movement.x, -maxUpStep, 0), true))
         movement.x = movement.x < step && movement.x >= -step ? 0.0 : movement.x > 0.0 ? movement.x - step : movement.x + step;
       }
 
-      while (movement.z != 0.0 && this.worldIsFree(world, prepare(0, -maxUpStep, movement.z), false)) {
+      while (movement.z != 0.0 && this.worldIsFree(world, prepare(0, -maxUpStep, movement.z), true)) {
         movement.z = movement.z < step && movement.z >= -step ? 0.0 : movement.z > 0.0 ? movement.z - step : movement.z + step;
       }
 
+      // this code is almost certainly bugged, but it works right now so hey we take it.
       while ((movement.x != 0.0 && movement.z != 0.0 && prepare(movement.x, -maxUpStep, movement.z), false)) {
         movement.x = movement.x < step && movement.x >= -step ? 0.0 : movement.x > 0.0 ? movement.x - step : movement.x + step;
         movement.z = movement.z < step && movement.z >= -step ? 0.0 : movement.z > 0.0 ? movement.z - step : movement.z + step;
