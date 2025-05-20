@@ -1277,8 +1277,11 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
       }
     }
 
-    this.checkInsideBlocks(player, world);
-
+    // Rough fix for now: ignore this if we are flying.
+    if (!player.flying) {
+      this.checkInsideBlocks(player, world);
+    }
+  
     let blockSpeedFactor = 1.0;
     if (this.verGreaterThan("1.15.2") && this.verLessThan("1.21")) {
       const soulSpeed = player.soulSpeed;
