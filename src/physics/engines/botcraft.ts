@@ -229,7 +229,7 @@ export class BotcraftPhysics implements IPhysics {
     for (const blockBB of bbs) {
       if (blockBB.intersects(bb)) {
         const blockAt = world.getBlock(blockBB.minPoint())!;
-        console.log('world not free due to block: ', blockAt.name, blockAt.position)
+        // console.log('world not free due to block: ', blockAt.name, blockAt.position)
         return false;
       }
     }
@@ -1127,7 +1127,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
       };
 
       while (movement.x != 0.0 && this.worldIsFree(world, prepare(movement.x, -maxUpStep, 0), true)) {
-        console.log('x', movement.x, step, this.worldIsFree(world, prepare(movement.x, -maxUpStep, 0), true))
+        // console.log('x', movement.x, step, this.worldIsFree(world, prepare(movement.x, -maxUpStep, 0), true))
         movement.x = movement.x < step && movement.x >= -step ? 0.0 : movement.x > 0.0 ? movement.x - step : movement.x + step;
       }
 
