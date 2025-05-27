@@ -1,6 +1,6 @@
 {
     "name": "@nxg-org/mineflayer-physics-util",
-    "version": "1.8.10",
+    "version": "1.8.11",
     "description": "Provides functionality for more accurate entity and projectile tracking.",
     "keywords": [
         "mineflayer",
