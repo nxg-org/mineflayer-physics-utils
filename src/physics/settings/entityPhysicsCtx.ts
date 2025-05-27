@@ -24,7 +24,7 @@ function load(data: md.IndexedData) {
 export const emptyVec = new Vec3(0, 0, 0);
 
 type CollisionContext = { blockEffects: boolean; affectedAfterCollision: boolean };
-export class EPhysicsCtx {
+export class EPhysicsCtx<State extends IEntityState=IEntityState> {
     public static loadData: (data: md.IndexedData) => void = load;
     public static entityConstructor: new (id: number) => Entity;
     public static mcData: md.IndexedData;
@@ -67,7 +67,7 @@ export class EPhysicsCtx {
         public readonly ctx: IPhysics, 
         public readonly worldSettings: PhysicsWorldSettings, 
         public pose: PlayerPoses, 
-        public readonly state: IEntityState, 
+        public readonly state: State, 
         public readonly entityType: md.Entity = DefaultPlayer
     ) {
         this.position = state.pos;
