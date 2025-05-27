@@ -1,23 +1,19 @@
 
 import { EntityPhysics, IPhysics } from "./physics/engines";
-import { EPhysicsCtx, PhysicsWorldSettings } from "./physics/settings";
-import { BaseSimulator, BasicSim } from "./simulators";
-import { Vec3 } from "vec3";
-
-import registry from "prismarine-registry"
+import { EPhysicsCtx } from "./physics/settings";
 import md from "minecraft-data"
 
 import type { Entity } from "prismarine-entity";
 import type { Bot } from "mineflayer";
 
-/**
- * Just a convenience thing.
- */
-export enum SimulationTypes {
-    UNTIL_GROUND,
-    FOR_X_TICKS,
-    TO_DESTINATION,
-}
+// /**
+//  * Just a convenience thing.
+//  */
+// export enum SimulationTypes {
+//     UNTIL_GROUND,
+//     FOR_X_TICKS,
+//     TO_DESTINATION,
+// }
 
 export class PhysicsUtilWrapper {
     public engine!: IPhysics;
@@ -42,35 +38,35 @@ export class PhysicsUtilWrapper {
         return EPhysicsCtx.FROM_ENTITY_TYPE(ctx, entity, options);
     }
 
-    public simulate(simulator: IPhysics, simCtx: EPhysicsCtx, world: any) {
-        return simulator.simulate(simCtx, world);
-    }
+    // public simulate(simulator: IPhysics, simCtx: EPhysicsCtx, world: any) {
+    //     return simulator.simulate(simCtx, world);
+    // }
 
-    public exampleSim(entity: Entity, type: SimulationTypes, ticks: number = 10, destination?: Vec3) {
-        const simulator = new BasicSim(new EntityPhysics(this.data));
+    // public exampleSim(entity: Entity, type: SimulationTypes, ticks: number = 10, destination?: Vec3) {
+    //     const simulator = new BasicSim(new EntityPhysics(this.data));
       
-        switch (type) {
-            case SimulationTypes.FOR_X_TICKS:
-                return simulator.simXTicks(entity, this.bot.world, ticks);
-            case SimulationTypes.UNTIL_GROUND:
-                return simulator.simUntilOnGround(entity, this.bot.world, ticks);
-            case SimulationTypes.TO_DESTINATION:
-                if (!destination) throw "Invalid destination for example sim.";
-                return simulator.simUntilDestination(entity, destination, this.bot.world, ticks);
-        }
-    }
+    //     switch (type) {
+    //         case SimulationTypes.FOR_X_TICKS:
+    //             return simulator.simXTicks(entity, this.bot.world, ticks);
+    //         case SimulationTypes.UNTIL_GROUND:
+    //             return simulator.simUntilOnGround(entity, this.bot.world, ticks);
+    //         case SimulationTypes.TO_DESTINATION:
+    //             if (!destination) throw "Invalid destination for example sim.";
+    //             return simulator.simUntilDestination(entity, destination, this.bot.world, ticks);
+    //     }
+    // }
 
-    public advancedExample(simCtx: EPhysicsCtx, type: SimulationTypes, ticks: number = 10, destination?: Vec3) {
-        const simulator = new BasicSim(new EntityPhysics(this.data));
+    // public advancedExample(simCtx: EPhysicsCtx, type: SimulationTypes, ticks: number = 10, destination?: Vec3) {
+    //     const simulator = new BasicSim(new EntityPhysics(this.data));
       
-        switch (type) {
-            case SimulationTypes.FOR_X_TICKS:
-                return simulator.simXTicksPrebuilt(simCtx, this.bot.world, ticks);
-            case SimulationTypes.UNTIL_GROUND:
-                return simulator.simUntilOnGroundPrebuilt(simCtx, this.bot.world, ticks);
-            case SimulationTypes.TO_DESTINATION:
-                if (!destination) throw "Invalid destination for example sim.";
-                return simulator.simUntilDestinationPrebuilt(simCtx, destination, this.bot.world, ticks);
-        }
-    }
+    //     switch (type) {
+    //         case SimulationTypes.FOR_X_TICKS:
+    //             return simulator.simXTicksPrebuilt(simCtx, this.bot.world, ticks);
+    //         case SimulationTypes.UNTIL_GROUND:
+    //             return simulator.simUntilOnGroundPrebuilt(simCtx, this.bot.world, ticks);
+    //         case SimulationTypes.TO_DESTINATION:
+    //             if (!destination) throw "Invalid destination for example sim.";
+    //             return simulator.simUntilDestinationPrebuilt(simCtx, destination, this.bot.world, ticks);
+    //     }
+    // }
 }

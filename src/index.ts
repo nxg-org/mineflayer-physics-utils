@@ -26,7 +26,7 @@ export function initSetup(data: IndexedData) {
 export { EPhysicsCtx, PhysicsWorldSettings } from "./physics/settings";
 export { BaseSimulator } from "./simulators";
 export { EntityPhysics, BotcraftPhysics } from "./physics/engines";
-export { EntityState } from "./physics/states";
+export { EntityState, PlayerState, PlayerPoses, IEntityState } from "./physics/states";
 export { ControlStateHandler } from "./physics/player";
 
 export type { SimulationGoal, Controller, OnGoalReachFunction }from "./simulators";
