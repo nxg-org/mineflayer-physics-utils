@@ -2,6 +2,7 @@ import type { Effect, Entity } from "prismarine-entity";
 import type {Vec3} from "vec3";
 import { PlayerPoses } from "./poses";
 import { ControlStateHandler } from "../states";
+import { AABB } from "@nxg-org/mineflayer-util-plugin";
 
 export * from "./entityState"
 export * from "./playerState"
@@ -53,6 +54,8 @@ export interface IEntityState {
     supportingBlockPos: Vec3 | null;
 
     clone(): IEntityState;
+
+    getBB(): AABB;
 }
 
 export function getPose(entity: Entity) {
