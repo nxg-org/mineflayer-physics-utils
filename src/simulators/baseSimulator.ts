@@ -38,9 +38,9 @@ export class BaseSimulator<State extends IEntityState = IEntityState> {
     }
 
     simulateUntil(
-        goal: SimulationGoal,
-        onGoalReach: OnGoalReachFunction,
-        controller: Controller,
+        goal: SimulationGoal<State>,
+        onGoalReach: OnGoalReachFunction<State>,
+        controller: Controller<State>,
         simCtx: EPhysicsCtx<State>,
         world: any,
         ticks = 1
