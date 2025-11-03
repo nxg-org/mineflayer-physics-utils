@@ -326,7 +326,7 @@ export class PlayerState implements IEntityState {
                 break;
             case "survival":
             case "adventure":
-                this.flySpeed = 0;
+                this.flySpeed = 0.05; // same as creative
                 this.mayFly = (bot.entity as any).canFly;
                 break;
             default:
