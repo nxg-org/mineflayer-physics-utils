@@ -19,7 +19,7 @@ import { IPhysics } from "./IPhysics";
 import { PlayerPoses, PlayerState, convInpToAxes, getCollider } from "../states";
 import { PhysicsWorldSettings } from "../settings";
 
-import type {world} from "prismarine-world"
+import type { world } from "prismarine-world"
 
 type CheapEffectNames = keyof ReturnType<typeof getStatusEffectNamesForVersion>;
 type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersion>;
@@ -143,7 +143,7 @@ export class BotcraftPhysics implements IPhysics {
     pos.z = bb.minZ + halfWidth;
   }
 
-  getSurroundingBBs(queryBB: AABB, world: World, underlying=true): AABB[] {
+  getSurroundingBBs(queryBB: AABB, world: World, underlying = true): AABB[] {
     const surroundingBBs = [];
     const cursor = new Vec3(0, 0, 0);
     for (cursor.y = Math.floor(queryBB.minY) - Number(underlying); cursor.y <= Math.floor(queryBB.maxY); ++cursor.y) {
@@ -175,10 +175,10 @@ export class BotcraftPhysics implements IPhysics {
             const waterLevel = cursor.y + 1 - this.getLiquidHeightPcent(block);
             if (Math.ceil(bb.maxY) >= waterLevel) {
               bbs.push(new AABB(cursor.x, cursor.y, cursor.z, cursor.x + 1, cursor.y + 1, cursor.z + 1));
+            }
           }
         }
       }
-    }
     }
     return bbs;
   }
@@ -248,13 +248,15 @@ export class BotcraftPhysics implements IPhysics {
     // Check for rocket boosting if currently in elytra flying mode
     const entity = ctx.state;
 
-    if (ctx.state.elytraFlying) {
-      // TODO: entity check for fireworks
-      // TODO: check if firework is attached to player
-      if (false) {
-        // player->speed += player->front_vector * 0.1 + (player->front_vector * 1.5 - player->speed) * 0.5;
-      }
-    }
+    // if (ctx.state.elytraFlying) {
+    //   // TODO: entity check for fireworks
+    //   // TODO: check if firework is attached to player
+    //   if (false) {
+    //     // player->speed += player->front_vector * 0.1 + (player->front_vector * 1.5 - player->speed) * 0.5;
+    //   }
+    // }
+
+    // for now, only check if this is a player.
 
     const playerFlag = ctx.entityType.type === "player";
 
@@ -343,7 +345,7 @@ export class BotcraftPhysics implements IPhysics {
         for (blockPos.z = Math.floor(minAABB.z); blockPos.z <= Math.floor(maxAABB.z); ++blockPos.z) {
           const block = world.getBlock(blockPos);
           if (block == null) continue;
-          
+
           const waterRes = waterCond(block);
           const lavaRes = lavaCond(block);
           if ((waterRes && !water) || (lavaRes && water) || (!waterRes && !lavaRes)) {
@@ -652,9 +654,9 @@ export class BotcraftPhysics implements IPhysics {
 
     // console.log('is sprinting', player.sprinting, 'can sprint', this.canStartSprinting(ctx, heading), player.sprinting)
     if (this.canStartSprinting(ctx, heading) &&
-        (player.control.sprint || (player.sprintTriggerTime > 0 && heading.forward >= (player.isInWater ? 1e-5 : 0.8)))) {
+      (player.control.sprint || (player.sprintTriggerTime > 0 && heading.forward >= (player.isInWater ? 1e-5 : 0.8)))) {
       this.setSprinting(ctx, true);
-    } 
+    }
 
 
     // console.log('should stop', this.shouldStopRunSprinting(ctx, heading), 'minor collision', player.isCollidedHorizontallyMinor)
@@ -672,57 +674,57 @@ export class BotcraftPhysics implements IPhysics {
         this.setSprinting(ctx, false);
       }
     }
-}
+  }
 
-private canStartSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
+  private canStartSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
     const player = ctx.state as PlayerState;
     return !player.sprinting &&
-           heading.forward >= (player.isInWater ? 1e-5 : 0.8) &&
-           this.hasEnoughFoodToSprint(ctx) &&
-           !player.isUsingItem &&
-           !player.blindness &&
-          //  (!player.isPassenger || this.vehicleCanSprint(ctx)) &&
-           (!player.fallFlying || player.isUnderWater) &&
-           (!player.crouching || player.isUnderWater) &&
-           (!player.isInWater || player.isUnderWater);
-}
+      heading.forward >= (player.isInWater ? 1e-5 : 0.8) &&
+      this.hasEnoughFoodToSprint(ctx) &&
+      !player.isUsingItem &&
+      !player.blindness &&
+      //  (!player.isPassenger || this.vehicleCanSprint(ctx)) &&
+      (!player.fallFlying || player.isUnderWater) &&
+      (!player.crouching || player.isUnderWater) &&
+      (!player.isInWater || player.isUnderWater);
+  }
 
-private hasEnoughFoodToSprint(ctx: EPhysicsCtx): boolean {
+  private hasEnoughFoodToSprint(ctx: EPhysicsCtx): boolean {
     const player = ctx.state as PlayerState;
     return /* player.isPassenger ||*/ player.food > 6 || player.mayFly;
-}
+  }
 
-private vehicleCanSprint(ctx: EPhysicsCtx): boolean {
-  return false;
+  private vehicleCanSprint(ctx: EPhysicsCtx): boolean {
+    return false;
     // const player = ctx.state as PlayerState;
     // return player.vehicle &&
     //        player.vehicle.canSprint &&
     //        player.vehicle.isLocalInstanceAuthoritative;
-}
+  }
 
-private isSwimming(ctx: EPhysicsCtx): boolean {
+  private isSwimming(ctx: EPhysicsCtx): boolean {
     const player = ctx.state as PlayerState;
     return player.isInWater && player.isUnderWater;
-}
+  }
 
-private shouldStopRunSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
+  private shouldStopRunSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
     const player = ctx.state as PlayerState;
     return player.blindness > 0 ||
-          //  (player.isPassenger && !this.vehicleCanSprint(ctx)) ||
-           heading.forward < 1e-5 ||
-           !this.hasEnoughFoodToSprint(ctx) ||
-           (player.isCollidedHorizontally && !player.isCollidedHorizontallyMinor) ||
-           (player.isInWater && !player.isUnderWater);
-}
+      //  (player.isPassenger && !this.vehicleCanSprint(ctx)) ||
+      heading.forward < 1e-5 ||
+      !this.hasEnoughFoodToSprint(ctx) ||
+      (player.isCollidedHorizontally && !player.isCollidedHorizontallyMinor) ||
+      (player.isInWater && !player.isUnderWater);
+  }
 
-private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
+  private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
     const player = ctx.state as PlayerState;
     return player.blindness > 0 ||
-          //  (player.isPassenger && !this.vehicleCanSprint(ctx)) ||
-           !player.isInWater ||
-           (heading.forward <= 1e-5 && !player.onGround && !player.control.sneak) ||
-           !this.hasEnoughFoodToSprint(ctx);
-}
+      //  (player.isPassenger && !this.vehicleCanSprint(ctx)) ||
+      !player.isInWater ||
+      (heading.forward <= 1e-5 && !player.onGround && !player.control.sneak) ||
+      !this.hasEnoughFoodToSprint(ctx);
+  }
 
   /**
    * TODO: almost certainly unfinished.
@@ -964,7 +966,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
 
           // because of this, I will implement my own version.
           // if (goingDown) {
-            player.vel.y -= ctx.waterGravity;
+          player.vel.y -= ctx.waterGravity;
           // }
         }
 
@@ -1025,15 +1027,32 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
         if (player.onGround) {
           player.fallFlying = false;
         }
+
+        // Potentially not the correct place for this logic, but it is easier to implement here for now. This is the firework boost from elytra flying.
+        if (player.fireworkRocketDuration > 0) {
+          const { lookDir } = getLookingVector(player);
+          player.vel.x += lookDir.x * 0.1 + (lookDir.x * 1.5 - player.vel.x) * 0.5;
+          player.vel.y += lookDir.y * 0.1 + (lookDir.y * 1.5 - player.vel.y) * 0.5;
+          player.vel.z += lookDir.z * 0.1 + (lookDir.z * 1.5 - player.vel.z) * 0.5;
+          --player.fireworkRocketDuration;
+        }
+
+        // we're on ground or in air, not flying.
       } else {
+
+        // clear firework boost if on ground or in air without flying, otherwise it can cause issues with movement.
+        if (player.fireworkRocketDuration > 0) {
+          player.fireworkRocketDuration = 0;
+        }
+
         const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
-      
+
         // deviation. using our stores slipperiness values.
         const friction = blockBelow
           ? this.blockSlipperiness[blockBelow.type] ?? ctx.worldSettings.defaultSlipperiness
           : ctx.worldSettings.defaultSlipperiness;
 
-          // console.log(blockBelow.name, blockBelow.position, player.supportingBlockPos, friction)
+        // console.log(blockBelow.name, blockBelow.position, player.supportingBlockPos, friction)
         const inertia = player.onGround ? friction * ctx.airborneInertia : ctx.airborneInertia;
 
         // deviation, adding additional logic for changing attribute values.
@@ -1241,7 +1260,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
         if (supportingBlockPos != null || player.onGroundWithoutSupportingBlock) {
           player.supportingBlockPos = supportingBlockPos;
         } else {
-      
+
           player.supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB.translate(-movement.x, 0.0, -movement.z));
         }
         // unnecessary due to it being a getter.
@@ -1281,7 +1300,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
     if (!player.flying) {
       this.checkInsideBlocks(player, world);
     }
-  
+
     let blockSpeedFactor = 1.0;
     if (this.verGreaterThan("1.15.2") && this.verLessThan("1.21")) {
       const soulSpeed = player.soulSpeed;
@@ -1299,7 +1318,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
 
     if (this.verGreaterThan("1.20.6")) {
       const factor = player.attributes[this.movementEfficiencyAttribute]?.value ?? 1
-      blockSpeedFactor = blockSpeedFactor + factor  * (1 - blockSpeedFactor);
+      blockSpeedFactor = blockSpeedFactor + factor * (1 - blockSpeedFactor);
     }
 
     player.vel.x *= blockSpeedFactor;
@@ -1345,7 +1364,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
       if (horizSpeed >= 1e-5 && horizMovement >= 1e-5) {
         const dot = xxaRot * var1.x + zzaRot * var1.z;
         let angle = Math.acos(dot / Math.sqrt(horizSpeed * horizMovement));
-        
+
         // unsure why this is needed, but this ends up matching.
         angle = Math.abs(angle - Math.PI / 2)
         return angle < 0.13962634; // magic number
@@ -1409,7 +1428,7 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
     }
   }
 
-  collideBoundingBox(world: World, bb: AABB, movement: Vec3,  colliders: AABB[] = []): Vec3 {
+  collideBoundingBox(world: World, bb: AABB, movement: Vec3, colliders: AABB[] = []): Vec3 {
     const queryBB = bb.expandTowards(movement);
 
     const combinedColliders = [...colliders];
@@ -1485,81 +1504,81 @@ private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
  * @param colliders Array of AABBs to check for collisions with
  * @returns The adjusted movement amount that prevents collisions
  */
-/**
- * Handles collision detection and response along a single axis.
- * @param axis The axis to check for collision (0 = X, 1 = Y, 2 = Z)
- * @param bb The bounding box that's moving
- * @param movement The proposed movement amount along the specified axis
- * @param colliders Array of AABBs to check for collisions with
- * @returns The adjusted movement amount that prevents collisions
- */
-private voxelShapeCollide(axis: number, bb: AABB, movement: number, colliders: AABB[]): number {
-  // If there's no movement or no colliders, return the original movement
-  if (movement === 0 || colliders.length === 0) {
+  /**
+   * Handles collision detection and response along a single axis.
+   * @param axis The axis to check for collision (0 = X, 1 = Y, 2 = Z)
+   * @param bb The bounding box that's moving
+   * @param movement The proposed movement amount along the specified axis
+   * @param colliders Array of AABBs to check for collisions with
+   * @returns The adjusted movement amount that prevents collisions
+   */
+  private voxelShapeCollide(axis: number, bb: AABB, movement: number, colliders: AABB[]): number {
+    // If there's no movement or no colliders, return the original movement
+    if (movement === 0 || colliders.length === 0) {
       return movement;
-  }
+    }
 
-  let adjustedMovement = movement;
-  
-  for (const collider of colliders) {
+    let adjustedMovement = movement;
+
+    for (const collider of colliders) {
       // Calculate offset manually based on the axis
       if (axis === 0) { // X axis
-          // Check if there's overlap in Y and Z axes
-          if (bb.maxY > collider.minY && bb.minY < collider.maxY && 
-              bb.maxZ > collider.minZ && bb.minZ < collider.maxZ) {
-              
-              if (movement > 0 && bb.maxX + movement > collider.minX && bb.maxX <= collider.minX) {
-                  // Moving right and will collide
-                  adjustedMovement = Math.min(adjustedMovement, collider.minX - bb.maxX);
-              } 
-              else if (movement < 0 && bb.minX + movement < collider.maxX && bb.minX >= collider.maxX) {
-                  // Moving left and will collide
-                  adjustedMovement = Math.max(adjustedMovement, collider.maxX - bb.minX);
-              }
+        // Check if there's overlap in Y and Z axes
+        if (bb.maxY > collider.minY && bb.minY < collider.maxY &&
+          bb.maxZ > collider.minZ && bb.minZ < collider.maxZ) {
+
+          if (movement > 0 && bb.maxX + movement > collider.minX && bb.maxX <= collider.minX) {
+            // Moving right and will collide
+            adjustedMovement = Math.min(adjustedMovement, collider.minX - bb.maxX);
           }
-      } 
-      else if (axis === 1) { // Y axis
-          // Check if there's overlap in X and Z axes
-          if (bb.maxX > collider.minX && bb.minX < collider.maxX && 
-              bb.maxZ > collider.minZ && bb.minZ < collider.maxZ) {
-              
-              if (movement > 0 && bb.maxY + movement > collider.minY && bb.maxY <= collider.minY) {
-                  // Moving up and will collide
-                  adjustedMovement = Math.min(adjustedMovement, collider.minY - bb.maxY);
-              } 
-              else if (movement < 0 && bb.minY + movement < collider.maxY && bb.minY >= collider.maxY) {
-                  // Moving down and will collide
-                  adjustedMovement = Math.max(adjustedMovement, collider.maxY - bb.minY);
-              }
+          else if (movement < 0 && bb.minX + movement < collider.maxX && bb.minX >= collider.maxX) {
+            // Moving left and will collide
+            adjustedMovement = Math.max(adjustedMovement, collider.maxX - bb.minX);
           }
-      } 
-      else { // Z axis
-          // Check if there's overlap in X and Y axes
-          if (bb.maxX > collider.minX && bb.minX < collider.maxX && 
-              bb.maxY > collider.minY && bb.minY < collider.maxY) {
-              
-              if (movement > 0 && bb.maxZ + movement > collider.minZ && bb.maxZ <= collider.minZ) {
-                  // Moving forward and will collide
-                  adjustedMovement = Math.min(adjustedMovement, collider.minZ - bb.maxZ);
-              } 
-              else if (movement < 0 && bb.minZ + movement < collider.maxZ && bb.minZ >= collider.maxZ) {
-                  // Moving backward and will collide
-                  adjustedMovement = Math.max(adjustedMovement, collider.maxZ - bb.minZ);
-              }
-          }
+        }
       }
+      else if (axis === 1) { // Y axis
+        // Check if there's overlap in X and Z axes
+        if (bb.maxX > collider.minX && bb.minX < collider.maxX &&
+          bb.maxZ > collider.minZ && bb.minZ < collider.maxZ) {
+
+          if (movement > 0 && bb.maxY + movement > collider.minY && bb.maxY <= collider.minY) {
+            // Moving up and will collide
+            adjustedMovement = Math.min(adjustedMovement, collider.minY - bb.maxY);
+          }
+          else if (movement < 0 && bb.minY + movement < collider.maxY && bb.minY >= collider.maxY) {
+            // Moving down and will collide
+            adjustedMovement = Math.max(adjustedMovement, collider.maxY - bb.minY);
+          }
+        }
+      }
+      else { // Z axis
+        // Check if there's overlap in X and Y axes
+        if (bb.maxX > collider.minX && bb.minX < collider.maxX &&
+          bb.maxY > collider.minY && bb.minY < collider.maxY) {
+
+          if (movement > 0 && bb.maxZ + movement > collider.minZ && bb.maxZ <= collider.minZ) {
+            // Moving forward and will collide
+            adjustedMovement = Math.min(adjustedMovement, collider.minZ - bb.maxZ);
+          }
+          else if (movement < 0 && bb.minZ + movement < collider.maxZ && bb.minZ >= collider.maxZ) {
+            // Moving backward and will collide
+            adjustedMovement = Math.max(adjustedMovement, collider.maxZ - bb.minZ);
+          }
+        }
+      }
+    }
+
+    // if (axis === 0) {
+    //   ('test')
+    //   console.log(bb, colliders,)
+    //   console.log('movement:', movement, 'adjustedMovement', adjustedMovement)
+    //   console.log('end test')
+    //   console.log
+    // }
+
+    return adjustedMovement;
   }
-
-  // if (axis === 0) {
-  //   ('test')
-  //   console.log(bb, colliders,)
-  //   console.log('movement:', movement, 'adjustedMovement', adjustedMovement)
-  //   console.log('end test')
-  //   console.log
-  // }
-
-  return adjustedMovement;
-}
 
 
   collideOneAxis(movedAABB: AABB, movement: Vec3, axis: number, colliders: AABB[]) {
@@ -1603,12 +1622,12 @@ private voxelShapeCollide(axis: number, bb: AABB, movement: number, colliders: A
   applyInputs(inputStrength: number, player: PlayerState) {
     // Add slowdown when using items (like food)
     if (player.isUsingItem) {
-        inputStrength *= Math.fround(0.2);
+      inputStrength *= Math.fround(0.2);
     }
 
     // Use flySpeed for horizontal movement when flying
     if (player.flying) {
-        inputStrength *= player.flySpeed * 40;
+      inputStrength *= player.flySpeed * 40;
     }
 
     const inputVector = new Vec3(player.heading.strafe, 0, player.heading.forward);
