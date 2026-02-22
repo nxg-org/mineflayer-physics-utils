@@ -37,6 +37,7 @@
         "mineflayer-pathfinder": "^2.4.4",
         "mocha": "^11.1.0",
         "prismarine-entity": "^2.4.0",
+        "prismarine-physics": "^1.10.0",
         "prismarine-registry": "^1.11.0",
         "ts-node": "^10.9.2",
         "typescript": "^5.8.2",

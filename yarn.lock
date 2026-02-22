@@ -1550,7 +1550,7 @@ prismarine-nbt@^2.0.0, prismarine-nbt@^2.2.1, prismarine-nbt@^2.5.0:
   dependencies:
     protodef "^1.18.0"
 
-prismarine-physics@^1.5.2, prismarine-physics@^1.9.0:
+prismarine-physics@^1.10.0, prismarine-physics@^1.5.2, prismarine-physics@^1.9.0:
   version "1.10.0"
   resolved "https://registry.yarnpkg.com/prismarine-physics/-/prismarine-physics-1.10.0.tgz#ef566a2b73bb7f843e09160de11e1c3dbcfc91a8"
   integrity sha512-FE2xUSDhrdgjlJFtBPMTQt1FX3uG2YvKceRvoMmhcCni0MrS8365ZlbIcW06SB1sKIpoNQWanS5LuefynzwdXQ==

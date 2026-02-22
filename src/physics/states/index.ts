@@ -62,3 +62,4 @@ export function getPose(entity: Entity) {
     const pose = entity.metadata.find((e) => (e as any)?.type === 18);
     return pose ? ((pose as any).value as number) : PlayerPoses.STANDING;
 }
+
