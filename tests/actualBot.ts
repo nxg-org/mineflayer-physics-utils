@@ -32,7 +32,7 @@ function buildBot() {
     await bot.waitForTicks(20);
     (bot as any).physics.yawSpeed = 50;
     (bot as any).physics.pitchSpeed = 50;
-    setupNewPhysics(bot);
+    // setupNewPhysics(bot);
     // setupNewPhysics(bot);
   });
 
@@ -118,10 +118,9 @@ function buildBot() {
       case "status":
         const str0 = `pos: ${bot.entity.position.toString()}, vel: ${bot.entity.velocity.toString()}, yaw: ${bot.entity.yaw}, pitch: ${bot.entity.pitch}`;
         bot.chat(str0);
-        
-        const str = `onGround: ${bot.entity.onGround}, hCol: ${(bot.entity as any).isCollidedHorizontally}, vCol: ${
-          (bot.entity as any).isCollidedVertically
-        }, inWater: ${(bot.entity as any).isInWater}, inLava: ${(bot.entity as any).isInLava}`;
+
+        const str = `onGround: ${bot.entity.onGround}, hCol: ${(bot.entity as any).isCollidedHorizontally}, vCol: ${(bot.entity as any).isCollidedVertically
+          }, inWater: ${(bot.entity as any).isInWater}, inLava: ${(bot.entity as any).isInLava}`;
         bot.chat(str);
 
         if (state != null) {
@@ -172,15 +171,19 @@ function buildBot() {
         bot.setControlState("jump", true);
         break;
       case "come":
-        if (!author) return bot.chat(`Cannot see ${user}!`);
-        const goal0 = new goals.GoalNear(author.position.x, author.position.y, author.position.z, 3);
-        bot.pathfinder.setGoal(goal0);
-        break;
+        {
+          if (!author) return bot.chat(`Cannot see ${user}!`);
+          const goal0 = new goals.GoalNear(author.position.x, author.position.y, author.position.z, 3);
+          bot.pathfinder.setGoal(goal0);
+          break;
+        }
       case "goto":
-        if (!author) return bot.chat(`Cannot see ${user}!`);
-        const goal1 = new goals.GoalNear(Number(args[0]), Number(args[1]), Number(args[2]), 3);
-        bot.pathfinder.setGoal(goal1);
-        break;
+        {
+          if (!author) return bot.chat(`Cannot see ${user}!`);
+          const goal1 = new goals.GoalNear(Number(args[0]), Number(args[1]), Number(args[2]), 3);
+          bot.pathfinder.setGoal(goal1);
+          break;
+        }
       case "stop":
         bot.deactivateItem();
         bot.pathfinder.stop();
