@@ -868,33 +868,58 @@ export class BotcraftPhysics implements IPhysics {
    * @param entity
    * @returns
    */
-  getMovementSpeedAttribute(entity: EPhysicsCtx) {
+ getMovementSpeedAttribute(entity: EPhysicsCtx) {
     const isSprinting = entity.state instanceof PlayerState && entity.state.sprinting;
     let attribute;
-    // console.log(JSON.stringify(entity.state.attributes), this.movementSpeedAttribute, entity.state.attributes[this.movementSpeedAttribute])
+    
+    // In 1.21+, this should map to 'minecraft:movement_speed'
     if (entity.state.attributes && entity.state.attributes[this.movementSpeedAttribute]) {
-      // Use server-side player attributes
       attribute = entity.state.attributes[this.movementSpeedAttribute];
     } else {
-      // Create an attribute if the player does not have it
-      //TODO: Generalize to all entities.
-      attribute = attributes.createAttributeValue(entity.worldSettings.playerSpeed);
+      // Create fallback if server hasn't sent it
+      attribute = attributes.createAttributeValue(Math.fround(entity.worldSettings.playerSpeed));
     }
-    // Client-side sprinting (don't rely on server-side sprinting)
-    // setSprinting in Livingentity.state.java
-    //TODO: Generalize to all entities.
-    attribute = attributes.deleteAttributeModifier(attribute, entity.worldSettings.sprintingUUID); // always delete sprinting (if it exists)
+
+    // --- SPRINTING ---
+    attribute = attributes.deleteAttributeModifier(attribute, entity.worldSettings.sprintingUUID);
     if (isSprinting) {
-      if (!attributes.checkAttributeModifier(attribute, entity.worldSettings.sprintingUUID)) {
-        attribute = attributes.addAttributeModifier(attribute, {
-          uuid: entity.worldSettings.sprintingUUID,
-          amount: entity.worldSettings.sprintSpeed,
-          operation: 2,
-        });
-      }
+      attribute = attributes.addAttributeModifier(attribute, {
+        uuid: entity.worldSettings.sprintingUUID,
+        // Math.fround(0.3) perfectly resolves to 0.30000001192092896
+        amount: Math.fround(0.3), 
+        operation: 2,
+      });
     }
-    // Calculate what the speed is (0.1 if no modification)
-    const attributeSpeed = attributes.getAttributeValue(attribute);
+
+    // --- SPEED EFFECT ---
+    const SPEED_UUID = "91AEAA56-376B-4498-935B-2F7F68070635";
+    attribute = attributes.deleteAttributeModifier(attribute, SPEED_UUID);
+    
+    const speedLevel = this.getEffectLevel(CheapEffects.SPEED, entity.state.effects);
+    if (speedLevel > 0) {
+      attribute = attributes.addAttributeModifier(attribute, {
+        uuid: SPEED_UUID,
+        // Truncate the 0.2 first, then multiply, then truncate again (how Java float math works)
+        amount: Math.fround(Math.fround(0.2) * speedLevel),
+        operation: 2,
+      });
+    }
+
+    // --- SLOWNESS EFFECT ---
+    const SLOWNESS_UUID = "7107DE5E-7CE8-4030-940E-514C1F160890";
+    attribute = attributes.deleteAttributeModifier(attribute, SLOWNESS_UUID);
+    
+    const slownessLevel = this.getEffectLevel(CheapEffects.SLOWNESS, entity.state.effects);
+    if (slownessLevel > 0) {
+      attribute = attributes.addAttributeModifier(attribute, {
+        uuid: SLOWNESS_UUID,
+        amount: Math.fround(Math.fround(-0.15) * slownessLevel),
+        operation: 2,
+      });
+    }
+
+    // Calculate the final speed and cast the entire result to a 32-bit float
+    const attributeSpeed = Math.fround(attributes.getAttributeValue(attribute));
     return attributeSpeed;
   }
 
@@ -1070,6 +1095,8 @@ export class BotcraftPhysics implements IPhysics {
             inputStrength += airSprintFactor
           }
         }
+
+       
 
         this.applyInputs(inputStrength, player);
 
