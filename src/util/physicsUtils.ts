@@ -253,3 +253,62 @@ export function convertPlayerState(bot: Bot, oldState: any, ctx: IPhysics): Play
 
     return newState;
 }
+
+/**
+ * Applies the values of the new PlayerState class back onto an old PlayerState object.
+ * This updates the oldState in-place.
+ * * @param newState The current, updated instance of the new PlayerState class.
+ * @param oldState The old PlayerState object to be overwritten.
+ */
+export function applyToPlayerState(newState: PlayerState, oldState: any): void {
+    // 1. Update Spatial and Velocity Data
+    // Using .set() preserves the original Vec3 object reference in the old state.
+    if (oldState.pos && newState.pos) {
+        oldState.pos.set(newState.pos.x, newState.pos.y, newState.pos.z);
+    }
+    if (oldState.vel && newState.vel) {
+        oldState.vel.set(newState.vel.x, newState.vel.y, newState.vel.z);
+    }
+
+    // 2. Map Environment & Collision Flags
+    oldState.onGround = newState.onGround;
+    oldState.isInWater = newState.isInWater;
+    oldState.isInLava = newState.isInLava;
+    oldState.isInWeb = newState.isInWeb;
+    oldState.isCollidedHorizontally = newState.isCollidedHorizontally;
+    oldState.isCollidedVertically = newState.isCollidedVertically;
+    
+    // 3. Map Movement & Actions
+    oldState.elytraFlying = newState.elytraFlying;
+    oldState.elytraEquipped = newState.elytraEquipped;
+    oldState.jumpTicks = newState.jumpTicks;
+    oldState.jumpQueued = newState.jumpQueued;
+    oldState.fireworkRocketDuration = newState.fireworkRocketDuration;
+    oldState.yaw = newState.yaw;
+    oldState.pitch = newState.pitch;
+
+    // 4. Downgrade Control State
+    // Extracts standard booleans from the ControlStateHandler so the old state 
+    // doesn't accidentally inherit class methods.
+    if (newState.control) {
+        oldState.control = {
+            forward: newState.control.forward,
+            back: newState.control.back,
+            left: newState.control.left,
+            right: newState.control.right,
+            jump: newState.control.jump,
+            sprint: newState.control.sprint,
+            sneak: newState.control.sneak
+        };
+    }
+
+    // 5. Map Attributes, Effects, and Enchantments
+    oldState.attributes = newState.attributes;
+    oldState.jumpBoost = newState.jumpBoost;
+    oldState.speed = newState.speed;
+    oldState.slowness = newState.slowness;
+    oldState.dolphinsGrace = newState.dolphinsGrace;
+    oldState.slowFalling = newState.slowFalling;
+    oldState.levitation = newState.levitation;
+    oldState.depthStrider = newState.depthStrider;
+}
