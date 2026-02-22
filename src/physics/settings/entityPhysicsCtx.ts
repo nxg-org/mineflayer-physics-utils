@@ -184,7 +184,8 @@ export class EPhysicsCtx<State extends IEntityState=IEntityState> {
 
     public static FROM_ENTITY_STATE(ctx: IPhysics, entityState: IEntityState, entityType?: md.Entity, settings?: PhysicsWorldSettings) {
         settings ??= new PhysicsWorldSettings(ctx.data);
-        return new EPhysicsCtx(ctx, settings, entityState.pose ?? PlayerPoses.STANDING, entityState, entityType);
+        entityState.pose ??= PlayerPoses.STANDING;
+        return new EPhysicsCtx(ctx, settings, entityState.pose, entityState, entityType);
     }
 
     public clone() {
