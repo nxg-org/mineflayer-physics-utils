@@ -3,8 +3,10 @@ import { EPhysicsCtx } from "../physics/settings";
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import features from "../physics/info/features.json";
 import md from "minecraft-data";
-import { EntityState, IEntityState } from "../physics/states";
+import { ControlStateHandler, EntityState, IEntityState, PlayerState } from "../physics/states";
 import { Vec3 } from "vec3";
+import { IPhysics } from "../physics/engines";
+import { Bot } from "mineflayer";
 
 export function makeSupportFeature(mcData: md.IndexedData) {
     return (feature: string) => features.some(({ name, versions }) => name === feature && versions.includes(mcData.version.majorVersion!));
@@ -194,3 +196,60 @@ export function getLookingVector (entity: {yaw: number, pitch: number}) {
       lookDir
     }
   }
+
+
+/**
+ * Converts an old PlayerState object into the new PlayerState class format.
+ * * @param bot The current Mineflayer bot instance.
+ * @param oldState The old PlayerState object to migrate.
+ * @param ctx The IPhysics context required by the new PlayerState constructor.
+ * @returns A newly formatted PlayerState instance.
+ */
+export function convertPlayerState(bot: Bot, oldState: any, ctx: IPhysics): PlayerState {
+    // 1. Initialize the new state. 
+    // This automatically runs update() and pulls the bot's current real state.
+    const newState = new PlayerState(ctx, bot);
+
+    // 2. Overwrite spatial and velocity data with the old simulated state
+    if (oldState.pos) newState.pos.set(oldState.pos.x, oldState.pos.y, oldState.pos.z);
+    if (oldState.vel) newState.vel.set(oldState.vel.x, oldState.vel.y, oldState.vel.z);
+
+    // 3. Map collision and environment flags
+    newState.onGround = oldState.onGround ?? newState.onGround;
+    newState.isInWater = oldState.isInWater ?? newState.isInWater;
+    newState.isInLava = oldState.isInLava ?? newState.isInLava;
+    newState.isInWeb = oldState.isInWeb ?? newState.isInWeb;
+    newState.isCollidedHorizontally = oldState.isCollidedHorizontally ?? newState.isCollidedHorizontally;
+    newState.isCollidedVertically = oldState.isCollidedVertically ?? newState.isCollidedVertically;
+    
+    // 4. Map movement and action states
+    newState.elytraFlying = oldState.elytraFlying ?? newState.elytraFlying;
+    newState.elytraEquipped = oldState.elytraEquipped ?? newState.elytraEquipped;
+    newState.jumpTicks = oldState.jumpTicks ?? newState.jumpTicks;
+    newState.jumpQueued = oldState.jumpQueued ?? newState.jumpQueued;
+    newState.fireworkRocketDuration = oldState.fireworkRocketDuration ?? newState.fireworkRocketDuration;
+    newState.yaw = oldState.yaw ?? newState.yaw;
+    newState.pitch = oldState.pitch ?? newState.pitch;
+
+    // 5. Map Control State
+    // The old state uses a standard object for controls; the new uses ControlStateHandler.
+    if (oldState.control) {
+        // Create a fresh clone of the bot's current controls, then overwrite with simulated ones
+        newState.control = ControlStateHandler.COPY_BOT(bot);
+        Object.assign(newState.control, oldState.control);
+    }
+
+    // 6. Map Attributes, Effects, and Enchantments
+    newState.attributes = oldState.attributes ?? newState.attributes;
+    
+    newState.jumpBoost = oldState.jumpBoost ?? newState.jumpBoost;
+    newState.speed = oldState.speed ?? newState.speed;
+    newState.slowness = oldState.slowness ?? newState.slowness;
+    newState.dolphinsGrace = oldState.dolphinsGrace ?? newState.dolphinsGrace;
+    newState.slowFalling = oldState.slowFalling ?? newState.slowFalling;
+    newState.levitation = oldState.levitation ?? newState.levitation;
+    
+    newState.depthStrider = oldState.depthStrider ?? newState.depthStrider;
+
+    return newState;
+}

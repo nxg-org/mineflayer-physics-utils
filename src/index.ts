@@ -30,3 +30,4 @@ export { EntityState, PlayerState, PlayerPoses, IEntityState } from "./physics/s
 export { ControlStateHandler } from "./physics/player";
 
 export type { SimulationGoal, Controller, OnGoalReachFunction }from "./simulators";
+export { convertPlayerState } from "./util/physicsUtils";
