@@ -1,6 +1,5 @@
 import { pathfinder, goals } from "mineflayer-pathfinder";
 import { Bot, createBot } from "mineflayer";
-const physicsInject = require("mineflayer/lib/plugins/physics");
 import loader, { BotcraftPhysics, EntityPhysics, EntityState, EPhysicsCtx } from "../src/index";
 import { PlayerState } from "../src/physics/states";
 
@@ -19,19 +18,20 @@ function buildBot() {
     host: process.argv[2] || 'localhost',
     port: Number(process.argv[3]),
     username: "testingbot",
-    version: process.argv[4],
+    version: process.argv[4], 
+    auth: process.argv[5] as any ?? "offline"
   });
 
-  bot.on('login', () => {
-    bot.chat("Hello! I am a testing bot!");
-  })
+  // bot.on('login', () => {
+  //   bot.chat("Hello! I am a testing bot!");
+  // })
 
   bot.once("spawn", async () => {
     bot.loadPlugin(loader);
     bot.loadPlugin(pathfinder);
     await bot.waitForTicks(20);
-    (bot as any).physics.yawSpeed = 50;
-    (bot as any).physics.pitchSpeed = 50;
+    (bot as any).physics.yawSpeed = 6000;
+    (bot as any).physics.pitchSpeed = 6000;
     // setupNewPhysics(bot);
     // setupNewPhysics(bot);
   });
@@ -62,7 +62,7 @@ function buildBot() {
         const block = bot.blockAt(entity.position);
         if (block && (block.type === bot.registry.blocksByName.water.id || block.type === bot.registry.blocksByName.lava.id)) return;
 
-        bot.chat(`${entity.username} hit the ground! ${entity.position.toString()}`);
+        // bot.chat(`${entity.username} hit the ground! ${entity.position.toString()}`);
         lastPositions[entity.username] = true;
       } else if (Math.floor(entity.position.y) !== entity.position.y) {
         lastPositions[entity.username] = false;
