@@ -1,14 +1,8 @@
-import { Bot, createBot } from "mineflayer";
-import loader, { BotcraftPhysics, EntityState, EPhysicsCtx } from "../src/index";
+import { Bot } from "mineflayer";
 import { PlayerState } from "../src/physics/states";
+import { buildManagedBot, getBotOptionsFromArgs, type PhysicsBot, type PhysicsSwitcher, sleep } from "./util/botSetup";
 
-type PhysicsBot = Bot & {
-  physics: {
-    yawSpeed: number;
-    pitchSpeed: number;
-    autojumpCooldown: number;
-    simulatePlayer: (...args: any[]) => unknown;
-  };
+type ElytraBot = PhysicsBot & {
   elytraFly: () => Promise<void>;
   fireworkRocketDuration: number;
 };
@@ -22,51 +16,15 @@ type FlightSample = {
   fireworkTicks: number;
 };
 
-const rl = require("readline").createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
-
 let activeBot: Bot;
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function getBotOptions() {
-  return {
-    host: process.argv[2] ?? "localhost",
-    port: Number(process.argv[3]),
-    username: process.argv[4] ?? "testingbot",
-    version: process.argv[5],
-    auth: (process.argv[6] as any) ?? "offline",
-  };
-}
-
-function createPhysicsSwitcher(bot: PhysicsBot) {
-  let state: PlayerState | null = null;
-
-  const enable = () => {
-    const physics = new BotcraftPhysics(bot.registry);
-    const ctx = EPhysicsCtx.FROM_BOT(physics, bot);
-    state = ctx.state as PlayerState;
-
-    (EntityState.prototype as any).apply = function applyState(this: EntityState, currentBot: Bot) {
-      this.applyToBot(currentBot);
-    };
-
-    bot.physics.autojumpCooldown = 0;
-    bot.physics.simulatePlayer = () => {
-      state!.update(bot);
-      ctx.state.jumpTicks = 0;
-      return physics.simulate(ctx, bot.world);
-    };
-  };
-
-  return {
-    enable,
-    getState: () => state,
-  };
+  return getBotOptionsFromArgs({
+    defaultUsername: "testingbot",
+    usernameIndex: 4,
+    versionIndex: 5,
+    authIndex: 6,
+  });
 }
 
 function findInventoryItem(bot: Bot, itemName: string) {
@@ -74,13 +32,14 @@ function findInventoryItem(bot: Bot, itemName: string) {
 }
 
 function findEquippedItem(bot: Bot, destination: "hand" | "torso" | "off-hand", itemName: string) {
-  // const slot = bot.getEquipmentDestSlot(destination);
-  // slot for dest is 0 for hjand, 1 for offhand, 4 for torso.
   const slot = (() => {
     switch (destination) {
-      case "hand": return 0;
-      case "off-hand": return 1;
-      case "torso": return 4;
+      case "hand":
+        return 0;
+      case "off-hand":
+        return 1;
+      case "torso":
+        return 4;
     }
   })();
   const item = bot.entity.equipment[slot];
@@ -100,8 +59,6 @@ function findFireworkRocket(bot: Bot) {
 }
 
 async function ensureFlightLoadout(bot: Bot) {
-  // console.log(`/give ${bot.username} minecraft:elytra`);
-
   bot.chat(`/tp ${bot.username} 0 200 0`);
   await sleep(1000);
 
@@ -119,7 +76,7 @@ async function ensureFlightLoadout(bot: Bot) {
   await bot.equip(firework, "hand");
 }
 
-function formatFlightState(bot: PhysicsBot, state: PlayerState | null) {
+function formatFlightState(bot: ElytraBot, state: PlayerState | null) {
   return [
     `pos=${bot.entity.position.toString()}`,
     `vel=${bot.entity.velocity.toString()}`,
@@ -133,7 +90,7 @@ function formatFlightState(bot: PhysicsBot, state: PlayerState | null) {
     .join(" ");
 }
 
-async function collectFlightSamples(bot: PhysicsBot, ticks: number): Promise<FlightSample[]> {
+async function collectFlightSamples(bot: ElytraBot, ticks: number): Promise<FlightSample[]> {
   const samples: FlightSample[] = [];
 
   for (let tick = 0; tick < ticks; tick++) {
@@ -168,8 +125,8 @@ function printFlightSummary(samples: FlightSample[]) {
   });
 }
 
-async function triggerElytraFlight(bot: PhysicsBot, pitchDeg = 50) {
-  await bot.look(0, pitchDeg * Math.PI / 180);
+async function triggerElytraFlight(bot: ElytraBot, pitchDeg = 50) {
+  await bot.look(Math.PI, pitchDeg * Math.PI / 180);
   bot.setControlState("jump", true);
   await sleep(100);
   bot.setControlState("jump", false);
@@ -179,7 +136,7 @@ async function triggerElytraFlight(bot: PhysicsBot, pitchDeg = 50) {
   bot.activateItem();
 }
 
-async function runElytraTest(bot: PhysicsBot, dir: number, physicsSwitcher: ReturnType<typeof createPhysicsSwitcher>) {
+async function runElytraTest(bot: ElytraBot, dir: number, physicsSwitcher: PhysicsSwitcher) {
   await ensureFlightLoadout(bot);
   console.log("[elytra] launch state", formatFlightState(bot, physicsSwitcher.getState()));
   await triggerElytraFlight(bot, dir);
@@ -189,10 +146,10 @@ async function runElytraTest(bot: PhysicsBot, dir: number, physicsSwitcher: Retu
 }
 
 async function handleChatCommand(
-  bot: PhysicsBot,
+  bot: ElytraBot,
   username: string,
   message: string,
-  physicsSwitcher: ReturnType<typeof createPhysicsSwitcher>,
+  physicsSwitcher: PhysicsSwitcher,
 ) {
   if (username === bot.username) return;
 
@@ -208,7 +165,7 @@ async function handleChatCommand(
       }
       return;
     case "fly": {
-       const deg = args.length > 0 ? parseInt(args[0]) : 50;
+      const deg = args.length > 0 ? parseInt(args[0]) : 50;
       try {
         await runElytraTest(bot, deg, physicsSwitcher);
         bot.chat("Elytra test completed. Check console logs.");
@@ -224,6 +181,7 @@ async function handleChatCommand(
       bot.chat(formatFlightState(bot, physicsSwitcher.getState()));
       return;
     case "reset":
+      physicsSwitcher.reset();
       bot.quit();
       await sleep(3000);
       activeBot = buildBot();
@@ -233,12 +191,7 @@ async function handleChatCommand(
   }
 }
 
-function registerConsoleRelay(bot: Bot) {
-  rl.removeAllListeners("line");
-  rl.on("line", (line: string) => bot.chat(line));
-}
-
-function registerFlightLogging(bot: PhysicsBot) {
+function registerFlightLogging(bot: ElytraBot) {
   bot.on("entityElytraFlew", (entity) => {
     if (entity.id !== bot.entity.id) return;
     console.log("[elytra] entityElytraFlew", bot.entity.position.toString(), bot.entity.velocity.toString());
@@ -246,41 +199,25 @@ function registerFlightLogging(bot: PhysicsBot) {
 
   bot.on("usedFirework", () => {
     console.log("[elytra] usedFirework", {
-      // fireworkEntityId: bot.fireworkEntityId,
       fireworkRocketDuration: bot.fireworkRocketDuration,
     });
   });
 }
 
-function registerLifecycle(bot: PhysicsBot) {
-  const physicsSwitcher = createPhysicsSwitcher(bot);
-
-  bot.once("spawn", async () => {
-    bot.loadPlugin(loader);
-    await bot.waitForTicks(20);
-    // bot.physics.yawSpeed = 6000;
-    // bot.physics.pitchSpeed = 6000;
-    physicsSwitcher.enable();
-    console.log("[elytra] new engine enabled");
-    console.log("[elytra] chat commands: prep | fly | boost | status | reset");
-  });
-
-  bot.on("chat", (username, message) => {
-    void handleChatCommand(bot, username, message, physicsSwitcher);
-  });
-}
-
 function buildBot() {
-  const bot = createBot(getBotOptions()) as PhysicsBot;
-
-  registerLifecycle(bot);
-  registerFlightLogging(bot);
-  registerConsoleRelay(bot);
-
-  bot.on("kicked", console.log);
-  bot.on("error", console.log);
-
-  return bot;
+  return buildManagedBot<ElytraBot>(getBotOptions, {
+    afterCreate: (bot) => {
+      registerFlightLogging(bot);
+    },
+    onSpawn: async (bot, helpers) => {
+      helpers.physicsSwitcher.enable();
+      console.log("[elytra] new engine enabled");
+      console.log("[elytra] chat commands: prep | fly | boost | status | reset");
+    },
+    onChat: async (bot, username, message, helpers) => {
+      await handleChatCommand(bot, username, message, helpers.physicsSwitcher);
+    },
+  });
 }
 
 activeBot = buildBot();

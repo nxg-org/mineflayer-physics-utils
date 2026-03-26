@@ -1,35 +1,19 @@
-import { Bot, createBot } from "mineflayer";
+import { Bot } from "mineflayer";
 import { goals, pathfinder } from "mineflayer-pathfinder";
 import { Entity } from "prismarine-entity";
-import loader, { BotcraftPhysics, EntityState, EPhysicsCtx } from "../src/index";
 import { PlayerState } from "../src/physics/states";
-
-type PhysicsBot = Bot & {
-  physics: {
-    yawSpeed: number;
-    pitchSpeed: number;
-    autojumpCooldown: number;
-    simulatePlayer: (...args: any[]) => unknown;
-  };
-};
+import { buildManagedBot, getBotOptionsFromArgs, type PhysicsBot, type PhysicsSwitcher, sleep } from "./util/botSetup";
 
 type ControlName = Parameters<Bot["setControlState"]>[0];
-
-const rl = require("readline").createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
 
 let activeBot: Bot;
 
 function getBotOptions() {
-  return {
-    host: process.argv[2] ?? "localhost",
-    port: Number(process.argv[3]),
-    username: "testingbot",
-    version: process.argv[4],
-    auth: (process.argv[5] as any) ?? "offline",
-  };
+  return getBotOptionsFromArgs({
+    defaultUsername: "testingbot",
+    versionIndex: 4,
+    authIndex: 5,
+  });
 }
 
 function createGroundTracker(bot: Bot) {
@@ -57,46 +41,6 @@ function createGroundTracker(bot: Bot) {
   };
 }
 
-function createPhysicsSwitcher(bot: PhysicsBot) {
-  let usingNewPhysics = false;
-  let state: PlayerState | null = null;
-
-  const enable = () => {
-    if (usingNewPhysics) return false;
-
-    usingNewPhysics = true;
-
-    const physics = new BotcraftPhysics(bot.registry);
-    const ctx = EPhysicsCtx.FROM_BOT(physics, bot);
-    state = ctx.state as PlayerState;
-
-    (EntityState.prototype as any).apply = function applyState(this: EntityState, currentBot: Bot) {
-      this.applyToBot(currentBot);
-    };
-
-    bot.physics.autojumpCooldown = 0;
-    bot.physics.simulatePlayer = () => {
-      state!.update(bot);
-      ctx.state.jumpTicks = 0;
-      return physics.simulate(ctx, bot.world);
-    };
-
-    return true;
-  };
-
-  const reset = () => {
-    usingNewPhysics = false;
-    state = null;
-  };
-
-  return {
-    enable,
-    reset,
-    getState: () => state,
-    isEnabled: () => usingNewPhysics,
-  };
-}
-
 function parseControl(name: string): ControlName {
   return name as ControlName;
 }
@@ -115,16 +59,6 @@ async function printSimulation(bot: Bot, ticks: number) {
   }
 }
 
-function registerLifecycle(bot: PhysicsBot) {
-  bot.once("spawn", async () => {
-    bot.loadPlugin(loader);
-    bot.loadPlugin(pathfinder);
-    await bot.waitForTicks(20);
-    bot.physics.yawSpeed = 6000;
-    bot.physics.pitchSpeed = 6000;
-  });
-}
-
 function registerMovementLogging(bot: Bot) {
   let wasOnGround = false;
 
@@ -136,11 +70,6 @@ function registerMovementLogging(bot: Bot) {
   });
 
   bot.on("entityMoved", createGroundTracker(bot));
-}
-
-function registerConsoleRelay(bot: Bot) {
-  rl.removeAllListeners("line");
-  rl.on("line", (line: string) => bot.chat(line));
 }
 
 function buildStatusMessages(bot: Bot, state: PlayerState | null) {
@@ -157,7 +86,7 @@ async function handleChatCommand(
   bot: Bot,
   username: string,
   message: string,
-  physicsSwitcher: ReturnType<typeof createPhysicsSwitcher>,
+  physicsSwitcher: PhysicsSwitcher,
 ) {
   const [command, ...args] = message.split(" ");
   const author = bot.nearestEntity((entity) => entity.username === username);
@@ -210,7 +139,7 @@ async function handleChatCommand(
     case "reset":
       physicsSwitcher.reset();
       bot.quit();
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await sleep(3000);
       activeBot = buildBot();
       return;
     case "new":
@@ -242,23 +171,20 @@ async function handleChatCommand(
   }
 }
 
-function registerChatCommands(bot: PhysicsBot) {
-  const physicsSwitcher = createPhysicsSwitcher(bot);
-
-  bot.on("chat", (username, message) => {
-    void handleChatCommand(bot, username, message, physicsSwitcher);
-  });
-}
-
 function buildBot() {
-  const bot = createBot(getBotOptions()) as PhysicsBot;
-
-  registerLifecycle(bot);
-  registerMovementLogging(bot);
-  registerChatCommands(bot);
-  registerConsoleRelay(bot);
-
-  return bot;
+  return buildManagedBot<PhysicsBot>(getBotOptions, {
+    afterCreate: (bot) => {
+      registerMovementLogging(bot);
+    },
+    onSpawn: async (bot) => {
+      bot.loadPlugin(pathfinder);
+      bot.physics.yawSpeed = 6000;
+      bot.physics.pitchSpeed = 6000;
+    },
+    onChat: async (bot, username, message, helpers) => {
+      await handleChatCommand(bot, username, message, helpers.physicsSwitcher);
+    },
+  });
 }
 
 activeBot = buildBot();
