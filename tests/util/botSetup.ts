@@ -162,6 +162,9 @@ export function buildManagedBot<TBot extends PhysicsBot>(
 
   bot.once("spawn", async () => {
     bot.loadPlugin(loader);
+
+    bot.physics.yawSpeed = 6000;
+    bot.physics.pitchSpeed = 6000;
     await bot.waitForTicks(20);
     await hooks.onSpawn?.(bot, helpers);
   });

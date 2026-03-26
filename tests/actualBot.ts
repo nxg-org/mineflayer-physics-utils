@@ -11,8 +11,9 @@ let activeBot: Bot;
 function getBotOptions() {
   return getBotOptionsFromArgs({
     defaultUsername: "testingbot",
-    versionIndex: 4,
-    authIndex: 5,
+    usernameIndex: 4,
+    versionIndex: 5,
+    authIndex: 6,
   });
 }
 

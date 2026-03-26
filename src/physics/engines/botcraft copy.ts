@@ -556,11 +556,6 @@ export class BotcraftPhysics implements IPhysics {
         }
       }
 
-      // Refresh pose before movement so the first fall-flying tick uses the
-      // correct collider instead of the standing bounding box.
-      if (this.verGreaterThan("1.13.2")) {
-        this.updatePoses(ctx, world);
-      }
 
       const velY = player.vel.y;
       this.movePlayer(ctx, world); // TODO: should be in player-specific logic??
@@ -710,44 +705,6 @@ export class BotcraftPhysics implements IPhysics {
   private isSwimming(ctx: EPhysicsCtx): boolean {
     const player = ctx.state as PlayerState;
     return player.isInWater && player.isUnderWater;
-  }
-
-  private canGlide(player: PlayerState): boolean {
-    return !player.onGround && player.levitation <= 0 && player.elytraEquipped;
-  }
-
-  private updateFallFlyingState(player: PlayerState) {
-    if (player.fallFlying && !this.canGlide(player)) {
-      player.fallFlying = false;
-    }
-  }
-
-  private handleFallFlyingCollisions(player: PlayerState, previousHorizontalSpeed: number) {
-    if (!player.isCollidedHorizontally) return;
-
-    const currentHorizontalSpeed = Math.sqrt(player.vel.x * player.vel.x + player.vel.z * player.vel.z);
-    const deltaSpeed = previousHorizontalSpeed - currentHorizontalSpeed;
-    const collisionDamage = deltaSpeed * 10.0 - 3.0;
-
-    if (collisionDamage > 0.0) {
-      // Vanilla applies fly-into-wall damage and sound here.
-      // BotcraftPhysics currently does not model those side effects.
-    }
-  }
-
-  private applyFireworkBoost(player: PlayerState) {
-    if (player.fireworkRocketDuration <= 0) return;
-
-    if (!player.fallFlying) {
-      player.fireworkRocketDuration = 0;
-      return;
-    }
-
-    const { lookDir } = getLookingVector(player);
-    player.vel.x += lookDir.x * 0.1 + (lookDir.x * 1.5 - player.vel.x) * 0.5;
-    player.vel.y += lookDir.y * 0.1 + (lookDir.y * 1.5 - player.vel.y) * 0.5;
-    player.vel.z += lookDir.z * 0.1 + (lookDir.z * 1.5 - player.vel.z) * 0.5;
-    --player.fireworkRocketDuration;
   }
 
   private shouldStopRunSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
@@ -986,8 +943,6 @@ export class BotcraftPhysics implements IPhysics {
         gravity = goingDown && hasSlowFalling ? Math.min(0.01, ctx.gravity) : ctx.gravity;
       }
 
-      this.updateFallFlyingState(player);
-
       if (player.isInWater && !player.flying) {
         const initY = player.pos.y;
         let waterSlowDown = player.sprinting ? ctx.sprintWaterInertia : ctx.waterInertia;
@@ -1062,8 +1017,6 @@ export class BotcraftPhysics implements IPhysics {
       }
       // elytra flying.
       else if (player.fallFlying) {
-        const previousHorizontalSpeed = Math.sqrt(player.vel.x * player.vel.x + player.vel.z * player.vel.z);
-
         // slight deviation
         // sqrt(front_vector.x² + front_vector.z²) to follow vanilla code
         const { pitch, sinPitch, cosPitch, lookDir } = getLookingVector(player);
@@ -1080,10 +1033,10 @@ export class BotcraftPhysics implements IPhysics {
           player.vel.y += deltaSpeed;
         }
 
-        if (player.pitch > 0.0 && cosPitchFromLength > 0.0) {
-          const deltaSpeed = hVel * lookDir.y * 0.04;
-          player.vel.x += (-lookDir.x * deltaSpeed) / cosPitchFromLength;
-          player.vel.z += (-lookDir.z * deltaSpeed) / cosPitchFromLength;
+        if (player.pitch < 0.0 && cosPitchFromLength > 0.0) {
+          const deltaSpeed = hVel * -lookDir.y * 0.04;
+          player.vel.x += (lookDir.x * deltaSpeed) / cosPitchFromLength;
+          player.vel.z += (lookDir.z * deltaSpeed) / cosPitchFromLength;
           player.vel.y += deltaSpeed * 3.2; // magic number
         }
 
@@ -1095,14 +1048,28 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.z *= Math.fround(0.99); // magic number, this DEFINITELY should be replaced by a drag value.
         player.vel.y *= Math.fround(0.98); // magic number, this DEFINITELY should be replaced by a drag value.
         this.applyMovement(ctx, world);
-        this.handleFallFlyingCollisions(player, previousHorizontalSpeed);
 
         if (player.onGround) {
           player.fallFlying = false;
         }
 
+        // Potentially not the correct place for this logic, but it is easier to implement here for now. This is the firework boost from elytra flying.
+        if (player.fireworkRocketDuration > 0) {
+          const { lookDir } = getLookingVector(player);
+          player.vel.x += lookDir.x * 0.1 + (lookDir.x * 1.5 - player.vel.x) * 0.5;
+          player.vel.y += lookDir.y * 0.1 + (lookDir.y * 1.5 - player.vel.y) * 0.5;
+          player.vel.z += lookDir.z * 0.1 + (lookDir.z * 1.5 - player.vel.z) * 0.5;
+          --player.fireworkRocketDuration;
+        }
+
         // we're on ground or in air, not flying.
       } else {
+
+        // clear firework boost if on ground or in air without flying, otherwise it can cause issues with movement.
+        if (player.fireworkRocketDuration > 0) {
+          player.fireworkRocketDuration = 0;
+        }
+
         const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
 
         // deviation. using our stores slipperiness values.
@@ -1121,6 +1088,12 @@ export class BotcraftPhysics implements IPhysics {
           inputStrength = movementSpeedAttr * (0.21600002 / (friction * friction * friction));
         } else {
           inputStrength = 0.02;
+
+          // DEVIATION: taken from p-physics, fixes motion!
+          if (player.sprinting) {
+            const airSprintFactor = ctx.airborneAccel * 0.3
+            inputStrength += airSprintFactor
+          }
         }
 
        
@@ -1158,8 +1131,6 @@ export class BotcraftPhysics implements IPhysics {
         // this can be generalized.
         player.vel.y *= 0.9800000190734863;
       }
-
-      this.applyFireworkBoost(player);
     }
   }
 
