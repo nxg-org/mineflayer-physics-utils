@@ -1132,7 +1132,7 @@ export class BotcraftPhysics implements IPhysics {
         } else {
           inputStrength = 0.02;
 
-            // DEVIATION: taken from p-physics, fixes motion!
+          // DEVIATION: taken from p-physics, fixes motion!
           if (player.control.sprint) {
             const airSprintFactor = ctx.airborneAccel * 0.3
             inputStrength += airSprintFactor

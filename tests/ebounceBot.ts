@@ -27,7 +27,7 @@ const MAX_TELEPORT_DIST = 50.0;
 const WARMUP_SPEED_THRESHOLD = 0.15;
 const MIN_BOOST_SPEED = 30.0;
 const MAX_SPEED = 100.0;
-const TARGET_PITCH_DEG = 72.4;
+const TARGET_PITCH_DEG = -72.4;
 
 let activeBot: Bot;
 
@@ -105,6 +105,7 @@ async function ensureBounceLoadout(bot: Bot) {
 }
 
 class EBounceController {
+
   private currentState = FlightState.IDLE;
   private stateTicks = 0;
   private lastPos: Bot["entity"]["position"] | null = null;
@@ -313,6 +314,7 @@ class EBounceController {
   private handleWarmup() {
     const vel = this.bot.entity.velocity;
     const yaw = this.getLockedYaw();
+    const pitch = this.getLockedPitch();
     const yawRad = yaw ?? 0;
     const lookX = -Math.sin(yawRad);
     const lookZ = Math.cos(yawRad);
@@ -321,22 +323,22 @@ class EBounceController {
       this.log(`Warmup Complete (DirSpeed: ${speedInDirection.toFixed(2)}). Launching.`);
       this.transitionTo(FlightState.LAUNCHING);
     } else {
-      this.submitInput(true, true, false, yaw, null);
+      this.submitInput(true, true, false, yaw, pitch);
     }
   }
 
   private handleLaunching() {
     const yaw = this.getLockedYaw();
+    const pitch = this.getLockedPitch();
 
     switch (this.stateTicks) {
       case 1:
         this.setClientSideFallFlying(false);
-        this.submitInput(true, true, true, yaw, null);
+        this.submitInput(true, true, true, yaw, pitch);
         return;
       default:
         this.launchJumpReleased = true;
-        this.submitInput(true, true, false, yaw, null);
-
+        this.submitInput(true, true, false, yaw, pitch);  
         if (!this.launchAirborneMoveSeen) return;
 
         if (!this.glideRequested) {
@@ -346,10 +348,10 @@ class EBounceController {
           return;
         }
 
-        if (this.isServerSideFallFlying()) {
+        // if (this.isServerSideFallFlying()) {
           this.log("Server accepted glide. Entering bounce state.");
           this.transitionTo(FlightState.BOUNCING);
-        }
+        // }
         return;
     }
   }
@@ -444,25 +446,8 @@ class EBounceController {
   }
 
   private applyLook(yaw: number, pitch: number) {
-    this.bot.entity.yaw = yaw;
-    this.bot.entity.pitch = pitch;
-    this.desiredLook = { yaw, pitch };
-
-    if (this.pendingLook) return;
-
-    this.pendingLook = (async () => {
-      while (this.desiredLook) {
-        const target = this.desiredLook;
-        this.desiredLook = null;
-        try {
-          await this.bot.look(target.yaw, target.pitch);
-        } catch {
-          return;
-        }
-      }
-    })().finally(() => {
-      this.pendingLook = null;
-    });
+    this.bot.look(yaw, pitch).finally((() => {
+    }));
   }
 
   private getLockedYaw() {
@@ -524,6 +509,7 @@ async function handleChatCommand(bot: EBounceBot, username: string, message: str
     case "start":
       if (args[0] != null) {
         const yaw = Number(args[0]);
+        const pitch = Number(args[1]);
         if (!Number.isNaN(yaw)) controller.setTargetYawDegrees(yaw);
       }
       controller.beginBounce();
