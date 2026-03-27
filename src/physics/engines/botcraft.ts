@@ -594,7 +594,7 @@ export class BotcraftPhysics implements IPhysics {
 
     // Preserve the current inputs for the next tick after all previous-state
     // consumers in this tick have already read the prior values.
-    player.lastOnGround = tickStartedOnGround;
+    player.lastOnGround = player.onGround;
     player.prevHeading.forward = heading.forward;
     player.prevHeading.strafe = heading.strafe;
     player.prevControl.jump = player.control.jump;
@@ -728,18 +728,6 @@ export class BotcraftPhysics implements IPhysics {
   private isSwimming(ctx: EPhysicsCtx): boolean {
     const player = ctx.state as PlayerState;
     return player.isInWater && player.isUnderWater;
-  }
-
-  private canGlide(player: PlayerState): boolean {
-    return !player.onGround && player.levitation <= 0 && player.elytraEquipped;
-  }
-
-  private updateFallFlyingState(player: PlayerState) {
-    if (player.fallFlying && !this.canGlide(player)) {
-      player.fallFlying = false;
-
-
-    }
   }
 
   private handleFallFlyingCollisions(player: PlayerState, previousHorizontalSpeed: number) {0
@@ -1023,8 +1011,6 @@ export class BotcraftPhysics implements IPhysics {
         gravity = goingDown && hasSlowFalling ? Math.min(0.01, ctx.gravity) : ctx.gravity;
       }
 
-      this.updateFallFlyingState(player);
-
       if (player.isInWater && !player.flying) {
         const initY = player.pos.y;
         let waterSlowDown = player.sprinting ? ctx.sprintWaterInertia : ctx.waterInertia;
@@ -1133,37 +1119,6 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.y *= Math.fround(0.98); // magic number, this DEFINITELY should be replaced by a drag value.
         this.applyMovement(ctx, world);
         this.handleFallFlyingCollisions(player, previousHorizontalSpeed);
-
-        if (player.onGround) {
-          player.fallFlying = false;
-          player.postFallFlyingLandingTicks = 4;
-        }
-      } else if (player.postFallFlyingLandingTicks > 0) {
-        const isLastCarryTick = player.postFallFlyingLandingTicks === 1;
-        this.applyMovement(ctx, world);
-
-        // The glide-landing carry stays grounded through the transition even
-        // though this synthetic branch does not produce a downward collision.
-        player.onGround = true;
-        player.supportingBlockPos = this.getBlockBelowAffectingMovement(player, world);
-
-        if (player.onGround && Math.abs(player.vel.y) <= 1e-7) {
-          player.vel.y = -gravity * 0.9800000190734863;
-        }
-
-        if (isLastCarryTick) {
-          const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
-          const friction = blockBelow
-            ? this.blockSlipperiness[blockBelow.type] ?? ctx.worldSettings.defaultSlipperiness
-            : ctx.worldSettings.defaultSlipperiness;
-          const inertia = friction * ctx.airborneInertia;
-          player.vel.x *= inertia;
-          player.vel.z *= inertia;
-        }
-
-        player.postFallFlyingLandingTicks--;
-
-        // we're on ground or in air, not flying.
       } else {
         const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
 
@@ -1362,8 +1317,12 @@ export class BotcraftPhysics implements IPhysics {
     // TODO: add minor horizontal collision check
     {
       // Entity::setOnGroundWithKnownMovement
-      player.onGround = movementBeforeCollisions.y < 0.0 && collisionY;
-      if (player.onGround) {
+      const wasOnGround = player.onGround;
+      const groundedByCollision = movementBeforeCollisions.y < 0.0 && collisionY;
+      const shouldCheckStandingSupport = wasOnGround && Math.abs(movementBeforeCollisions.y) <= 1e-7;
+
+      player.onGround = groundedByCollision;
+      if (player.onGround || shouldCheckStandingSupport) {
         const halfWidth = player.halfWidth;
         const feetSliceAABB = new AABB(
           player.pos.x - halfWidth,
@@ -1380,6 +1339,10 @@ export class BotcraftPhysics implements IPhysics {
         } else {
 
           player.supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB.translate(-movement.x, 0.0, -movement.z));
+        }
+
+        if (!player.onGround && player.supportingBlockPos != null) {
+          player.onGround = true;
         }
         // unnecessary due to it being a getter.
         //  player->on_ground_without_supporting_block = !player->supporting_block_pos.has_value();

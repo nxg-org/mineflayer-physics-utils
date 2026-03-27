@@ -100,7 +100,6 @@ export class PlayerState implements IEntityState {
     public isInWeb: boolean = false;
     public elytraEquipped: boolean = false;
     public fireworkRocketDuration: number = 0;
-    public postFallFlyingLandingTicks: number = 0;
     public isCollidedHorizontally: boolean = false;
     public isCollidedHorizontallyMinor: boolean = false;
     public isCollidedVertically: boolean = false;
@@ -262,7 +261,6 @@ export class PlayerState implements IEntityState {
         this.isInWeb = (bot.entity as any).isInWeb;
         this.elytraEquipped = bot.inventory.slots[bot.getEquipmentDestSlot('torso')]?.name === 'elytra';
         this.fireworkRocketDuration = bot.fireworkRocketDuration;
-        this.postFallFlyingLandingTicks = (bot.entity as any).postFallFlyingLandingTicks ?? 0;
         this.isCollidedHorizontally = (bot.entity as any).isCollidedHorizontally;
         this.isCollidedHorizontallyMinor = (bot.entity as any).isCollidedHorizontallyMinor;
         this.isCollidedVertically = (bot.entity as any).isCollidedVertically;
@@ -364,10 +362,8 @@ export class PlayerState implements IEntityState {
         (bot.entity as any).isInLava = this.isInLava;
         (bot.entity as any).isUnderLava = this.isUnderLava;
         (bot.entity as any).isInWeb = this.isInWeb;
-        (bot.entity as any).elytraFlying = this.fallFlying;
         (bot.entity as any).elytraEquipped = this.elytraEquipped;
         bot.fireworkRocketDuration = this.fireworkRocketDuration;
-        (bot.entity as any).postFallFlyingLandingTicks = this.postFallFlyingLandingTicks;
         (bot.entity as any).isCollidedHorizontally = this.isCollidedHorizontally;
         (bot.entity as any).isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         (bot.entity as any).isCollidedVertically = this.isCollidedVertically;
@@ -390,8 +386,6 @@ export class PlayerState implements IEntityState {
         (bot.entity as any).swimming = this.swimming ?? false;
         (bot.entity as any).sprinting = this.sprinting ?? false;
         (bot.entity as any).crouching = this.crouching ?? false;
-        (bot.entity as any).fallFlying = this.fallFlying ?? false;
-
         bot.entity.attributes = this.attributes;
 
         this.control.applyControls(bot);
@@ -412,7 +406,6 @@ export class PlayerState implements IEntityState {
         tmp.isInWeb = this.isInWeb;
         tmp.elytraEquipped = this.elytraEquipped;
         tmp.fireworkRocketDuration = this.fireworkRocketDuration;
-        tmp.postFallFlyingLandingTicks = this.postFallFlyingLandingTicks;
         tmp.isCollidedHorizontally = this.isCollidedHorizontally;
         tmp.isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         tmp.isCollidedVertically = this.isCollidedVertically;
@@ -482,7 +475,6 @@ export class PlayerState implements IEntityState {
         this.isInWeb = other.isInWeb;
         this.elytraEquipped = other.elytraEquipped;
         this.fireworkRocketDuration = other.fireworkRocketDuration;
-        this.postFallFlyingLandingTicks = other.postFallFlyingLandingTicks;
         this.isCollidedHorizontally = other.isCollidedHorizontally;
         this.isCollidedHorizontallyMinor = other.isCollidedHorizontallyMinor
         this.isCollidedVertically = other.isCollidedVertically;
