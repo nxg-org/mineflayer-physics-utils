@@ -513,12 +513,6 @@ export class BotcraftPhysics implements IPhysics {
       player.flyJumpTriggerTime = Math.max(0, player.flyJumpTriggerTime - 1);
     }
 
-    // TODO: find a good way to implement this.
-    player.prevHeading.forward = heading.forward;
-    player.prevHeading.strafe = heading.strafe;
-    player.prevControl.jump = player.control.jump;
-    player.prevControl.sneak = player.control.sneak;
-
     // livingEntity::AiStep
     {
       player.jumpTicks = Math.max(0, player.jumpTicks - 1);
@@ -584,6 +578,13 @@ export class BotcraftPhysics implements IPhysics {
     if (this.verGreaterThan("1.13.2")) {
       this.updatePoses(ctx, world);
     }
+
+    // Preserve the current inputs for the next tick after all previous-state
+    // consumers in this tick have already read the prior values.
+    player.prevHeading.forward = heading.forward;
+    player.prevHeading.strafe = heading.strafe;
+    player.prevControl.jump = player.control.jump;
+    player.prevControl.sneak = player.control.sneak;
 
   }
 
@@ -848,54 +849,63 @@ export class BotcraftPhysics implements IPhysics {
     if (entity instanceof PlayerState) {
       const player = entity as PlayerState;
 
-      if (player.control.jump && !player.flying) {
-        if (player.isInWater || player.isInLava) {
-          player.vel.y += 0.03999999910593033; // magic number
-        } else if (player.onGround && player.jumpTicks === 0) {
-          let blockJumpFactor = 1.0;
-          const jumpBoost = 0.1 * player.jumpBoost; // in mineflayer, level 1 is 1, not 0.
+      if (!player.control.jump) {
+        player.jumpTicks = 0;
+        return;
+      }
 
-          // get below block
-          const blFeet = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
-          if (blFeet && this.honeyblockId !== blFeet.type) {
-            const blBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
-            if (blBelow && this.honeyblockId === blBelow.type) {
-              blockJumpFactor = 0.4;
-            }
-          } else {
-            blockJumpFactor = 0.4;
-          }
+      if (player.flying) {
+        return;
+      }
 
-          if (this.verLessThan("1.20.5")) {
-            // console.log(blockJumpFactor)
-            player.vel.y = Math.fround(0.42) * blockJumpFactor + jumpBoost;
-            if (player.sprinting) {
-              const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
-              // potential inconsistency here. This may not be accurate.
-              const offsetX = Math.fround(Math.sin(yawRad)) * 0.2;
-              const offsetZ = Math.fround(Math.cos(yawRad)) * 0.2;
-              player.vel.x -= offsetX
-              player.vel.z += offsetZ
-            }
-          } else {
-            // something about getting an attribute for jump strength?
-            const value = entity.attributes[this.jumpStrengthAttribute]?.value ?? Math.fround(0.42) // default value from previous versions
-            const jumpPower = value * blockJumpFactor + jumpBoost;
-            if (jumpPower > 1e-5) {
-              player.vel.y = jumpPower;
-              if (player.sprinting) {
-                const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
-                player.vel.x -= Math.sin(yawRad) * 0.2;
-                player.vel.z += Math.cos(yawRad) * 0.2;
-              }
-            }
-            player.jumpTicks = worldSettings.autojumpCooldown;
+      if (player.isInWater || player.isInLava) {
+        player.vel.y += 0.03999999910593033; // magic number
+      } else if (player.onGround && player.jumpTicks === 0) {
+        const blockJumpFactor = this.getBlockJumpFactor(player, world, worldSettings);
+        const jumpBoost = Math.fround(0.1 * player.jumpBoost); // in mineflayer, level 1 is 1, not 0.
+
+        if (this.verLessThan("1.20.5")) {
+          const jumpPower = Math.fround(Math.fround(0.42) * Math.fround(blockJumpFactor) + jumpBoost);
+          player.vel.y = Math.max(jumpPower, player.vel.y);
+          if (player.sprinting) {
+            const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
+            // potential inconsistency here. This may not be accurate.
+            const offsetX = Math.fround(Math.sin(yawRad)) * 0.2;
+            const offsetZ = Math.fround(Math.cos(yawRad)) * 0.2;
+            player.vel.x -= offsetX
+            player.vel.z += offsetZ
           }
         } else {
-          player.jumpTicks = 0;
+          const value = Math.fround(entity.attributes[this.jumpStrengthAttribute]?.value ?? Math.fround(0.42));
+          const jumpPower = Math.fround(value * Math.fround(blockJumpFactor) + jumpBoost);
+          if (jumpPower > 1e-5) {
+            player.vel.y = Math.max(jumpPower, player.vel.y);
+            if (player.sprinting) {
+              const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
+              player.vel.x -= Math.sin(yawRad) * 0.2;
+              player.vel.z += Math.cos(yawRad) * 0.2;
+            }
+          }
         }
+
+        player.jumpTicks = worldSettings.autojumpCooldown;
       }
     }
+  }
+
+  private getBlockJumpFactor(entity: IEntityState, world: World, worldSettings: PhysicsWorldSettings) {
+    const feetBlock = world.getBlock(new Vec3(entity.pos.x, entity.pos.y, entity.pos.z));
+    const feetJumpFactor = this.getKnownJumpFactor(feetBlock?.type, worldSettings);
+    if (feetJumpFactor !== 1.0) return feetJumpFactor;
+
+    const supportBlock = world.getBlock(this.getBlockBelowAffectingMovement(entity, world));
+    return this.getKnownJumpFactor(supportBlock?.type, worldSettings);
+  }
+
+  private getKnownJumpFactor(blockType: number | undefined, worldSettings: PhysicsWorldSettings) {
+    if (blockType == null) return 1.0;
+    if (blockType === this.honeyblockId) return worldSettings.honeyblockJumpSpeed;
+    return 1.0;
   }
 
   private getBlockBelowAffectingMovement(entity: IEntityState, world: World) {
@@ -1121,6 +1131,12 @@ export class BotcraftPhysics implements IPhysics {
           inputStrength = movementSpeedAttr * (0.21600002 / (friction * friction * friction));
         } else {
           inputStrength = 0.02;
+
+            // DEVIATION: taken from p-physics, fixes motion!
+          if (player.control.sprint) {
+            const airSprintFactor = ctx.airborneAccel * 0.3
+            inputStrength += airSprintFactor
+          }
         }
 
        
