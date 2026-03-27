@@ -6,7 +6,7 @@ import {
   type PhysicsBot,
   type PhysicsSwitcher,
   sleep,
-} from "./util/botSetup";
+} from "../helpers/manual/botSetup";
 
 type EBounceBot = PhysicsBot & {
   elytraFly: () => Promise<void>;

@@ -1,5 +1,5 @@
 import { Bot } from "mineflayer";
-import { PlayerState } from "../src/physics/states";
+import { PlayerState } from "../../src/physics/states";
 import {
   buildManagedBot,
   getBotOptionsFromArgs,
@@ -7,7 +7,7 @@ import {
   type PhysicsBot,
   type PhysicsSwitcher,
   sleep,
-} from "./util/botSetup";
+} from "../helpers/manual/botSetup";
 
 type ElytraBot = PhysicsBot & {
   elytraFly: () => Promise<void>;

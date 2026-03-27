@@ -1,6 +1,6 @@
 import { Bot } from "mineflayer";
 import { Entity } from "prismarine-entity";
-import { buildManagedBot, getBotOptionsFromArgs, type PhysicsBot } from "./util/botSetup";
+import { buildManagedBot, getBotOptionsFromArgs, type PhysicsBot } from "../helpers/manual/botSetup";
 
 const TARGET_USERNAME = "PancakeSlam";
 

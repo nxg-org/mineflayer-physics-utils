@@ -23,7 +23,7 @@ export class EntityState implements IEntityState {
     public isInWater: boolean;
     public isInLava: boolean;
     public isInWeb: boolean;
-    public elytraFlying: boolean;
+    public fallFlying: boolean;
     public elytraEquipped: boolean;
     public isCollidedHorizontally: boolean;
     public isCollidedVertically: boolean;
@@ -54,6 +54,17 @@ export class EntityState implements IEntityState {
 
     public supportingBlockPos: Vec3 | null;
 
+    /**
+     * Deprecated compatibility alias for fallFlying.
+     */
+    public get elytraFlying(): boolean {
+        return this.fallFlying;
+    }
+
+    public set elytraFlying(value: boolean) {
+        this.fallFlying = value;
+    }
+
     // public effects: Effect[];
     // public statusEffectNames;
 
@@ -71,7 +82,7 @@ export class EntityState implements IEntityState {
         this.isInWater = false;
         this.isInLava = false;
         this.isInWeb = false;
-        this.elytraFlying = false;
+        this.fallFlying = false;
         this.elytraEquipped = false;
         this.isCollidedHorizontally = false;
         this.isCollidedVertically = false;
@@ -177,14 +188,14 @@ export class EntityState implements IEntityState {
             this.isInWater = (entity as any).isInWater;
             this.isInLava = (entity as any).isInLava;
             this.isInWeb = (entity as any).isInWeb;
-            this.elytraFlying = (entity as any).elytraFlying;
+            this.fallFlying = (entity as any).fallFlying ?? (entity as any).elytraFlying ?? false;
             this.isCollidedHorizontally = (entity as any).isCollidedHorizontally;
             this.isCollidedVertically = (entity as any).isCollidedVertically;
             this.sneakCollision = false; //TODO
             this.attributes ||= entity.attributes;
 
             this.elytraEquipped = entity.equipment[4] && entity.equipment[4]?.name.includes("elytra");
-            this.elytraFlying = this.elytraEquipped && this.elytraFlying
+            this.fallFlying = this.elytraEquipped && this.fallFlying
         }
         this.pos = entity.position.clone();
 
@@ -246,7 +257,7 @@ export class EntityState implements IEntityState {
         this.isInWater = other.isInWater ?? this.isInWater;
         this.isInLava = other.isInLava ?? this.isInLava;
         this.isInWeb = other.isInWeb ?? this.isInWeb;
-        this.elytraFlying = other.elytraFlying ?? this.elytraFlying;
+        this.fallFlying = other.fallFlying ?? other.elytraFlying ?? this.fallFlying;
         this.elytraEquipped = other.elytraEquipped ?? this.elytraEquipped;
         return this;
     }
@@ -265,7 +276,8 @@ export class EntityState implements IEntityState {
         (bot.entity as any).isInWater = this.isInWater;
         (bot.entity as any).isInLava = this.isInLava;
         (bot.entity as any).isInWeb = this.isInWeb;
-        bot.entity.elytraFlying = this.elytraFlying;
+        (bot.entity as any).fallFlying = this.fallFlying;
+        bot.entity.elytraFlying = this.fallFlying;
         (bot.entity as any).elytraEquipped = this.elytraEquipped;
         (bot.entity as any).isCollidedHorizontally = this.isCollidedHorizontally;
         (bot.entity as any).isCollidedVertically = this.isCollidedVertically;
@@ -310,7 +322,7 @@ export class EntityState implements IEntityState {
         other.isInWater = this.isInWater;
         other.isInLava = this.isInLava;
         other.isInWeb = this.isInWeb;
-        other.elytraFlying = this.elytraFlying;
+        other.fallFlying = this.fallFlying;
         other.elytraEquipped = this.elytraEquipped;
         other.fireworkRocketDuration = this.fireworkRocketDuration;
         other.jumpTicks = this.jumpTicks;
@@ -343,7 +355,7 @@ export class EntityState implements IEntityState {
         this.isInWater = other.isInWater;
         this.isInLava = other.isInLava;
         this.isInWeb = other.isInWeb;
-        this.elytraFlying = other.elytraFlying;
+        this.fallFlying = other.fallFlying;
         this.elytraEquipped = other.elytraEquipped;
         this.fireworkRocketDuration = other.fireworkRocketDuration;
         this.jumpTicks = other.jumpTicks;

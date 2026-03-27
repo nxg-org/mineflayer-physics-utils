@@ -1,7 +1,7 @@
 import { Bot, createBot } from "mineflayer";
-import loader, { BotcraftPhysics, EntityState, EPhysicsCtx } from "../../src/index";
-import { IEntityState, PlayerState } from "../../src/physics/states";
-import type { IPhysics } from "../../src/physics/engines/IPhysics";
+import loader, { BotcraftPhysics, EntityState, EPhysicsCtx } from "../../../src/index";
+import { IEntityState, PlayerState } from "../../../src/physics/states";
+import type { IPhysics } from "../../../src/physics/engines/IPhysics";
 
 export type PhysicsBot = Bot & {
   physics: {

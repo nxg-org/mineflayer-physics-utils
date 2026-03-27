@@ -223,7 +223,7 @@ export function convertPlayerState(bot: Bot, oldState: any, ctx: IPhysics): Play
     newState.isCollidedVertically = oldState.isCollidedVertically ?? newState.isCollidedVertically;
     
     // 4. Map movement and action states
-    newState.elytraFlying = oldState.elytraFlying ?? newState.elytraFlying;
+    newState.fallFlying = oldState.fallFlying ?? oldState.elytraFlying ?? newState.fallFlying;
     newState.elytraEquipped = oldState.elytraEquipped ?? newState.elytraEquipped;
     newState.jumpTicks = oldState.jumpTicks ?? newState.jumpTicks;
     newState.jumpQueued = oldState.jumpQueued ?? newState.jumpQueued;
@@ -279,7 +279,8 @@ export function applyToPlayerState(newState: PlayerState, oldState: any): void {
     oldState.isCollidedVertically = newState.isCollidedVertically;
     
     // 3. Map Movement & Actions
-    oldState.elytraFlying = newState.elytraFlying;
+    oldState.fallFlying = newState.fallFlying;
+    oldState.elytraFlying = newState.fallFlying;
     oldState.elytraEquipped = newState.elytraEquipped;
     oldState.jumpTicks = newState.jumpTicks;
     oldState.jumpQueued = newState.jumpQueued;

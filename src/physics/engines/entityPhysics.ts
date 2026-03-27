@@ -566,7 +566,7 @@ export class EntityPhysics implements IPhysics {
 
     // Unsure how to handle this w/ other entities.
     // this is player-only.
-    if (entity.state.elytraFlying) {
+    if (entity.state.fallFlying) {
       const { pitch, sinPitch, cosPitch, lookDir } = getLookingVector(entity.state);
       const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
       const cosPitchSquared = cosPitch * cosPitch;
@@ -598,7 +598,7 @@ export class EntityPhysics implements IPhysics {
       this.moveEntity(entity, vel.x, vel.y, vel.z,  world);
 
       if (entity.state.onGround) {
-        entity.state.elytraFlying = false;
+        entity.state.fallFlying = false;
       } 
     } else if (!entity.state.isInWater && !entity.state.isInLava) {
       let acceleration = entity.airborneAccel;
@@ -781,13 +781,13 @@ export class EntityPhysics implements IPhysics {
         entity.state.control.sprint = false;
       }
 
-      entity.state.elytraFlying =
-        entity.state.elytraFlying && entity.state.elytraEquipped && !entity.state.onGround && !entity.state.levitation;
+      entity.state.fallFlying =
+        entity.state.fallFlying && entity.state.elytraEquipped && !entity.state.onGround && !entity.state.levitation;
 
       // for now, only check if this is a player.
       if (entity.state instanceof PlayerState) {
         if (entity.state.fireworkRocketDuration > 0) {
-          if (!entity.state.elytraFlying) {
+          if (!entity.state.fallFlying) {
             entity.state.fireworkRocketDuration = 0;
           } else {
             const { lookDir } = getLookingVector(entity.state);

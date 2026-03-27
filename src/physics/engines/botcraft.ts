@@ -486,8 +486,21 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
+  private isMovingSlowly(ctx: EPhysicsCtx, world: World) {
+    const player = ctx.state as PlayerState;
+    if (this.verGreaterThan("1.13.2")) {
+      const visuallyCrawling =
+        (player.pose === PlayerPoses.SWIMMING || (!player.fallFlying && player.pose === PlayerPoses.FALL_FLYING)) &&
+        !player.isInWater;
+      return player.crouching || visuallyCrawling;
+    }
+
+    return player.crouching;
+  }
+
   private localPlayerAIStep(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
+    const tickStartedOnGround = player.onGround;
     const heading = convInpToAxes(player);
     player.heading = heading;
 
@@ -581,6 +594,7 @@ export class BotcraftPhysics implements IPhysics {
 
     // Preserve the current inputs for the next tick after all previous-state
     // consumers in this tick have already read the prior values.
+    player.lastOnGround = tickStartedOnGround;
     player.prevHeading.forward = heading.forward;
     player.prevHeading.strafe = heading.strafe;
     player.prevControl.jump = player.control.jump;
@@ -607,12 +621,7 @@ export class BotcraftPhysics implements IPhysics {
 
 
     // Determine if moving slowly
-    let isMovingSlowly: boolean;
-    if (this.verGreaterThan("1.13.2")) {
-      isMovingSlowly = player.crouching || (player.pose === PlayerPoses.SWIMMING && !player.isInWater);
-    } else {
-      isMovingSlowly = player.crouching;
-    }
+    const isMovingSlowly = this.isMovingSlowly(ctx, world);
 
     // Handle post-1.21.3 sprinting conditions
     if (this.verGreaterThan("1.21.3")) {
@@ -657,6 +666,14 @@ export class BotcraftPhysics implements IPhysics {
 
   private inputsToSprint(ctx: EPhysicsCtx, heading: Heading, world: World) {
     const player = ctx.state as PlayerState;
+
+    // Vanilla treats fall-flying as an unconditional sprint stop condition.
+    // If sprint persists through gliding, the landing transition can inherit a
+    // sprinting ground state one tick too early.
+    if (player.fallFlying) {
+      this.setSprinting(ctx, false);
+      return;
+    }
 
     // console.log('is sprinting', player.sprinting, 'can sprint', this.canStartSprinting(ctx, heading), player.sprinting)
     if (this.canStartSprinting(ctx, heading) &&
@@ -720,10 +737,12 @@ export class BotcraftPhysics implements IPhysics {
   private updateFallFlyingState(player: PlayerState) {
     if (player.fallFlying && !this.canGlide(player)) {
       player.fallFlying = false;
+
+
     }
   }
 
-  private handleFallFlyingCollisions(player: PlayerState, previousHorizontalSpeed: number) {
+  private handleFallFlyingCollisions(player: PlayerState, previousHorizontalSpeed: number) {0
     if (!player.isCollidedHorizontally) return;
 
     const currentHorizontalSpeed = Math.sqrt(player.vel.x * player.vel.x + player.vel.z * player.vel.z);
@@ -906,6 +925,14 @@ export class BotcraftPhysics implements IPhysics {
     if (blockType == null) return 1.0;
     if (blockType === this.honeyblockId) return worldSettings.honeyblockJumpSpeed;
     return 1.0;
+  }
+
+  private getOffGroundSpeed(player: PlayerState) {
+    if (player.flying) {
+      return player.sprinting ? player.flySpeed * 2.0 : player.flySpeed;
+    }
+
+    return player.sprinting ? Math.fround(0.025999999) : Math.fround(0.02);
   }
 
   private getBlockBelowAffectingMovement(entity: IEntityState, world: World) {
@@ -1109,7 +1136,32 @@ export class BotcraftPhysics implements IPhysics {
 
         if (player.onGround) {
           player.fallFlying = false;
+          player.postFallFlyingLandingTicks = 4;
         }
+      } else if (player.postFallFlyingLandingTicks > 0) {
+        const isLastCarryTick = player.postFallFlyingLandingTicks === 1;
+        this.applyMovement(ctx, world);
+
+        // The glide-landing carry stays grounded through the transition even
+        // though this synthetic branch does not produce a downward collision.
+        player.onGround = true;
+        player.supportingBlockPos = this.getBlockBelowAffectingMovement(player, world);
+
+        if (player.onGround && Math.abs(player.vel.y) <= 1e-7) {
+          player.vel.y = -gravity * 0.9800000190734863;
+        }
+
+        if (isLastCarryTick) {
+          const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
+          const friction = blockBelow
+            ? this.blockSlipperiness[blockBelow.type] ?? ctx.worldSettings.defaultSlipperiness
+            : ctx.worldSettings.defaultSlipperiness;
+          const inertia = friction * ctx.airborneInertia;
+          player.vel.x *= inertia;
+          player.vel.z *= inertia;
+        }
+
+        player.postFallFlyingLandingTicks--;
 
         // we're on ground or in air, not flying.
       } else {
@@ -1121,22 +1173,16 @@ export class BotcraftPhysics implements IPhysics {
           : ctx.worldSettings.defaultSlipperiness;
 
         // console.log(blockBelow.name, blockBelow.position, player.supportingBlockPos, friction)
-        const inertia = player.onGround ? friction * ctx.airborneInertia : ctx.airborneInertia;
+        const inertia = player.lastOnGround ? friction * ctx.airborneInertia : ctx.airborneInertia;
 
         // deviation, adding additional logic for changing attribute values.
         const movementSpeedAttr = this.getMovementSpeedAttribute(ctx);
 
         let inputStrength: number;
-        if (player.onGround) {
+        if (player.lastOnGround) {
           inputStrength = movementSpeedAttr * (0.21600002 / (friction * friction * friction));
         } else {
-          inputStrength = 0.02;
-
-          // DEVIATION: taken from p-physics, fixes motion!
-          if (player.control.sprint) {
-            const airSprintFactor = ctx.airborneAccel * 0.3
-            inputStrength += airSprintFactor
-          }
+          inputStrength = this.getOffGroundSpeed(player);
         }
 
        

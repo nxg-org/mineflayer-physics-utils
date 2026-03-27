@@ -21,12 +21,12 @@ type PlayerPoseContext = { [key in PlayerPoses]: { width: number; height: number
 
 export const playerPoseCtx: PlayerPoseContext = {
   0: { width: 0.6, height: 1.8 },
-  1: { width: 0.2, height: 0.2 },
-  2: { width: 0.6, height: 0.6 },
+  1: { width: 0.6, height: 0.6 },
+  2: { width: 0.2, height: 0.2 },
   3: { width: 0.6, height: 0.6 },
   4: { width: 0.6, height: 0.6 },
-  5: { width: 0.6, height: 0.6 },
-  6: { width: 0.6, height: 1.5 },
+  5: { width: 0.6, height: 1.5 },
+  6: { width: 0.6, height: 1.8 },
   7: { width: 0.2, height: 0.2 },
 };
 

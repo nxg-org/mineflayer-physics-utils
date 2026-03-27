@@ -91,15 +91,16 @@ export class PlayerState implements IEntityState {
     public vel: Vec3;
 
     public onGround: boolean = false;
+    public lastOnGround: boolean = false;
     public onClimbable: boolean = false;
     public isInWater: boolean = false;
     public isUnderWater: boolean = false;
     public isInLava: boolean = false;
     public isUnderLava: boolean = false;
     public isInWeb: boolean = false;
-    public elytraFlying: boolean = false;
     public elytraEquipped: boolean = false;
     public fireworkRocketDuration: number = 0;
+    public postFallFlyingLandingTicks: number = 0;
     public isCollidedHorizontally: boolean = false;
     public isCollidedHorizontallyMinor: boolean = false;
     public isCollidedVertically: boolean = false;
@@ -188,6 +189,17 @@ export class PlayerState implements IEntityState {
     public fallFlying: boolean = false;
 
     /**
+     * Deprecated compatibility alias for fallFlying.
+     */
+    public get elytraFlying(): boolean {
+        return this.fallFlying;
+    }
+
+    public set elytraFlying(value: boolean) {
+        this.fallFlying = value;
+    }
+
+    /**
      * TODO: proper impl.
      */
     public flySpeed: number = 0;
@@ -241,15 +253,16 @@ export class PlayerState implements IEntityState {
         this.vel.set(bot.entity.velocity.x, bot.entity.velocity.y, bot.entity.velocity.z);
         this.supportingBlockPos = (bot.entity as any).supportingBlockPos ?? null;
         this.onGround = bot.entity.onGround;
+        this.lastOnGround = (bot.entity as any).lastOnGround ?? bot.entity.onGround;
         this.onClimbable = (bot.entity as any).onClimbable;
         this.isInWater = (bot.entity as any).isInWater;
         this.isUnderWater = (bot.entity as any).isUnderWater;
         this.isInLava = (bot.entity as any).isInLava;
         this.isUnderLava = (bot.entity as any).isUnderLava;
         this.isInWeb = (bot.entity as any).isInWeb;
-        this.elytraFlying = (bot.entity as any).elytraFlying;
         this.elytraEquipped = bot.inventory.slots[bot.getEquipmentDestSlot('torso')]?.name === 'elytra';
         this.fireworkRocketDuration = bot.fireworkRocketDuration;
+        this.postFallFlyingLandingTicks = (bot.entity as any).postFallFlyingLandingTicks ?? 0;
         this.isCollidedHorizontally = (bot.entity as any).isCollidedHorizontally;
         this.isCollidedHorizontallyMinor = (bot.entity as any).isCollidedHorizontallyMinor;
         this.isCollidedVertically = (bot.entity as any).isCollidedVertically;
@@ -313,7 +326,7 @@ export class PlayerState implements IEntityState {
         this.swimming = (bot.entity as any).swimming ?? false;
         this.sprinting = (bot.entity as any).sprinting ?? false; 
         this.crouching = (bot.entity as any).crouching ?? false;
-        this.fallFlying = (bot.entity as any).fallFlying ?? false;
+        this.fallFlying = (bot.entity as any).fallFlying ?? (bot.entity as any).elytraFlying ?? false;
 
         switch (bot.game.gameMode) {
             case "creative":
@@ -344,15 +357,17 @@ export class PlayerState implements IEntityState {
         bot.entity.position.set(this.pos.x, this.pos.y, this.pos.z);
         bot.entity.velocity.set(this.vel.x, this.vel.y, this.vel.z);
         bot.entity.onGround = this.onGround;
+        (bot.entity as any).lastOnGround = this.lastOnGround;
         (bot.entity as any).onClimbable = this.onClimbable;
         (bot.entity as any).isInWater = this.isInWater;
         (bot.entity as any).isUnderWater = this.isUnderWater;
         (bot.entity as any).isInLava = this.isInLava;
         (bot.entity as any).isUnderLava = this.isUnderLava;
         (bot.entity as any).isInWeb = this.isInWeb;
-        (bot.entity as any).elytraFlying = this.elytraFlying;
+        (bot.entity as any).elytraFlying = this.fallFlying;
         (bot.entity as any).elytraEquipped = this.elytraEquipped;
         bot.fireworkRocketDuration = this.fireworkRocketDuration;
+        (bot.entity as any).postFallFlyingLandingTicks = this.postFallFlyingLandingTicks;
         (bot.entity as any).isCollidedHorizontally = this.isCollidedHorizontally;
         (bot.entity as any).isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         (bot.entity as any).isCollidedVertically = this.isCollidedVertically;
@@ -388,15 +403,16 @@ export class PlayerState implements IEntityState {
         tmp.pos.set(this.pos.x, this.pos.y, this.pos.z);
         tmp.vel.set(this.vel.x, this.vel.y, this.vel.z);
         tmp.onGround = this.onGround;
+        tmp.lastOnGround = this.lastOnGround;
         tmp.onClimbable = this.onClimbable;
         tmp.isInWater = this.isInWater;
         tmp.isUnderWater = this.isUnderWater;
         tmp.isInLava = this.isInLava;
         tmp.isUnderLava = this.isUnderLava;
         tmp.isInWeb = this.isInWeb;
-        tmp.elytraFlying = this.elytraFlying;
         tmp.elytraEquipped = this.elytraEquipped;
         tmp.fireworkRocketDuration = this.fireworkRocketDuration;
+        tmp.postFallFlyingLandingTicks = this.postFallFlyingLandingTicks;
         tmp.isCollidedHorizontally = this.isCollidedHorizontally;
         tmp.isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         tmp.isCollidedVertically = this.isCollidedVertically;
@@ -457,15 +473,16 @@ export class PlayerState implements IEntityState {
         this.pos.set(other.pos.x, other.pos.y, other.pos.z);
         this.vel.set(other.vel.x, other.vel.y, other.vel.z);
         this.onGround = other.onGround;
+        this.lastOnGround = other.lastOnGround;
         this.onClimbable = other.onClimbable;
         this.isInWater = other.isInWater;
         this.isUnderWater = other.isUnderWater;
         this.isInLava = other.isInLava;
         this.isUnderLava = other.isUnderLava;
         this.isInWeb = other.isInWeb;
-        this.elytraFlying = other.elytraFlying;
         this.elytraEquipped = other.elytraEquipped;
         this.fireworkRocketDuration = other.fireworkRocketDuration;
+        this.postFallFlyingLandingTicks = other.postFallFlyingLandingTicks;
         this.isCollidedHorizontally = other.isCollidedHorizontally;
         this.isCollidedHorizontallyMinor = other.isCollidedHorizontallyMinor
         this.isCollidedVertically = other.isCollidedVertically;

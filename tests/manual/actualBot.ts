@@ -1,8 +1,8 @@
 import { Bot } from "mineflayer";
 import { goals, pathfinder } from "mineflayer-pathfinder";
 import { Entity } from "prismarine-entity";
-import { PlayerState } from "../src/physics/states";
-import { buildManagedBot, getBotOptionsFromArgs, type PhysicsBot, type PhysicsSwitcher, sleep } from "./util/botSetup";
+import { PlayerState } from "../../src/physics/states";
+import { buildManagedBot, getBotOptionsFromArgs, type PhysicsBot, type PhysicsSwitcher, sleep } from "../helpers/manual/botSetup";
 
 type ControlName = Parameters<Bot["setControlState"]>[0];
 
