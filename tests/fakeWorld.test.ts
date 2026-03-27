@@ -142,8 +142,8 @@ describe("Physics Simulation Tests", () => {
 
   it("sprint-jumping", () => {
     setupEntity(0);
-    // playerState.control.forward = true;
-    // playerState.control.sprint = true;
+    playerState.control.forward = true;
+    playerState.control.sprint = true;
 
     for (let i = 0; i < 4; i++) {
       physics.simulate(playerCtx, fakeWorld);
@@ -156,7 +156,7 @@ describe("Physics Simulation Tests", () => {
     for (let i = 0; i < 12; i++) {
       physics.simulate(playerCtx, fakeWorld);
       playerState.apply(fakePlayer);
-    console.log(playerState.sprinting, playerState.onGround, playerState.pos)
+    // console.log(playerState.sprinting, playerState.onGround, playerState.pos)
     }
 
     expect(fakePlayer.entity.position.y).toEqual(groundLevel);

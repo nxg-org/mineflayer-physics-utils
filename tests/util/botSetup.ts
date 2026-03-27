@@ -37,9 +37,40 @@ const rl = require("readline").createInterface({
   input: process.stdin,
   output: process.stdout,
 });
+const DEFAULT_CLI_USERNAME = "cli";
 
 export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function performElytraTakeoff(
+  bot: PhysicsBot,
+  yaw: number,
+  pitch: number,
+  activateItem = false,
+  requestFlight: (() => Promise<void>) | null = null,
+) {
+  if (typeof bot.elytraFly !== "function") {
+    throw new Error("Bot does not support elytraFly()");
+  }
+
+  await bot.look(yaw, pitch);
+  bot.setControlState("jump", true);
+  // bot.setControlState("forward", true);
+  // bot.setControlState("sprint", true);
+  await sleep(100);
+  bot.setControlState("jump", false);
+
+  await sleep(50);
+  if (requestFlight) {
+    await requestFlight();
+  } else {
+    await bot.elytraFly();
+  }
+  if (activateItem) {
+    await sleep(100);
+    bot.activateItem();
+  }
 }
 
 export function getBotOptionsFromArgs(args: {
@@ -61,6 +92,8 @@ export function getBotOptionsFromArgs(args: {
     username: usernameIndex == null ? defaultUsername : process.argv[usernameIndex] ?? defaultUsername,
     version: process.argv[versionIndex],
     auth: (process.argv[authIndex] as any) ?? "offline",
+    logErrors: false,
+    hideErrors: true
   };
 }
 
@@ -146,9 +179,23 @@ export function createPhysicsSwitcher<TBot extends PhysicsBot>(bot: TBot) {
   };
 }
 
-export function registerConsoleRelay(bot: Bot) {
+export function registerConsoleRelay<TBot extends PhysicsBot>(
+  bot: TBot,
+  hooks: ManagedBotHooks<TBot>,
+  helpers: BotHelpers<TBot>,
+) {
   rl.removeAllListeners("line");
-  rl.on("line", (line: string) => bot.chat(line));
+  rl.on("line", (line: string) => {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) return;
+
+    if (trimmed.startsWith("chat ")) {
+      bot.chat(trimmed.slice(5));
+      return;
+    }
+
+    void hooks.onChat?.(bot, DEFAULT_CLI_USERNAME, trimmed, helpers);
+  });
 }
 
 export function buildManagedBot<TBot extends PhysicsBot>(
@@ -175,7 +222,7 @@ export function buildManagedBot<TBot extends PhysicsBot>(
     });
   }
 
-  registerConsoleRelay(bot);
+  registerConsoleRelay(bot, hooks, helpers);
   bot.on("kicked", console.log);
   bot.on("error", console.log);
 

@@ -1,6 +1,13 @@
 import { Bot } from "mineflayer";
 import { PlayerState } from "../src/physics/states";
-import { buildManagedBot, getBotOptionsFromArgs, type PhysicsBot, type PhysicsSwitcher, sleep } from "./util/botSetup";
+import {
+  buildManagedBot,
+  getBotOptionsFromArgs,
+  performElytraTakeoff,
+  type PhysicsBot,
+  type PhysicsSwitcher,
+  sleep,
+} from "./util/botSetup";
 
 type ElytraBot = PhysicsBot & {
   elytraFly: () => Promise<void>;
@@ -126,14 +133,7 @@ function printFlightSummary(samples: FlightSample[]) {
 }
 
 async function triggerElytraFlight(bot: ElytraBot, pitchDeg = 50) {
-  await bot.look(Math.PI, pitchDeg * Math.PI / 180);
-  bot.setControlState("jump", true);
-  await sleep(100);
-  bot.setControlState("jump", false);
-  await sleep(50);
-  await bot.elytraFly();
-  await sleep(50);
-  bot.activateItem();
+  await performElytraTakeoff(bot, Math.PI, pitchDeg * Math.PI / 180);
 }
 
 async function runElytraTest(bot: ElytraBot, dir: number, physicsSwitcher: PhysicsSwitcher) {
@@ -143,6 +143,7 @@ async function runElytraTest(bot: ElytraBot, dir: number, physicsSwitcher: Physi
   const samples = await collectFlightSamples(bot, 80);
   printFlightSummary(samples);
   console.log("[elytra] final state", formatFlightState(bot, physicsSwitcher.getState()));
+  bot.clearControlStates();
 }
 
 async function handleChatCommand(
