@@ -27,6 +27,7 @@ export function collectMovementDeltas(options: {
   groundY?: number;
   ticks: number;
   startFallFlyingTick?: number;
+  fallFlyingClearDelayTicks?: number;
   holdJump?: boolean;
   releaseJumpTick?: number;
   holdForward?: boolean;
@@ -85,19 +86,34 @@ export function collectMovementDeltas(options: {
   playerState.pitch = options.pitch ?? 0;
 
   const deltas: MovementDeltaSample[] = [];
+  let groundedFallFlyingTicks = 0;
   for (let i = 0; i < options.ticks; i++) {
     if (options.releaseJumpTick != null && i === options.releaseJumpTick) {
       playerState.control.jump = false;
     }
 
     if (options.startFallFlyingTick != null && i === options.startFallFlyingTick) {
-      playerState.fallFlying = true;
       fakePlayer.entity.fallFlying = true;
+      fakePlayer.entity.elytraFlying = true;
     }
+
+    playerState.fallFlying = fakePlayer.entity.fallFlying ?? fakePlayer.entity.elytraFlying ?? false;
 
     const previousPos = playerState.pos.clone();
     physics.simulate(playerCtx, fakeWorld);
     playerState.apply(fakePlayer);
+
+    if (fakePlayer.entity.fallFlying && playerState.onGround && playerState.fallFlying) {
+      groundedFallFlyingTicks++;
+      if (options.fallFlyingClearDelayTicks != null && groundedFallFlyingTicks >= options.fallFlyingClearDelayTicks) {
+        fakePlayer.entity.fallFlying = false;
+        fakePlayer.entity.elytraFlying = false;
+        playerState.fallFlying = false;
+      }
+    } else if (!playerState.onGround) {
+      groundedFallFlyingTicks = 0;
+    }
+
     deltas.push({
       x: playerState.pos.x - previousPos.x,
       y: playerState.pos.y - previousPos.y,
