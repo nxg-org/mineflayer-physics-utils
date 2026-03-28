@@ -1,4 +1,4 @@
 dist/
 node_modules/
 research_refs/
-tests/***/*.log
+tests/**/*.log
