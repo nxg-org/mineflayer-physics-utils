@@ -133,7 +133,7 @@ function printFlightSummary(samples: FlightSample[]) {
 }
 
 async function triggerElytraFlight(bot: ElytraBot, pitchDeg = 50) {
-  await performElytraTakeoff(bot, Math.PI, pitchDeg * Math.PI / 180);
+  await performElytraTakeoff(bot, Math.PI, pitchDeg * Math.PI / 180, true);
 }
 
 async function runElytraTest(bot: ElytraBot, dir: number, physicsSwitcher: PhysicsSwitcher) {
