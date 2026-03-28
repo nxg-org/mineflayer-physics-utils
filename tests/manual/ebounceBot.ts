@@ -111,13 +111,158 @@ async function ensureBounceLoadout(bot: Bot) {
   }
 }
 
-class EBounceController {
+type BounceVector = { x: number; y: number; z: number };
 
+type BounceInput = {
+  forward: boolean;
+  sprint: boolean;
+  jump: boolean;
+  yaw: number | null;
+  pitch: number | null;
+};
+
+type BounceSnapshot = {
+  position: BounceVector;
+  velocity: BounceVector;
+  yaw: number;
+  pitch: number;
+  onGround: boolean;
+  rawFallFlying: boolean;
+  pendingFlight: boolean;
+  pendingRequest: boolean;
+  controlJump: boolean;
+  jumpTicks: number;
+  lastSentOnGround: boolean | "null";
+  fireworkTicks: number;
+  clientOnGround: boolean | null;
+  clientFallFlying: boolean | null;
+  pose: string | null;
+};
+
+type EBounceOptions = {
+  syncTimeoutTicks: number;
+  maxTeleportDistance: number;
+  warmupSpeedThreshold: number;
+  minBoostSpeed: number;
+  maxBoostSpeed: number;
+  takeoffTimeoutTicks: number;
+  retryDelayTicks: number;
+  targetPitchDeg: number;
+};
+
+const DEFAULT_EBOUNCE_OPTIONS: EBounceOptions = {
+  syncTimeoutTicks: SYNC_TIMEOUT_TICKS,
+  maxTeleportDistance: MAX_TELEPORT_DIST,
+  warmupSpeedThreshold: WARMUP_SPEED_THRESHOLD,
+  minBoostSpeed: MIN_BOOST_SPEED,
+  maxBoostSpeed: MAX_SPEED,
+  takeoffTimeoutTicks: TAKEOFF_TIMEOUT_TICKS,
+  retryDelayTicks: RETRY_DELAY_TICKS,
+  targetPitchDeg: TARGET_PITCH_DEG,
+};
+
+interface EBouncePort {
+  getSnapshot(): BounceSnapshot;
+  isElytraEquipped(): boolean;
+  ensureElytraEquipped(): Promise<EquipResult>;
+  setInput(input: BounceInput): void;
+  clearInputs(): void;
+  setVerticalVelocity(y: number): void;
+  look(yaw: number, pitch: number): Promise<void>;
+  requestGlide(assistTakeoff: boolean): Promise<void>;
+  activateItem(): void;
+  log(message: string): void;
+}
+
+class MineflayerEBouncePort implements EBouncePort {
+  constructor(
+    private readonly bot: EBounceBot,
+    private readonly physicsSwitcher: PhysicsSwitcher,
+  ) {}
+
+  public getSnapshot(): BounceSnapshot {
+    const clientState = this.physicsSwitcher.getState();
+    const rawFallFlying = (this.bot.entity as any).fallFlying ?? this.bot.entity.elytraFlying ?? false;
+    const pendingFlight = (this.bot.entity as any)._pendingElytraFlightConfirmation ?? false;
+    return {
+      position: this.bot.entity.position,
+      velocity: this.bot.entity.velocity,
+      yaw: this.bot.entity.yaw,
+      pitch: this.bot.entity.pitch,
+      onGround: this.bot.entity.onGround,
+      rawFallFlying,
+      pendingFlight,
+      pendingRequest: (this.bot.entity as any)._pendingElytraFlyRequest ?? false,
+      controlJump: this.bot.getControlState("jump"),
+      jumpTicks: (this.bot as any).jumpTicks ?? 0,
+      lastSentOnGround: (this.bot as any)._lastSent?.onGround ?? "null",
+      fireworkTicks: this.bot.fireworkRocketDuration,
+      clientOnGround: clientState?.onGround ?? null,
+      clientFallFlying: clientState?.fallFlying ?? null,
+      pose: clientState?.pose != null ? String(clientState.pose) : null,
+    };
+  }
+
+  public isElytraEquipped() {
+    return isUsableElytra(findEquippedItem(this.bot, "torso", "elytra"));
+  }
+
+  public async ensureElytraEquipped(): Promise<EquipResult> {
+    const equipped = findEquippedItem(this.bot, "torso", "elytra");
+    if (isUsableElytra(equipped)) return EquipResult.ALREADY_EQUIPPED;
+
+    const elytra = findInventoryItem(this.bot, "elytra");
+    if (!isUsableElytra(elytra) || !elytra) return EquipResult.FAILED;
+
+    await this.bot.equip(elytra, "torso");
+    return EquipResult.JUST_SWAPPED;
+  }
+
+  public setInput(input: BounceInput) {
+    this.bot.setControlState("forward", input.forward);
+    this.bot.setControlState("back", false);
+    this.bot.setControlState("left", false);
+    this.bot.setControlState("right", false);
+    this.bot.setControlState("sprint", input.sprint);
+    this.bot.setControlState("sneak", false);
+    this.bot.setControlState("jump", input.jump);
+
+    if (input.yaw != null || input.pitch != null) {
+      const nextYaw = input.yaw ?? this.bot.entity.yaw;
+      const nextPitch = input.pitch ?? this.bot.entity.pitch;
+      void this.bot.look(nextYaw, nextPitch);
+    }
+  }
+
+  public clearInputs() {
+    this.bot.clearControlStates();
+  }
+
+  public setVerticalVelocity(y: number) {
+    this.bot.entity.velocity.y = y;
+  }
+
+  public async look(yaw: number, pitch: number) {
+    await this.bot.look(yaw, pitch);
+  }
+
+  public async requestGlide(assistTakeoff: boolean) {
+    await this.bot.elytraFly({ assistTakeoff });
+  }
+
+  public activateItem() {
+    this.bot.activateItem();
+  }
+
+  public log(message: string) {
+    console.log(`[ebounce] ${message}`);
+  }
+}
+
+class EBounceController {
   private currentState = FlightState.IDLE;
   private stateTicks = 0;
-  private lastPos: Bot["entity"]["position"] | null = null;
-  private lastLoggedEntityPos: Bot["entity"]["position"] | null = null;
-  private lastLoggedClientPos: { x: number; y: number; z: number } | null = null;
+  private lastPos: BounceVector | null = null;
   private lockPitch = true;
   private lockYaw = true;
   private targetYaw: number | null = null;
@@ -133,28 +278,30 @@ class EBounceController {
   private lastRetryBlockReason: string | null = null;
   private bounceTicks = 0;
   private bounceGroundTicks = 0;
-  private bounceGroundStartTick: number | null = null;
-  private lastBounceOnGround: boolean | null = null;
+  private lastBounceOnGround = false;
   private lastJumpCommand = false;
   private jumpAttemptCount = 0;
+  private readonly options: EBounceOptions;
 
   constructor(
-    private readonly bot: EBounceBot,
-    private readonly physicsSwitcher: PhysicsSwitcher,
-  ) {}
+    private readonly port: EBouncePort,
+    options: Partial<EBounceOptions> = {},
+  ) {
+    this.options = { ...DEFAULT_EBOUNCE_OPTIONS, ...options };
+  }
 
   public beginBounce() {
     if (this.currentState !== FlightState.IDLE) return;
 
     this.lockedYaw = null;
 
-    if (this.isElytraEquipped()) {
-      this.log("Optimistic Start: usable elytra already equipped. Skipping equip.");
+    if (this.port.isElytraEquipped()) {
+      this.port.log("Optimistic Start: usable elytra already equipped. Skipping equip.");
       this.transitionTo(FlightState.WARMUP);
       return;
     }
 
-    this.log("Initiating pre-flight equip.");
+    this.port.log("Initiating pre-flight equip.");
     this.transitionTo(FlightState.PRE_SYNC);
   }
 
@@ -163,19 +310,19 @@ class EBounceController {
 
     this.sequenceToken++;
     this.transitionTo(FlightState.IDLE);
-    this.cleanupPhysics();
-    this.bot.clearControlStates();
+    this.cleanup();
+    this.port.clearInputs();
   }
 
   public resetState() {
-    this.log("Forcing state reset.");
+    this.port.log("Forcing state reset.");
     this.sequenceToken++;
     this.currentState = FlightState.IDLE;
     this.stateTicks = 0;
-    this.cleanupPhysics();
-    this.bot.clearControlStates();
     this.pendingEquip = null;
     this.equipToken++;
+    this.cleanup();
+    this.port.clearInputs();
   }
 
   public setLockPitch(enabled: boolean) {
@@ -189,8 +336,8 @@ class EBounceController {
 
   public setTargetYawDegrees(degrees: number | null) {
     this.targetYaw = degrees == null ? null : toRadians(degrees);
-    if (degrees == null) this.log("Cleared target yaw.");
-    else this.log(`Target yaw set to ${degrees.toFixed(1)} deg.`);
+    if (degrees == null) this.port.log("Cleared target yaw.");
+    else this.port.log(`Target yaw set to ${degrees.toFixed(1)} deg.`);
   }
 
   public clearTargetYaw() {
@@ -198,52 +345,46 @@ class EBounceController {
   }
 
   public status() {
-    const state = this.physicsSwitcher.getState();
+    const snapshot = this.port.getSnapshot();
     return [
       `state=${this.currentState}`,
       `ticks=${this.stateTicks}`,
-      `pos=${this.bot.entity.position.toString()}`,
-      `vel=${this.bot.entity.velocity.toString()}`,
-      `entityOnGround=${this.bot.entity.onGround}`,
-      `entityElytraFlying=${this.bot.entity.elytraFlying}`,
-      `entityFallFlying=${this.getEntityFallFlying()}`,
-      `confirmedFallFlying=${this.isConfirmedFallFlying()}`,
-      `pendingFlight=${this.isPendingElytraFlight()}`,
-      `pendingRequest=${this.isPendingElytraRequest()}`,
-      `glideRequested=${this.glideRequested}`,
-      `fireworkTicks=${this.bot.fireworkRocketDuration}`,
+      `pos=${this.formatVec3(snapshot.position)}`,
+      `vel=${this.formatVec3(snapshot.velocity)}`,
       `speed=${this.currentSpeed.toFixed(2)}`,
+      `onGround=${snapshot.onGround}`,
+      `sentOnGround=${snapshot.lastSentOnGround}`,
+      `fallFlying=${snapshot.rawFallFlying}`,
+      `confirmedFallFlying=${this.isConfirmedFallFlying(snapshot)}`,
+      `pendingFlight=${snapshot.pendingFlight}`,
+      `pendingRequest=${snapshot.pendingRequest}`,
+      `controlJump=${snapshot.controlJump}`,
+      `jumpTicks=${snapshot.jumpTicks}`,
+      `fireworkTicks=${snapshot.fireworkTicks}`,
       `takeoffAttempts=${this.takeoffAttemptCount}`,
       `jumpAttempts=${this.jumpAttemptCount}`,
       `bounceTicks=${this.bounceTicks}`,
       `bounceOnGroundTicks=${this.bounceGroundTicks}`,
-      `bounceOnGround=${this.lastBounceOnGround}`,
-      state ? `clientOnGround=${state.onGround}` : null,
-      state ? `clientFallFlying=${state.fallFlying}` : null,
-      `sentOnGround=${this.getLastSentOnGround()}`,
-      `controlJump=${this.bot.getControlState("jump")}`,
-      `jumpTicks=${(this.bot as any).jumpTicks ?? 0}`,
+      snapshot.clientOnGround == null ? null : `clientOnGround=${snapshot.clientOnGround}`,
+      snapshot.clientFallFlying == null ? null : `clientFallFlying=${snapshot.clientFallFlying}`,
+      snapshot.pose == null ? null : `pose=${snapshot.pose}`,
       `targetYaw=${this.targetYaw == null ? "null" : toDegrees(this.targetYaw).toFixed(1)}`,
       `lockedYaw=${this.lockedYaw == null ? "null" : toDegrees(this.lockedYaw).toFixed(1)}`,
       `lockYaw=${this.lockYaw}`,
       `lockPitch=${this.lockPitch}`,
-      state ? `pose=${state.pose}` : null,
     ]
       .filter((value): value is string => value != null)
       .join(" ");
   }
 
-  public onPhysicsTick() {
-    if (!this.physicsSwitcher.isEnabled()) {
-      this.physicsSwitcher.enable();
-    }
-
+  public tick() {
     this.stateTicks++;
     if (this.retryDelayTicks > 0) {
       this.retryDelayTicks--;
     }
-    const speedBps = this.calculateSpeed();
-    this.currentSpeed = speedBps;
+
+    const snapshot = this.port.getSnapshot();
+    this.currentSpeed = this.calculateSpeed(snapshot.position);
 
     switch (this.currentState) {
       case FlightState.PRE_SYNC:
@@ -253,13 +394,13 @@ class EBounceController {
         this.handleEquipping();
         return;
       case FlightState.WARMUP:
-        this.handleWarmup();
+        this.handleWarmup(snapshot);
         return;
       case FlightState.LAUNCHING:
-        this.handleLaunching();
+        this.handleLaunching(snapshot);
         return;
       case FlightState.BOUNCING:
-        this.handleBouncing(speedBps);
+        this.handleBouncing(snapshot, this.currentSpeed);
         return;
       case FlightState.IDLE:
         return;
@@ -267,24 +408,26 @@ class EBounceController {
   }
 
   public onDeathLikeEvent() {
-    this.log("Resetting state after disconnect/death-like event.");
+    this.port.log("Resetting state after disconnect/death-like event.");
     this.resetState();
   }
 
   private transitionTo(newState: FlightState) {
     if (this.currentState === newState) return;
-    const previousState = this.currentState;
-    if (previousState === FlightState.BOUNCING && newState !== FlightState.BOUNCING) {
-      this.logBounceGroundSummary();
+
+    if (this.currentState === FlightState.BOUNCING && newState !== FlightState.BOUNCING && this.bounceTicks > 0) {
+      this.port.log(`Bounce summary: onGroundTicks=${this.bounceGroundTicks}/${this.bounceTicks}`);
     }
 
-    this.log(`State: ${previousState} -> ${newState}`);
+    this.port.log(`State: ${this.currentState} -> ${newState}`);
     this.currentState = newState;
     this.stateTicks = 0;
 
     if (newState === FlightState.BOUNCING) {
-      this.lockedYaw = this.bot.entity.yaw;
-      this.resetBounceGroundReport();
+      this.lockedYaw = this.port.getSnapshot().yaw;
+      this.bounceTicks = 0;
+      this.bounceGroundTicks = 0;
+      this.lastBounceOnGround = false;
     }
 
     if (newState === FlightState.IDLE) {
@@ -297,26 +440,26 @@ class EBounceController {
   private handlePreSync() {
     this.resetInputs();
 
-    if (this.stateTicks > SYNC_TIMEOUT_TICKS) {
-      this.log("WARN: equip preparation timed out.");
+    if (this.stateTicks > this.options.syncTimeoutTicks) {
+      this.port.log("WARN: equip preparation timed out.");
       this.stopFlight();
       return;
     }
 
     if (this.pendingEquip) return;
 
-    const myToken = ++this.equipToken;
+    const token = ++this.equipToken;
     this.pendingEquip = (async () => {
       try {
-        const result = await this.ensureElytraEquipped();
-        if (myToken !== this.equipToken || this.currentState !== FlightState.PRE_SYNC) return;
+        const result = await this.port.ensureElytraEquipped();
+        if (token !== this.equipToken || this.currentState !== FlightState.PRE_SYNC) return;
         this.processEquipResult(result);
       } catch (error) {
-        if (myToken !== this.equipToken || this.currentState !== FlightState.PRE_SYNC) return;
-        this.log(`FAIL: ${String(error)}`);
+        if (token !== this.equipToken || this.currentState !== FlightState.PRE_SYNC) return;
+        this.port.log(`FAIL: ${String(error)}`);
         this.stopFlight();
       } finally {
-        if (myToken === this.equipToken) {
+        if (token === this.equipToken) {
           this.pendingEquip = null;
         }
       }
@@ -326,110 +469,91 @@ class EBounceController {
   private handleEquipping() {
     this.resetInputs();
 
-    if (this.stateTicks > SYNC_TIMEOUT_TICKS) {
-      this.log("FAIL: equip confirmation timed out.");
+    if (this.stateTicks > this.options.syncTimeoutTicks) {
+      this.port.log("FAIL: equip confirmation timed out.");
       this.stopFlight();
       return;
     }
 
-    if (this.isElytraEquipped()) {
-      this.log("Equip confirmed. Moving to warmup.");
+    if (this.port.isElytraEquipped()) {
+      this.port.log("Equip confirmed. Moving to warmup.");
       this.transitionTo(FlightState.WARMUP);
     }
   }
 
-  private handleWarmup() {
-    const vel = this.bot.entity.velocity;
-    const yaw = this.getLockedYaw();
+  private handleWarmup(snapshot: BounceSnapshot) {
+    const yaw = this.getLockedYaw(snapshot);
     const pitch = this.getLockedPitch();
-    const yawRad = yaw ?? 0;
-    const lookX = -Math.sin(yawRad);
-    const lookZ = Math.cos(yawRad);
-    const speedInDirection = Math.abs((vel.x * lookX) + (vel.z * lookZ));
-    if (speedInDirection > WARMUP_SPEED_THRESHOLD || !this.bot.entity.onGround) {
-      this.log(`Warmup Complete (DirSpeed: ${speedInDirection.toFixed(2)}). Launching.`);
+    const speedInDirection = this.getForwardSpeed(snapshot.velocity, yaw ?? snapshot.yaw);
+
+    if (speedInDirection > this.options.warmupSpeedThreshold || !snapshot.onGround) {
+      this.port.log(`Warmup Complete (DirSpeed: ${speedInDirection.toFixed(2)}). Launching.`);
       this.transitionTo(FlightState.LAUNCHING);
-    } else {
-      this.submitInput(true, true, false, yaw, pitch);
+      return;
     }
+
+    this.submitInput({ forward: true, sprint: true, jump: false, yaw, pitch }, snapshot);
   }
 
-  private handleLaunching() {
-    if (this.stateTicks > TAKEOFF_TIMEOUT_TICKS) {
-      this.log("FAIL: takeoff timed out.");
+  private handleLaunching(snapshot: BounceSnapshot) {
+    if (this.stateTicks > this.options.takeoffTimeoutTicks) {
+      this.port.log("FAIL: takeoff timed out.");
       this.stopFlight();
       return;
     }
 
     if (this.takeoffInFlight) return;
 
-    const yaw = this.getLockedYaw() ?? this.bot.entity.yaw;
-    const pitch = this.getLockedPitch() ?? this.bot.entity.pitch;
-    void this.runTakeoffSequence(yaw, pitch);
+    const yaw = this.getLockedYaw(snapshot) ?? snapshot.yaw;
+    const pitch = this.getLockedPitch() ?? snapshot.pitch;
+    void this.runTakeoffSequence(yaw, pitch, snapshot.onGround);
   }
 
-  private handleBouncing(speedBps: number) {
-    const isOnGround = this.bot.entity.onGround;
-    this.recordBounceGroundState(speedBps);
-
-    if (isOnGround && speedBps < MAX_SPEED && speedBps > MIN_BOOST_SPEED) {
-      this.bot.entity.velocity.y = 0;
+  private handleBouncing(snapshot: BounceSnapshot, speedBps: number) {
+    this.bounceTicks++;
+    this.lastBounceOnGround = snapshot.onGround;
+    if (snapshot.onGround) {
+      this.bounceGroundTicks++;
     }
 
-    if (isOnGround && this.hasActiveGlideRequest()) {
-      this.log(`Clearing glide request on ground contact. retryDelay=${RETRY_DELAY_TICKS}`);
+    if (snapshot.onGround && speedBps < this.options.maxBoostSpeed && speedBps > this.options.minBoostSpeed) {
+      this.port.setVerticalVelocity(0);
+    }
+
+    if (snapshot.onGround && this.hasActiveGlideRequest(snapshot)) {
+      this.port.log(`Clearing glide request on ground contact. retryDelay=${this.options.retryDelayTicks}`);
       this.glideRequested = false;
-      this.retryDelayTicks = RETRY_DELAY_TICKS;
+      this.retryDelayTicks = this.options.retryDelayTicks;
     }
 
-    if (isOnGround && !this.hasActiveGlideRequest() && !this.takeoffInFlight && this.retryDelayTicks === 0) {
+    const canRetry = !this.hasActiveGlideRequest(snapshot) && !this.takeoffInFlight && this.retryDelayTicks === 0;
+    if (snapshot.onGround && canRetry) {
       this.lastRetryBlockReason = null;
-      this.log("Retrying grounded glide request.");
+      this.port.log("Retrying grounded glide request.");
       void this.requestGlide(true).catch(() => {
-        this.log("WARN: grounded bounce glide request failed.");
+        this.port.log("WARN: grounded bounce glide request failed.");
       });
-    } else if (!isOnGround && !this.hasActiveGlideRequest() && !this.takeoffInFlight && this.retryDelayTicks === 0) {
+    } else if (!snapshot.onGround && canRetry) {
       this.lastRetryBlockReason = null;
-      this.log("Retrying glide request.");
+      this.port.log("Retrying glide request.");
       void this.requestGlide(false).catch(() => {
-        this.log("WARN: bounce glide request failed.");
+        this.port.log("WARN: bounce glide request failed.");
       });
     } else {
-      const blockParts = [
-        isOnGround ? "onGround" : null,
-        this.glideRequested ? "glideRequested=true" : null,
-        this.isPendingElytraRequest() ? "pendingRequest=true" : null,
-        this.isPendingElytraFlight() ? "pendingFlight=true" : null,
-        this.isConfirmedFallFlying() ? "confirmedFallFlying=true" : null,
-        this.getEntityFallFlying() && !this.isConfirmedFallFlying() ? "entityFallFlying=speculative" : null,
-        this.takeoffInFlight ? "takeoffInFlight=true" : null,
-        this.retryDelayTicks > 0 ? `retryDelay=${this.retryDelayTicks}` : null,
-      ].filter((value): value is string => value != null);
-      const blockReason = blockParts.length > 0 ? blockParts.join(", ") : null;
-
-      if (blockReason && blockReason !== this.lastRetryBlockReason) {
-        this.lastRetryBlockReason = blockReason;
-        this.log(`Retry blocked: ${blockReason}`);
-      }
+      this.logRetryBlock(snapshot);
     }
 
-    this.submitInput(true, true, isOnGround, this.getLockedYaw(), this.getLockedPitch());
-    this.logBounceCommand(speedBps, isOnGround, isOnGround);
-  }
-
-  private async ensureElytraEquipped(): Promise<EquipResult> {
-    const equipped = findEquippedItem(this.bot, "torso", "elytra");
-    if (isUsableElytra(equipped)) return EquipResult.ALREADY_EQUIPPED;
-
-    const elytra = findInventoryItem(this.bot, "elytra");
-    if (!isUsableElytra(elytra) || !elytra) return EquipResult.FAILED;
-
-    await this.bot.equip(elytra, "torso");
-    return EquipResult.JUST_SWAPPED;
+    this.submitInput({
+      forward: true,
+      sprint: true,
+      jump: snapshot.onGround,
+      yaw: this.getLockedYaw(snapshot),
+      pitch: this.getLockedPitch(),
+    }, snapshot);
   }
 
   private processEquipResult(result: EquipResult) {
-    this.log(`Equipment Check Result: ${result}`);
+    this.port.log(`Equipment Check Result: ${result}`);
     switch (result) {
       case EquipResult.ALREADY_EQUIPPED:
         this.transitionTo(FlightState.WARMUP);
@@ -438,16 +562,14 @@ class EBounceController {
         this.transitionTo(FlightState.EQUIPPING);
         return;
       case EquipResult.FAILED:
-        this.log("FAIL: usable elytra not found.");
+        this.port.log("FAIL: usable elytra not found.");
         this.stopFlight();
         return;
     }
   }
 
-  private cleanupPhysics() {
+  private cleanup() {
     this.lastPos = null;
-    this.lastLoggedEntityPos = null;
-    this.lastLoggedClientPos = null;
     this.lockedYaw = null;
     this.targetYaw = null;
     this.currentSpeed = 0;
@@ -458,242 +580,142 @@ class EBounceController {
     this.lastRetryBlockReason = null;
     this.lastJumpCommand = false;
     this.jumpAttemptCount = 0;
-    this.resetBounceGroundReport();
-  }
-
-  private resetBounceGroundReport() {
     this.bounceTicks = 0;
     this.bounceGroundTicks = 0;
-    this.bounceGroundStartTick = null;
-    this.lastBounceOnGround = null;
+    this.lastBounceOnGround = false;
   }
 
-  private recordBounceGroundState(speedBps: number) {
-    const clientState = this.physicsSwitcher.getState();
-    const entityOnGround = this.bot.entity.onGround;
-    const entityFallFlying = this.getEntityFallFlying();
-    const confirmedFallFlying = this.isConfirmedFallFlying();
-    const clientOnGround = clientState?.onGround ?? null;
-    const clientFallFlying = clientState?.fallFlying ?? null;
-
-    this.bounceTicks++;
-    if (entityOnGround) {
-      this.bounceGroundTicks++;
+  private calculateSpeed(position: BounceVector) {
+    if (this.lastPos == null) {
+      this.lastPos = { ...position };
+      return 0;
     }
 
-    if (this.lastBounceOnGround == null) {
-      this.lastBounceOnGround = entityOnGround;
-      this.bounceGroundStartTick = entityOnGround ? this.bounceTicks : null;
-    } else if (this.lastBounceOnGround !== entityOnGround) {
-      this.lastBounceOnGround = entityOnGround;
-      this.bounceGroundStartTick = entityOnGround ? this.bounceTicks : null;
+    const dx = position.x - this.lastPos.x;
+    const dz = position.z - this.lastPos.z;
+    const dist = Math.sqrt((dx * dx) + (dz * dz));
+    this.lastPos = { ...position };
+
+    if (dist > this.options.maxTeleportDistance) {
+      return 0;
     }
 
-    this.log(
-      `Bounce preInput tick=${this.bounceTicks} speed=${speedBps.toFixed(2)} ` +
-      `entity.onGround=${entityOnGround} entity.fallFlying=${entityFallFlying} ` +
-      `confirmed.fallFlying=${confirmedFallFlying} pendingRequest=${this.isPendingElytraRequest()} ` +
-      `pendingFlight=${this.isPendingElytraFlight()} control.jump=${this.bot.getControlState("jump")} ` +
-      `sentOnGround=${this.getLastSentOnGround()} jumpTicks=${(this.bot as any).jumpTicks ?? 0} ` +
-      `entity.pos=${this.formatVec3(this.bot.entity.position)} entity.dPos=${this.formatDelta(this.lastLoggedEntityPos, this.bot.entity.position)} ` +
-      `entity.vel=${this.formatVec3(this.bot.entity.velocity)} ` +
-      `client.onGround=${clientOnGround == null ? "null" : clientOnGround} ` +
-      `client.fallFlying=${clientFallFlying == null ? "null" : clientFallFlying} ` +
-      `client.pos=${this.formatOptionalVec3(clientState?.pos)} client.dPos=${this.formatDelta(this.lastLoggedClientPos, clientState?.pos ?? null)} ` +
-      `client.vel=${this.formatOptionalVec3(clientState?.vel)}`,
-    );
-  }
-
-  private logBounceCommand(speedBps: number, tickStartedOnGround: boolean, jump: boolean) {
-    const clientState = this.physicsSwitcher.getState();
-    this.log(
-      `Bounce command tick=${this.bounceTicks} speed=${speedBps.toFixed(2)} ` +
-      `tickStartedOnGround=${tickStartedOnGround} desired.jump=${jump} ` +
-      `control.jump=${this.bot.getControlState("jump")} sentOnGround=${this.getLastSentOnGround()} jumpTicks=${(this.bot as any).jumpTicks ?? 0} ` +
-      `entity.onGround=${this.bot.entity.onGround} entity.fallFlying=${this.getEntityFallFlying()} ` +
-      `confirmed.fallFlying=${this.isConfirmedFallFlying()} pendingRequest=${this.isPendingElytraRequest()} ` +
-      `pendingFlight=${this.isPendingElytraFlight()} entity.pos=${this.formatVec3(this.bot.entity.position)} ` +
-      `entity.vel=${this.formatVec3(this.bot.entity.velocity)} client.onGround=${clientState?.onGround ?? "null"} ` +
-      `client.fallFlying=${clientState?.fallFlying ?? "null"} client.pos=${this.formatOptionalVec3(clientState?.pos)} ` +
-      `client.vel=${this.formatOptionalVec3(clientState?.vel)}`,
-    );
-
-    this.lastLoggedEntityPos = this.bot.entity.position.clone();
-    this.lastLoggedClientPos = clientState?.pos == null ? null : { ...clientState.pos };
-  }
-
-  private logBounceGroundSummary() {
-    if (this.bounceTicks === 0) return;
-    this.log(
-      `Bounce ground report: onGroundTicks=${this.bounceGroundTicks}/${this.bounceTicks} finalOnGround=${this.lastBounceOnGround ?? false}`,
-    );
-  }
-
-  private calculateSpeed() {
-    const currentPos = this.bot.entity.position.clone();
-    let speed = 0;
-
-    if (this.lastPos) {
-      const dx = currentPos.x - this.lastPos.x;
-      const dz = currentPos.z - this.lastPos.z;
-      const dist = Math.sqrt((dx * dx) + (dz * dz));
-      if (dist > MAX_TELEPORT_DIST) {
-        this.lastPos = currentPos;
-        return 0;
-      }
-      speed = dist * 20;
-    }
-
-    this.lastPos = currentPos;
-    return speed;
+    return dist * 20;
   }
 
   private resetInputs() {
-    this.submitInput(false, false, false, null, null);
+    this.port.setInput({ forward: false, sprint: false, jump: false, yaw: null, pitch: null });
+    this.lastJumpCommand = false;
   }
 
-  private submitMovementInput(forward: boolean, sprint: boolean, yaw: number | null, pitch: number | null) {
-    this.bot.setControlState("forward", forward);
-    this.bot.setControlState("back", false);
-    this.bot.setControlState("left", false);
-    this.bot.setControlState("right", false);
-    this.bot.setControlState("sprint", sprint);
-    this.bot.setControlState("sneak", false);
-
-    if (yaw != null || pitch != null) {
-      const nextYaw = yaw ?? this.bot.entity.yaw;
-      const nextPitch = pitch ?? this.bot.entity.pitch;
-      this.applyLook(nextYaw, nextPitch);
-    }
+  private submitInput(input: BounceInput, snapshot: BounceSnapshot) {
+    this.port.setInput(input);
+    this.recordJumpAttempt(input.jump, snapshot);
   }
 
-  private submitInput(forward: boolean, sprint: boolean, jump: boolean, yaw: number | null, pitch: number | null) {
-    this.submitMovementInput(forward, sprint, yaw, pitch);
-    this.bot.setControlState("jump", jump);
-    this.recordJumpAttempt(jump);
-  }
-
-  private applyLook(yaw: number, pitch: number) {
-    void this.bot.look(yaw, pitch);
-  }
-
-  private getLockedYaw() {
+  private getLockedYaw(snapshot: BounceSnapshot) {
     if (this.targetYaw != null) return this.targetYaw;
     if (!this.lockYaw) return null;
     if (this.lockedYaw == null) {
-      this.lockedYaw = this.bot.entity.yaw;
+      this.lockedYaw = snapshot.yaw;
     }
     return this.lockedYaw;
   }
 
   private getLockedPitch() {
-    return this.lockPitch ? toRadians(TARGET_PITCH_DEG) : null;
+    return this.lockPitch ? toRadians(this.options.targetPitchDeg) : null;
   }
 
-  private getEntityFallFlying() {
-    return (this.bot.entity as any).fallFlying ?? this.bot.entity.elytraFlying ?? false;
+  private isConfirmedFallFlying(snapshot: BounceSnapshot) {
+    return snapshot.rawFallFlying && !snapshot.pendingFlight;
   }
 
-  private isConfirmedFallFlying() {
-    return this.getEntityFallFlying() && !this.isPendingElytraFlight();
+  private hasActiveGlideRequest(snapshot: BounceSnapshot) {
+    return this.glideRequested || snapshot.pendingRequest || snapshot.pendingFlight || this.isConfirmedFallFlying(snapshot);
   }
 
-  private recordJumpAttempt(jump: boolean) {
-    if (jump && !this.lastJumpCommand) {
-      const clientState = this.physicsSwitcher.getState();
-      this.jumpAttemptCount++;
-      this.log(
-        `Jump attempt=${this.jumpAttemptCount} state=${this.currentState} tick=${this.stateTicks} phase=commandEdge ` +
-        `entity.onGround=${this.bot.entity.onGround} entity.fallFlying=${this.getEntityFallFlying()} ` +
-        `confirmed.fallFlying=${this.isConfirmedFallFlying()} pendingRequest=${this.isPendingElytraRequest()} ` +
-        `pendingFlight=${this.isPendingElytraFlight()} sentOnGround=${this.getLastSentOnGround()} jumpTicks=${(this.bot as any).jumpTicks ?? 0} ` +
-        `entity.pos=${this.formatVec3(this.bot.entity.position)} entity.vel=${this.formatVec3(this.bot.entity.velocity)} ` +
-        `client.onGround=${clientState?.onGround ?? "null"} client.fallFlying=${clientState?.fallFlying ?? "null"} ` +
-        `client.pos=${this.formatOptionalVec3(clientState?.pos)} client.vel=${this.formatOptionalVec3(clientState?.vel)}`,
-      );
+  private recordJumpAttempt(jump: boolean, snapshot: BounceSnapshot) {
+    if (!jump || this.lastJumpCommand) {
+      this.lastJumpCommand = jump;
+      return;
     }
-    this.lastJumpCommand = jump;
+
+    this.jumpAttemptCount++;
+    this.port.log(
+      `Jump attempt=${this.jumpAttemptCount} state=${this.currentState} tick=${this.stateTicks} ` +
+      `onGround=${snapshot.onGround} sentOnGround=${snapshot.lastSentOnGround} ` +
+      `fallFlying=${snapshot.rawFallFlying} pendingFlight=${snapshot.pendingFlight} pendingRequest=${snapshot.pendingRequest}`,
+    );
+    this.lastJumpCommand = true;
   }
 
-  private formatVec3(vec: { x: number; y: number; z: number }) {
-    return `${vec.x.toFixed(3)},${vec.y.toFixed(3)},${vec.z.toFixed(3)}`;
-  }
-
-  private formatOptionalVec3(vec: { x: number; y: number; z: number } | null | undefined) {
-    if (vec == null) return "null";
-    return this.formatVec3(vec);
-  }
-
-  private formatDelta(
-    previous: { x: number; y: number; z: number } | null,
-    current: { x: number; y: number; z: number } | null | undefined,
-  ) {
-    if (previous == null || current == null) return "null";
-    return `${(current.x - previous.x).toFixed(3)},${(current.y - previous.y).toFixed(3)},${(current.z - previous.z).toFixed(3)}`;
-  }
-
-  private getLastSentOnGround() {
-    return (this.bot as any)._lastSent?.onGround ?? "null";
-  }
-
-  private isPendingElytraFlight() {
-    return (this.bot.entity as any)._pendingElytraFlightConfirmation ?? false;
-  }
-
-  private isPendingElytraRequest() {
-    return (this.bot.entity as any)._pendingElytraFlyRequest ?? false;
-  }
-
-  private hasActiveGlideRequest() {
-    return this.glideRequested || this.isPendingElytraRequest() || this.isPendingElytraFlight() || this.isConfirmedFallFlying();
-  }
-
-  private async runTakeoffSequence(yaw: number, pitch: number) {
-    const myToken = this.sequenceToken;
+  private async runTakeoffSequence(yaw: number, pitch: number, assistTakeoff: boolean) {
+    const token = this.sequenceToken;
     this.takeoffInFlight = true;
 
     try {
-      await this.bot.look(yaw, pitch);
-      await this.requestGlide(this.bot.entity.onGround);
-      if (myToken !== this.sequenceToken || this.currentState !== FlightState.LAUNCHING) return;
+      await this.port.look(yaw, pitch);
+      await this.requestGlide(assistTakeoff);
+      if (token !== this.sequenceToken || this.currentState !== FlightState.LAUNCHING) return;
 
-      this.log("Takeoff sequence sent. Entering bounce state.");
+      this.port.log("Takeoff sequence sent. Entering bounce state.");
       this.transitionTo(FlightState.BOUNCING);
     } catch (error) {
-      if (myToken !== this.sequenceToken || this.currentState !== FlightState.LAUNCHING) return;
-      this.log(`FAIL: ${String(error)}`);
+      if (token !== this.sequenceToken || this.currentState !== FlightState.LAUNCHING) return;
+      this.port.log(`FAIL: ${String(error)}`);
       this.stopFlight();
     } finally {
       this.takeoffInFlight = false;
     }
   }
 
-  private async requestGlide(assistTakeoff = true) {
-    const myToken = this.sequenceToken;
+  private async requestGlide(assistTakeoff: boolean) {
+    const token = this.sequenceToken;
     this.takeoffAttemptCount++;
-    this.retryDelayTicks = RETRY_DELAY_TICKS;
+    this.retryDelayTicks = this.options.retryDelayTicks;
     this.glideRequested = true;
-    this.log(`Requesting glide. attempt=${this.takeoffAttemptCount} assistTakeoff=${assistTakeoff}`);
+    this.port.log(`Requesting glide. attempt=${this.takeoffAttemptCount} assistTakeoff=${assistTakeoff}`);
 
     try {
-      await this.bot.elytraFly({ assistTakeoff });
-      if (myToken !== this.sequenceToken) return;
-      this.log("Glide request accepted.");
+      await this.port.requestGlide(assistTakeoff);
+      if (token !== this.sequenceToken) return;
+      this.port.log("Glide request accepted.");
     } catch (error) {
-      if (myToken !== this.sequenceToken) return;
-      this.log(`Glide request failed: ${String(error)}`);
+      if (token !== this.sequenceToken) return;
+      this.port.log(`Glide request failed: ${String(error)}`);
       throw error;
     } finally {
       this.glideRequested = false;
     }
   }
 
-  private isElytraEquipped() {
-    return isUsableElytra(findEquippedItem(this.bot, "torso", "elytra"));
+  private logRetryBlock(snapshot: BounceSnapshot) {
+    const blockParts = [
+      snapshot.onGround ? "onGround" : null,
+      this.glideRequested ? "glideRequested=true" : null,
+      snapshot.pendingRequest ? "pendingRequest=true" : null,
+      snapshot.pendingFlight ? "pendingFlight=true" : null,
+      this.isConfirmedFallFlying(snapshot) ? "confirmedFallFlying=true" : null,
+      snapshot.rawFallFlying && !this.isConfirmedFallFlying(snapshot) ? "entityFallFlying=speculative" : null,
+      this.takeoffInFlight ? "takeoffInFlight=true" : null,
+      this.retryDelayTicks > 0 ? `retryDelay=${this.retryDelayTicks}` : null,
+    ].filter((value): value is string => value != null);
+
+    const blockReason = blockParts.join(", ");
+    if (blockReason.length > 0 && blockReason !== this.lastRetryBlockReason) {
+      this.lastRetryBlockReason = blockReason;
+      this.port.log(`Retry blocked: ${blockReason}`);
+    }
   }
 
-  private log(message: string) {
-    console.log(`[ebounce] ${message}`);
+  private getForwardSpeed(velocity: BounceVector, yaw: number) {
+    const lookX = -Math.sin(yaw);
+    const lookZ = Math.cos(yaw);
+    return Math.abs((velocity.x * lookX) + (velocity.z * lookZ));
+  }
+
+  private formatVec3(vec: BounceVector) {
+    return `${vec.x.toFixed(3)},${vec.y.toFixed(3)},${vec.z.toFixed(3)}`;
   }
 }
 
@@ -786,10 +808,10 @@ function buildBot() {
 
   return buildManagedBot<EBounceBot>(getBotOptions, {
     afterCreate: (bot, helpers) => {
-      controller = new EBounceController(bot, helpers.physicsSwitcher);
+      controller = new EBounceController(new MineflayerEBouncePort(bot, helpers.physicsSwitcher));
       registerLogging(bot, controller);
       bot.on("physicsTickBegin", () => {
-        controller.onPhysicsTick();
+        controller.tick();
       });
     },
     onSpawn: async (bot, helpers) => {

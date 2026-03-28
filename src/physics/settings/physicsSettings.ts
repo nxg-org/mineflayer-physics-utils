@@ -1,5 +1,3 @@
-import { Entity } from "prismarine-entity";
-import { IPhysics } from "../engines/IPhysics";
 import md from "minecraft-data";
 
 type BubbleColumnInfo = {
