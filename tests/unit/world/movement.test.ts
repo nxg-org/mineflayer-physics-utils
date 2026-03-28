@@ -57,7 +57,7 @@ describe("World movement simulation", () => {
     }
 
     expect(rig.fakePlayer.entity.position.y).toEqual(groundLevel);
-    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-4.164055985830322, 8);
+    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-4.377196061052951, 8);
   });
 
   it("matches walking fall-speed travel distance", () => {

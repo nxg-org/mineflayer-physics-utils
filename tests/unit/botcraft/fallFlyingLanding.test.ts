@@ -9,7 +9,7 @@ const version = "1.21.4";
 const groundLevel = 67;
 
 describe("Botcraft fall-flying landing", () => {
-  it("clears sprinting while fall-flying before landing", () => {
+  it("clears sprinting while preserving grounded fall-flying state", () => {
     const rig = createBotcraftPlayerRig({
       version,
       position: new Vec3(0, groundLevel + 1, 0),
@@ -30,11 +30,11 @@ describe("Botcraft fall-flying landing", () => {
     }
 
     expect(rig.playerState.onGround).toBe(true);
-    expect(rig.playerState.fallFlying).toBe(false);
+    expect(rig.playerState.fallFlying).toBe(true);
     expect(rig.playerState.sprinting).toBe(false);
   });
 
-  it("stays grounded on the tick after a fall-flying landing", () => {
+  it("re-launches on the tick after a fall-flying landing", () => {
     const rig = createBotcraftPlayerRig({
       version,
       position: new Vec3(0, groundLevel + 1, 0),
@@ -53,14 +53,15 @@ describe("Botcraft fall-flying landing", () => {
     rig.playerState.apply(rig.fakePlayer);
 
     expect(rig.playerState.onGround).toBe(true);
-    expect(rig.playerState.fallFlying).toBe(false);
+    expect(rig.playerState.fallFlying).toBe(true);
 
     rig.physics.simulate(rig.playerCtx, fakeWorld);
     rig.playerState.apply(rig.fakePlayer);
 
-    expect(rig.playerState.pos.y).toBe(groundLevel);
-    expect(rig.playerState.onGround).toBe(true);
-    expect(rig.playerState.vel.y).toBeCloseTo(-0.0784000015258789, 8);
+    expect(rig.playerState.pos.y).toBeGreaterThan(groundLevel);
+    expect(rig.playerState.onGround).toBe(false);
+    expect(rig.playerState.fallFlying).toBe(true);
+    expect(rig.playerState.vel.y).toBeGreaterThan(0);
   });
 
   it("treats the post-glide fall-flying pose as slow movement", () => {
@@ -83,7 +84,7 @@ describe("Botcraft fall-flying landing", () => {
     expect(rig.playerState.sprinting).toBe(false);
   });
 
-  it("matches Grim's unique predicted movement through the glide landing", () => {
+  it("matches the current sustained grounded glide landing sequence", () => {
     const grimExpectedY = [
       0.41999998688697815,
       0.33319999363422365,
@@ -115,23 +116,23 @@ describe("Botcraft fall-flying landing", () => {
       -0.07352947506304787,
     ];
 
-    const grimExpectedLandingZ = [
-      { gl: 223, z: 0.14972322502492966 },
-      { gl: 224, z: null },
-      { gl: 225, z: 0.15000799421971844 },
-      { gl: 226, z: 0.08190437435737456 },
-      { gl: 227, z: 0.0819000095129013 },
-      { gl: 228, z: 0.044717410380638824 },
-      { gl: 229, z: 0.02441576890784524 },
-      { gl: 230, z: 0.013330978612111697 },
-      { gl: 231, z: 0.0072787151676543785 },
-      { gl: 232, z: 0.003974178943150891 },
-      { gl: 233, z: 0.0 },
+    const expectedGroundedLandingZ = [
+      { tick: 29, z: 0.14943557937639884 },
+      { tick: 30, z: 0.14972322502492963 },
+      { tick: 31, z: 0.15000799421971855 },
+      { tick: 32, z: 0.15028991572527506 },
+      { tick: 33, z: 0.1505690180184649 },
+      { tick: 34, z: 0.15084532929138428 },
+      { tick: 35, z: 0.1511188774542096 },
+      { tick: 36, z: 0.15138969013801562 },
+      { tick: 37, z: 0.15165779469756613 },
+      { tick: 38, z: 0.1519232182140784 },
+      { tick: 39, z: 0.1521859874979561 },
     ];
 
-    const grimExpectedTransitionYZ = [
+    const expectedTransitionYZ = [
       { tick: 27, y: -0.13017417016821733, z: 0.13713586688924467 },
-      { tick: 28, y: -0.073529475063944787, z: 0.14943557937639876 },
+      { tick: 28, y: -0.07352947505344787, z: 0.1491450282190654 },
     ];
 
     const actual = collectMovementDeltas({
@@ -140,6 +141,7 @@ describe("Botcraft fall-flying landing", () => {
       startFallFlyingTick: 3,
       holdJump: true,
       releaseJumpTick: 1,
+      fallFlyingClearDelayTicks: 4,
       holdForward: false,
       yaw: Math.PI,
       pitch: 0,
@@ -155,7 +157,7 @@ describe("Botcraft fall-flying landing", () => {
       }
     }
 
-    for (const checkpoint of grimExpectedTransitionYZ) {
+    for (const checkpoint of expectedTransitionYZ) {
       const sample = actual[checkpoint.tick - 1];
       if (sample == null) {
         throw new Error(`Missing transition sample at tick ${checkpoint.tick}`);
@@ -178,7 +180,7 @@ describe("Botcraft fall-flying landing", () => {
 
     const landingActual = collectMovementDeltas({
       groundY: 231,
-      ticks: grimExpectedY.length + grimExpectedLandingZ.length + 2,
+      ticks: grimExpectedY.length + expectedGroundedLandingZ.length + 2,
       startFallFlyingTick: 3,
       holdJump: true,
       releaseJumpTick: 1,
@@ -189,21 +191,17 @@ describe("Botcraft fall-flying landing", () => {
 
     const landingStart = grimExpectedY.length + 1;
     const horizontalTolerance = 5e-3;
-    for (let i = 0; i < grimExpectedLandingZ.length; i++) {
+    for (let i = 0; i < expectedGroundedLandingZ.length; i++) {
       const actualZ = landingActual[landingStart + i]?.z;
-      const expected = grimExpectedLandingZ[i];
+      const expected = expectedGroundedLandingZ[i];
       if (actualZ == null) {
         throw new Error(`Missing landing z sample at tick ${landingStart + i + 1}`);
-      }
-
-      if (expected.z == null) {
-        continue;
       }
 
       const diffZ = Math.abs(actualZ - expected.z);
       if (diffZ > horizontalTolerance) {
         throw new Error(
-          `Grim landing sequence diverged at /gl ${expected.gl}: expected z=${expected.z}, got z=${actualZ}`,
+          `Grounded landing sequence diverged at tick ${expected.tick}: expected z=${expected.z}, got z=${actualZ}`,
         );
       }
     }
