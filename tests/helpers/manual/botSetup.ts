@@ -12,7 +12,7 @@ export type PhysicsBot = Bot & {
   };
   physicsEngine?: unknown;
   physicsEngineCtx?: unknown;
-  elytraFly?: () => Promise<void>;
+  elytraFly?: (options?: { assistTakeoff?: boolean } | boolean) => Promise<void>;
   fireworkRocketDuration?: number;
 };
 
@@ -58,17 +58,17 @@ export async function performElytraTakeoff(
   bot.setControlState("jump", true);
   // bot.setControlState("forward", true);
   // bot.setControlState("sprint", true);
-  await sleep(100);
+  await bot.waitForTicks(1);
   bot.setControlState("jump", false);
 
-  await sleep(50);
+  await bot.waitForTicks(1);
   if (requestFlight) {
     await requestFlight();
   } else {
     await bot.elytraFly();
   }
   if (activateItem) {
-    await sleep(100);
+    await bot.waitForTicks(1);
     bot.activateItem();
   }
 }

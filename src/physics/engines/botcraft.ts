@@ -730,7 +730,7 @@ export class BotcraftPhysics implements IPhysics {
     return player.isInWater && player.isUnderWater;
   }
 
-  private handleFallFlyingCollisions(player: PlayerState, previousHorizontalSpeed: number) {0
+  private handleFallFlyingCollisions(player: PlayerState, previousHorizontalSpeed: number) {
     if (!player.isCollidedHorizontally) return;
 
     const currentHorizontalSpeed = Math.sqrt(player.vel.x * player.vel.x + player.vel.z * player.vel.z);
@@ -1118,6 +1118,7 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.z *= Math.fround(0.99); // magic number, this DEFINITELY should be replaced by a drag value.
         player.vel.y *= Math.fround(0.98); // magic number, this DEFINITELY should be replaced by a drag value.
         this.applyMovement(ctx, world);
+
         this.handleFallFlyingCollisions(player, previousHorizontalSpeed);
       } else {
         const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));

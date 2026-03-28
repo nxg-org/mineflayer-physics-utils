@@ -386,6 +386,8 @@ export class PlayerState implements IEntityState {
         (bot.entity as any).swimming = this.swimming ?? false;
         (bot.entity as any).sprinting = this.sprinting ?? false;
         (bot.entity as any).crouching = this.crouching ?? false;
+        (bot.entity as any).fallFlying = this.fallFlying;
+        bot.entity.elytraFlying = this.fallFlying;
         bot.entity.attributes = this.attributes;
 
         this.control.applyControls(bot);

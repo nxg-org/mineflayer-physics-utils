@@ -31,6 +31,12 @@ Useful subtrees include:
 - Grim source:
   `/home/genpc/github_stuff/mineflayer-physics-utils/research_refs/Grim_head`
 
+## Physics Change Requirements
+
+- If you change the physics implementation, you must find the corresponding vanilla code for that behavior and reference it in your work.
+- Use the vanilla extracted client code under `research_refs/extracted_minecraft_data_client1_21_4_rc3` unless there is a clear reason to use a different vanilla source.
+- If the physics change is related to anticheat reasoning, add code comments that explain the anticheat reasoning and why the implementation matches the relevant behavior.
+
 ## Linked Mineflayer Checkout
 
 The linked mineflayer repository is outside this workspace at:

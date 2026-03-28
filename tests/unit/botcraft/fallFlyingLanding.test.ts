@@ -30,10 +30,11 @@ describe("Botcraft fall-flying landing", () => {
     }
 
     expect(rig.playerState.onGround).toBe(true);
+    expect(rig.playerState.fallFlying).toBe(false);
     expect(rig.playerState.sprinting).toBe(false);
   });
 
-  it("keeps fall-flying active through the initial grounded handoff", () => {
+  it("stays grounded on the tick after a fall-flying landing", () => {
     const rig = createBotcraftPlayerRig({
       version,
       position: new Vec3(0, groundLevel + 1, 0),
@@ -51,15 +52,15 @@ describe("Botcraft fall-flying landing", () => {
     rig.physics.simulate(rig.playerCtx, fakeWorld);
     rig.playerState.apply(rig.fakePlayer);
 
-    const firstZ = rig.playerState.pos.z;
     expect(rig.playerState.onGround).toBe(true);
-    expect(rig.playerState.fallFlying).toBe(true);
+    expect(rig.playerState.fallFlying).toBe(false);
 
     rig.physics.simulate(rig.playerCtx, fakeWorld);
     rig.playerState.apply(rig.fakePlayer);
 
-    expect(Math.abs(rig.playerState.pos.z)).toBeGreaterThan(Math.abs(firstZ));
-    expect(rig.playerState.fallFlying).toBe(true);
+    expect(rig.playerState.pos.y).toBe(groundLevel);
+    expect(rig.playerState.onGround).toBe(true);
+    expect(rig.playerState.vel.y).toBeCloseTo(-0.0784000015258789, 8);
   });
 
   it("treats the post-glide fall-flying pose as slow movement", () => {
@@ -116,15 +117,15 @@ describe("Botcraft fall-flying landing", () => {
 
     const grimExpectedLandingZ = [
       { gl: 223, z: 0.14972322502492966 },
-      { gl: 224, z: 0.15000799421971844 },
-      { gl: 225, z: 0.15028991572527511 },
-      { gl: 226, z: 0.15028991572527511 },
-      { gl: 227, z: 0.08205829398600022 },
-      { gl: 228, z: 0.04480382851635612 },
-      { gl: 229, z: 0.024462890369930445 },
-      { gl: 230, z: 0.013356738141982023 },
-      { gl: 231, z: 0.007292779025522185 },
-      { gl: 232, z: 0.003981857347935113 },
+      { gl: 224, z: null },
+      { gl: 225, z: 0.15000799421971844 },
+      { gl: 226, z: 0.08190437435737456 },
+      { gl: 227, z: 0.0819000095129013 },
+      { gl: 228, z: 0.044717410380638824 },
+      { gl: 229, z: 0.02441576890784524 },
+      { gl: 230, z: 0.013330978612111697 },
+      { gl: 231, z: 0.0072787151676543785 },
+      { gl: 232, z: 0.003974178943150891 },
       { gl: 233, z: 0.0 },
     ];
 
@@ -137,7 +138,6 @@ describe("Botcraft fall-flying landing", () => {
       groundY: 231,
       ticks: grimExpectedY.length,
       startFallFlyingTick: 3,
-      fallFlyingClearDelayTicks: 5,
       holdJump: true,
       releaseJumpTick: 1,
       holdForward: false,
@@ -180,7 +180,6 @@ describe("Botcraft fall-flying landing", () => {
       groundY: 231,
       ticks: grimExpectedY.length + grimExpectedLandingZ.length + 2,
       startFallFlyingTick: 3,
-      fallFlyingClearDelayTicks: 5,
       holdJump: true,
       releaseJumpTick: 1,
       holdForward: false,
