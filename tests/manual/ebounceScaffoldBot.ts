@@ -227,7 +227,12 @@ function buildBot() {
   let placementAssist: PredictiveTopPlacementAssist;
 
   return buildManagedBot<EBounceBot>(getBotOptions, {
-    afterCreate: (bot, helpers) => {
+    onSpawn: async (bot, helpers) => {
+      helpers.physicsSwitcher.enable();
+      console.log("[ebounce-scaffold] new engine enabled");
+      console.log("[ebounce-scaffold] chat commands: prep | bounce [yawDeg] [pitchDeg] [trackedY] | boost | stop | status | blocks | placelasttick <true|false> | yaw <deg|clear> | pitch <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | forcefallflying <true|false> | reset");
+      
+      
       controller = new EBounceController(new MineflayerEBouncePort(bot, helpers.physicsSwitcher, false));
       placementAssist = new PredictiveTopPlacementAssist(bot, controller);
       const logRealBotActivity = createRealBotActivityLogger(bot, placementAssist);
@@ -241,11 +246,7 @@ function buildBot() {
       bot.on("end", () => {
         placementAssist.clear();
       });
-    },
-    onSpawn: async (bot, helpers) => {
-      helpers.physicsSwitcher.enable();
-      console.log("[ebounce-scaffold] new engine enabled");
-      console.log("[ebounce-scaffold] chat commands: prep | bounce [yawDeg] [pitchDeg] [trackedY] | boost | stop | status | blocks | placelasttick <true|false> | yaw <deg|clear> | pitch <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | forcefallflying <true|false> | reset");
+      
       await ensureBounceLoadout(bot).catch(() => {});
     },
     onChat: async (bot, username, message) => {
