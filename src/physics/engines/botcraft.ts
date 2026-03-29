@@ -25,7 +25,7 @@ type CheapEffectNames = keyof ReturnType<typeof getStatusEffectNamesForVersion>;
 type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersion>;
 
 type Heading = { forward: number; strafe: number };
-type World = world.WorldSync;
+type World = { getBlock: world.WorldSync["getBlock"]};
 
 
 function extractAttribute(ctx: IPhysics, genericName: string) {
