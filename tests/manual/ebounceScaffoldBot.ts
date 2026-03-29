@@ -29,7 +29,11 @@ function getBotOptions() {
   });
 }
 
-function createRealBotActivityLogger(bot: EBounceBot, placementAssist: PredictiveTopPlacementAssist) {
+function createRealBotActivityLogger(
+  bot: EBounceBot,
+  controller: EBounceController,
+  placementAssist: PredictiveTopPlacementAssist,
+) {
   let tickNumber = 0;
   let lastRealHorizontalCollision = false;
   let lastRealBelowTrackedY = false;
@@ -42,7 +46,18 @@ function createRealBotActivityLogger(bot: EBounceBot, placementAssist: Predictiv
   return () => {
     tickNumber++;
 
-    const trackedYLevel = placementAssist.getTrackedYLevel();
+    if (!controller.isBouncing()) {
+      lastRealHorizontalCollision = false;
+      lastRealBelowTrackedY = false;
+      previousTravelPos = bot.entity.position.clone();
+      totalHorizontalTravel = 0;
+      nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
+      lastBlockUsageReportPlacedBlocks = placementAssist.getPlacedBlockCount();
+      lastTrackedYLevel = placementAssist.getActiveTrackedYLevel();
+      return;
+    }
+
+    const trackedYLevel = placementAssist.getActiveTrackedYLevel();
     if (trackedYLevel !== lastTrackedYLevel) {
       previousTravelPos = bot.entity.position.clone();
       totalHorizontalTravel = 0;
@@ -167,6 +182,26 @@ async function handleChatCommand(
       placementAssist.setPlaceOnLastValidTickOnly(args[0] !== "false");
       bot.chat(`placeOnLastValidTickOnly=${args[0] !== "false"}`);
       return;
+    case "descendstep":
+    case "maxdescend":
+      if (args[0] != null) {
+        const maxDescendStep = Number(args[0]);
+        if (!Number.isNaN(maxDescendStep) && maxDescendStep > 0) {
+          placementAssist.setMaxDescendStep(maxDescendStep);
+          bot.chat(`maxDescendStep=${Math.max(1, Math.floor(maxDescendStep))}`);
+        }
+      }
+      return;
+    case "ascendstep":
+    case "maxascend":
+      if (args[0] != null) {
+        const maxAscendStep = Number(args[0]);
+        if (!Number.isNaN(maxAscendStep) && maxAscendStep > 0) {
+          placementAssist.setMaxAscendStep(maxAscendStep);
+          bot.chat(`maxAscendStep=${Math.max(1, Math.floor(maxAscendStep))}`);
+        }
+      }
+      return;
     case "yaw":
       if (args[0] === "clear") {
         controller.clearTargetYaw();
@@ -230,12 +265,12 @@ function buildBot() {
     onSpawn: async (bot, helpers) => {
       helpers.physicsSwitcher.enable();
       console.log("[ebounce-scaffold] new engine enabled");
-      console.log("[ebounce-scaffold] chat commands: prep | bounce [yawDeg] [pitchDeg] [trackedY] | boost | stop | status | blocks | placelasttick <true|false> | yaw <deg|clear> | pitch <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | forcefallflying <true|false> | reset");
+      console.log("[ebounce-scaffold] chat commands: prep | bounce [yawDeg] [pitchDeg] [trackedY] | boost | stop | status | blocks | placelasttick <true|false> | ascendstep <blocks> | descendstep <blocks> | yaw <deg|clear> | pitch <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | forcefallflying <true|false> | reset");
       
       
       controller = new EBounceController(new MineflayerEBouncePort(bot, helpers.physicsSwitcher, false));
       placementAssist = new PredictiveTopPlacementAssist(bot, controller);
-      const logRealBotActivity = createRealBotActivityLogger(bot, placementAssist);
+      const logRealBotActivity = createRealBotActivityLogger(bot, controller, placementAssist);
       registerEBounceLogging(bot, controller, false);
       registerPlacementAssistLogging(placementAssist);
       bot.on("physicsTickBegin", () => {
