@@ -22,7 +22,6 @@ const MAX_VELOCITY_RECOVERY_FRONT_OFFSET = 3;
 const MAX_VELOCITY_RECOVERY_FORWARD_EXTENSION = 1;
 const PITCH_SHALLOW_SEARCH_STEP_DEG = 1;
 const ONE_TICK_UPWARD_RECOVERY_PITCH_DEG = 20;
-const BLOCK_USAGE_REPORT_DISTANCE = 1000;
 const DEFAULT_PLACEABLE_BLOCK_NAMES = [
   "dirt",
 ] as const;
@@ -82,7 +81,6 @@ type DeferredPlacement = {
   executeTick: number;
   placeableName: string;
   plan: PlacementPlan;
-  targetKey: string;
 };
 
 type CandidateResolution =
@@ -112,6 +110,10 @@ type BuildPredictedBlocksResult =
   | { ok: false; predictedBlocks: Block[] }
   | { ok: true; predictedBlocks: Block[] };
 
+type PitchOverrideState =
+  | { mode: "none"; pitch: null }
+  | { mode: "recovery" | "plan"; pitch: number };
+
 function blockKey(pos: Vec3) {
   return `${pos.x},${pos.y},${pos.z}`;
 }
@@ -137,18 +139,13 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
   private readonly blockNames = [...DEFAULT_PLACEABLE_BLOCK_NAMES];
   private pendingEquip: Promise<void> | null = null;
   private pendingPlacement: Promise<void> | null = null;
-  private lastPrediction: PlacementPrediction | null = null;
+  private lastPredictedTargetKey: string | null = null;
   private placedBlockCount = 0;
   private satisfiedLandingCount = 0;
   private lastWarningKey: string | null = null;
   private lastResolvedTargetKey: string | null = null;
   private lastSimulationDebug: string | null = null;
-  private upwardRecoveryPitch: number | null = null;
-  private activePlanPitchOverride: number | null = null;
-  private previousTravelPos: Vec3 | null = null;
-  private totalHorizontalTravel = 0;
-  private nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
-  private lastBlockUsageReportPlacedBlocks = 0;
+  private pitchOverrideState: PitchOverrideState = { mode: "none", pitch: null };
   private tickNumber = 0;
   private placeOnLastValidTickOnly = false;
   private deferredPlacement: DeferredPlacement | null = null;
@@ -168,37 +165,33 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
 
   public armFromYLevel(yLevel: number) {
     this.trackedYLevel = yLevel;
-    this.lastPrediction = null;
+    this.lastPredictedTargetKey = null;
     this.lastWarningKey = null;
     this.lastResolvedTargetKey = null;
     this.lastSimulationDebug = null;
     this.clearPitchStrategy();
-    this.previousTravelPos = this.bot.entity.position.clone();
-    this.totalHorizontalTravel = 0;
-    this.nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
-    this.lastBlockUsageReportPlacedBlocks = this.placedBlockCount;
     this.deferredPlacement = null;
     this.log(`Tracked Y level armed at ${this.trackedYLevel.toFixed(3)}`);
   }
 
   public clear() {
     this.trackedYLevel = null;
-    this.lastPrediction = null;
+    this.lastPredictedTargetKey = null;
     this.pendingEquip = null;
     this.pendingPlacement = null;
     this.lastWarningKey = null;
     this.lastResolvedTargetKey = null;
     this.lastSimulationDebug = null;
     this.clearPitchStrategy();
-    this.previousTravelPos = null;
-    this.totalHorizontalTravel = 0;
-    this.nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
-    this.lastBlockUsageReportPlacedBlocks = this.placedBlockCount;
     this.deferredPlacement = null;
   }
 
   public getTrackedYLevel() {
     return this.trackedYLevel;
+  }
+
+  public getPlacedBlockCount() {
+    return this.placedBlockCount;
   }
 
   public status() {
@@ -208,9 +201,8 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
       `placeTiming=${this.placeOnLastValidTickOnly ? "last_valid_tick" : "immediate"}`,
       `placeBlocks=${this.blockNames.join(",")}`,
       `placedBlocks=${this.placedBlockCount}`,
-      `travel=${this.totalHorizontalTravel.toFixed(1)}`,
       `satisfiedLandings=${this.satisfiedLandingCount}`,
-      `lastPredictedTarget=${this.lastPrediction == null ? "null" : blockKey(this.lastPrediction.projectedTargetPos)}`,
+      `lastPredictedTarget=${this.lastPredictedTargetKey ?? "null"}`,
     ].join(" ");
   }
 
@@ -228,10 +220,8 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
       vel: this.bot.entity.velocity.clone(),
     });
 
-    this.trackHorizontalTravel();
-
     if (!this.controller.isBouncing() || this.trackedYLevel == null) {
-      this.lastPrediction = null;
+      this.lastPredictedTargetKey = null;
       this.clearPitchStrategy();
       return;
     }
@@ -261,7 +251,7 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     }
 
     const prediction = this.resolvePlanningPrediction(placeable.name);
-    this.lastPrediction = prediction;
+    this.lastPredictedTargetKey = prediction == null ? null : blockKey(prediction.projectedTargetPos);
     if (prediction == null) return;
 
     const selection = this.selectBestPlacementCandidate(prediction, placeable.name);
@@ -294,7 +284,6 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
         executeTick,
         placeableName: placeable.name,
         plan: selection.plan,
-        targetKey,
       };
       if (this.tickNumber < executeTick) {
         return;
@@ -310,22 +299,19 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
   }
 
   private clearPitchStrategy() {
-    this.upwardRecoveryPitch = null;
-    this.activePlanPitchOverride = null;
+    this.pitchOverrideState = { mode: "none", pitch: null };
     this.controller.setInputPitchOverrideRadians(null);
   }
 
   private applyCommittedPitchIfNeeded() {
-    const committedPitch = this.activePlanPitchOverride ?? this.upwardRecoveryPitch;
-    if (committedPitch != null) {
-      this.controller.setInputPitchOverrideRadians(committedPitch);
-      this.applyImmediatePitch(committedPitch);
+    if (this.pitchOverrideState.mode !== "none") {
+      this.controller.setInputPitchOverrideRadians(this.pitchOverrideState.pitch);
+      this.applyImmediatePitch(this.pitchOverrideState.pitch);
     }
   }
 
   private setActivePlanPitchOverride(pitchRadians: number) {
-    this.upwardRecoveryPitch = null;
-    this.activePlanPitchOverride = pitchRadians;
+    this.pitchOverrideState = { mode: "plan", pitch: pitchRadians };
     this.controller.setInputPitchOverrideRadians(pitchRadians);
     this.applyImmediatePitch(pitchRadians);
   }
@@ -338,8 +324,7 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
       return;
     }
 
-    this.activePlanPitchOverride = null;
-    this.upwardRecoveryPitch = recoveryPitchRadians;
+    this.pitchOverrideState = { mode: "recovery", pitch: recoveryPitchRadians };
     this.controller.setInputPitchOverrideRadians(recoveryPitchRadians);
     this.applyImmediatePitch(recoveryPitchRadians);
     this.log(
@@ -356,7 +341,7 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     const currentlyBelowTrackedY = this.trackedYLevel != null &&
       this.bot.entity.position.y + 1e-6 < this.trackedYLevel;
 
-    if (this.upwardRecoveryPitch != null) {
+    if (this.pitchOverrideState.mode === "recovery") {
       if (currentlyBelowTrackedY) {
         this.applyCommittedPitchIfNeeded();
         return null;
@@ -365,7 +350,9 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
       this.applyImmediatePitch(wantedPitch);
     }
 
-    const startPitch = this.activePlanPitchOverride ?? wantedPitch;
+    const startPitch = this.pitchOverrideState.mode === "plan"
+      ? this.pitchOverrideState.pitch
+      : wantedPitch;
     const prediction = this.predictInterceptBelowTrackedY(startPitch);
     if (prediction == null) {
       return null;
@@ -629,30 +616,6 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
 
   private log(message: string) {
     this.emit("log", { tick: this.tickNumber, message });
-  }
-
-  private trackHorizontalTravel() {
-    const currentPos = this.bot.entity.position.clone();
-    if (this.previousTravelPos == null) {
-      this.previousTravelPos = currentPos;
-      return;
-    }
-
-    const dx = currentPos.x - this.previousTravelPos.x;
-    const dz = currentPos.z - this.previousTravelPos.z;
-    this.totalHorizontalTravel += Math.sqrt((dx * dx) + (dz * dz));
-    this.previousTravelPos = currentPos;
-
-    while (this.totalHorizontalTravel >= this.nextBlockUsageReportDistance) {
-      const blocksUsedThisSegment = this.placedBlockCount - this.lastBlockUsageReportPlacedBlocks;
-      this.log(
-        `Block usage over last ${BLOCK_USAGE_REPORT_DISTANCE} traveled: ` +
-        `${blocksUsedThisSegment} blocks used ` +
-        `totalTravel=${this.nextBlockUsageReportDistance.toFixed(0)} totalPlaced=${this.placedBlockCount}`,
-      );
-      this.lastBlockUsageReportPlacedBlocks = this.placedBlockCount;
-      this.nextBlockUsageReportDistance += BLOCK_USAGE_REPORT_DISTANCE;
-    }
   }
 
   private interpolateCrossing(previousPos: Vec3, currentPos: Vec3, trackedYLevel: number) {

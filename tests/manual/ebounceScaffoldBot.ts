@@ -16,6 +16,8 @@ import {
   registerPlacementAssistLogging,
 } from "../helpers/manual/ebounceScaffoldPlacement";
 
+const BLOCK_USAGE_REPORT_DISTANCE = 1000;
+
 let activeBot: Bot;
 
 function getBotOptions() {
@@ -31,9 +33,41 @@ function createRealBotActivityLogger(bot: EBounceBot, placementAssist: Predictiv
   let tickNumber = 0;
   let lastRealHorizontalCollision = false;
   let lastRealBelowTrackedY = false;
+  let previousTravelPos = bot.entity.position.clone();
+  let totalHorizontalTravel = 0;
+  let nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
+  let lastBlockUsageReportPlacedBlocks = placementAssist.getPlacedBlockCount();
+  let lastTrackedYLevel = placementAssist.getTrackedYLevel();
 
   return () => {
     tickNumber++;
+
+    const trackedYLevel = placementAssist.getTrackedYLevel();
+    if (trackedYLevel !== lastTrackedYLevel) {
+      previousTravelPos = bot.entity.position.clone();
+      totalHorizontalTravel = 0;
+      nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
+      lastBlockUsageReportPlacedBlocks = placementAssist.getPlacedBlockCount();
+      lastTrackedYLevel = trackedYLevel;
+    }
+
+    const currentPos = bot.entity.position.clone();
+    const dx = currentPos.x - previousTravelPos.x;
+    const dz = currentPos.z - previousTravelPos.z;
+    totalHorizontalTravel += Math.sqrt((dx * dx) + (dz * dz));
+    previousTravelPos = currentPos;
+
+    while (totalHorizontalTravel >= nextBlockUsageReportDistance) {
+      const placedBlockCount = placementAssist.getPlacedBlockCount();
+      const blocksUsedThisSegment = placedBlockCount - lastBlockUsageReportPlacedBlocks;
+      console.log(
+        `[ebounce-scaffold][tick=${tickNumber}] Block usage over last ${BLOCK_USAGE_REPORT_DISTANCE} traveled: ` +
+        `${blocksUsedThisSegment} blocks used ` +
+        `totalTravel=${nextBlockUsageReportDistance.toFixed(0)} totalPlaced=${placedBlockCount}`,
+      );
+      lastBlockUsageReportPlacedBlocks = placedBlockCount;
+      nextBlockUsageReportDistance += BLOCK_USAGE_REPORT_DISTANCE;
+    }
 
     const collidedHorizontally = !!(bot.entity as any).isCollidedHorizontally;
     if (!collidedHorizontally) {
@@ -48,7 +82,6 @@ function createRealBotActivityLogger(bot: EBounceBot, placementAssist: Predictiv
       );
     }
 
-    const trackedYLevel = placementAssist.getTrackedYLevel();
     if (trackedYLevel == null) {
       lastRealBelowTrackedY = false;
       return;
