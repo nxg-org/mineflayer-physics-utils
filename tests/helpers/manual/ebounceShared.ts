@@ -294,6 +294,7 @@ export class EBounceController {
   private lockYaw = true;
   private targetYaw: number | null = null;
   private targetPitch: number | null = null;
+  private inputPitchOverride: number | null = null;
   private lockedYaw: number | null = null;
   private equipToken = 0;
   private pendingEquip: Promise<void> | null = null;
@@ -391,6 +392,19 @@ export class EBounceController {
   public setForceClientSideFallFlying(enabled: boolean) {
     this.options.forceClientSideFallFlying = enabled;
     this.port.log(`forceClientSideFallFlying=${enabled}`);
+  }
+
+  public getDesiredYawRadians() {
+    const snapshot = this.port.getSnapshot();
+    return this.getLockedYaw(snapshot);
+  }
+
+  public getDesiredPitchRadians() {
+    return this.getBasePitch();
+  }
+
+  public setInputPitchOverrideRadians(radians: number | null) {
+    this.inputPitchOverride = radians;
   }
 
   public status() {
@@ -712,6 +726,11 @@ export class EBounceController {
   }
 
   private getLockedPitch() {
+    if (this.inputPitchOverride != null) return this.inputPitchOverride;
+    return this.getBasePitch();
+  }
+
+  private getBasePitch() {
     if (this.targetPitch != null) return this.targetPitch;
     return this.lockPitch ? toRadians(this.options.targetPitchDeg) : null;
   }

@@ -1,4 +1,5 @@
 import type { Block } from "prismarine-block";
+import { EventEmitter } from "events";
 import { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 import {
@@ -28,6 +29,8 @@ const MAX_VELOCITY_RECOVERY_STRIP_LENGTH = 5;
 const MAX_VELOCITY_RECOVERY_FRONT_OFFSET = 3;
 const MAX_VELOCITY_RECOVERY_FORWARD_EXTENSION = 1;
 const PITCH_SHALLOW_SEARCH_STEP_DEG = 1;
+const ONE_TICK_UPWARD_RECOVERY_PITCH_DEG = 10;
+const BLOCK_USAGE_REPORT_DISTANCE = 1000;
 const DEFAULT_PLACEABLE_BLOCK_NAMES = [
   "cobblestone",
   "stone",
@@ -71,6 +74,10 @@ type PlacementPrediction = {
 
 type OverlayWorld = {
   getBlock: (pos: Vec3) => Block;
+};
+
+type PlaceReference = {
+  position: Vec3;
 };
 
 type PlacementCandidate = {
@@ -141,13 +148,13 @@ function findFirstPlaceableBlock(bot: Bot, names: readonly string[]) {
   return null;
 }
 
-class PredictiveTopPlacementAssist {
+class PredictiveTopPlacementAssist extends EventEmitter {
   private readonly simPhysics: BotcraftPhysics;
   private readonly BlockCtor: any;
   private trackedYLevel: number | null = null;
   private readonly blockNames = [...DEFAULT_PLACEABLE_BLOCK_NAMES];
+  private pendingEquip: Promise<void> | null = null;
   private pendingPlacement: Promise<void> | null = null;
-  private placementCooldownTicks = 0;
   private lastPrediction: PlacementPrediction | null = null;
   private placedBlockCount = 0;
   private satisfiedLandingCount = 0;
@@ -156,11 +163,19 @@ class PredictiveTopPlacementAssist {
   private lastRealBelowTrackedY = false;
   private lastResolvedTargetKey: string | null = null;
   private lastSimulationDebug: string | null = null;
+  private upwardRecoveryPitch: number | null = null;
+  private activePlanPitchOverride: number | null = null;
+  private previousTravelPos: Vec3 | null = null;
+  private totalHorizontalTravel = 0;
+  private nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
+  private lastBlockUsageReportPlacedBlocks = 0;
+  private tickNumber = 0;
 
   constructor(
     private readonly bot: EBounceBot,
     private readonly controller: EBounceController,
   ) {
+    super();
     this.simPhysics = new BotcraftPhysics(bot.registry);
     this.BlockCtor = require("prismarine-block")(bot.registry);
   }
@@ -168,23 +183,32 @@ class PredictiveTopPlacementAssist {
   public armFromCurrentYLevel() {
     this.trackedYLevel = this.bot.entity.position.y;
     this.lastPrediction = null;
-    this.placementCooldownTicks = 0;
     this.lastWarningKey = null;
     this.lastResolvedTargetKey = null;
     this.lastSimulationDebug = null;
+    this.clearPitchStrategy();
+    this.previousTravelPos = this.bot.entity.position.clone();
+    this.totalHorizontalTravel = 0;
+    this.nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
+    this.lastBlockUsageReportPlacedBlocks = this.placedBlockCount;
     this.log(`Tracked Y level armed at ${this.trackedYLevel.toFixed(3)}`);
   }
 
   public clear() {
     this.trackedYLevel = null;
     this.lastPrediction = null;
-    this.placementCooldownTicks = 0;
+    this.pendingEquip = null;
     this.pendingPlacement = null;
     this.lastWarningKey = null;
     this.lastRealHorizontalCollision = false;
     this.lastRealBelowTrackedY = false;
     this.lastResolvedTargetKey = null;
     this.lastSimulationDebug = null;
+    this.clearPitchStrategy();
+    this.previousTravelPos = null;
+    this.totalHorizontalTravel = 0;
+    this.nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
+    this.lastBlockUsageReportPlacedBlocks = this.placedBlockCount;
   }
 
   public status() {
@@ -193,31 +217,37 @@ class PredictiveTopPlacementAssist {
       `predictionTicks=unbounded`,
       `placeBlocks=${this.blockNames.join(",")}`,
       `placedBlocks=${this.placedBlockCount}`,
+      `travel=${this.totalHorizontalTravel.toFixed(1)}`,
       `satisfiedLandings=${this.satisfiedLandingCount}`,
       `lastPredictedTarget=${this.lastPrediction == null ? "null" : blockKey(this.lastPrediction.projectedTargetPos)}`,
     ].join(" ");
   }
 
   public tick() {
-    if (this.placementCooldownTicks > 0) {
-      this.placementCooldownTicks--;
-    }
+    this.tickNumber++;
+    this.emit("tick_state", {
+      tick: this.tickNumber,
+      pitchDeg: toDegrees(this.bot.entity.pitch),
+      pos: this.bot.entity.position.clone(),
+      vel: this.bot.entity.velocity.clone(),
+    });
 
+    this.trackHorizontalTravel();
     this.logRealHorizontalCollision();
     this.logRealBelowTrackedY();
 
     if (!this.controller.isBouncing() || this.trackedYLevel == null) {
       this.lastPrediction = null;
+      this.clearPitchStrategy();
       return;
     }
 
-    if (this.pendingPlacement != null || this.placementCooldownTicks > 0) {
+    this.ensurePlaceableEquipped();
+    this.applyCommittedPitchIfNeeded();
+
+    if (this.pendingPlacement != null) {
       return;
     }
-
-    let prediction = this.predictInterceptBelowTrackedY();
-    this.lastPrediction = prediction;
-    if (prediction == null) return;
 
     const placeable = findFirstPlaceableBlock(this.bot, this.blockNames);
     if (!placeable) {
@@ -225,13 +255,9 @@ class PredictiveTopPlacementAssist {
       return;
     }
 
-    if (prediction.interceptTick === 1) {
-      const adjustedPrediction = this.tryAdjustPitchForExtraLead(prediction, placeable.name);
-      if (adjustedPrediction != null) {
-        prediction = adjustedPrediction;
-        this.lastPrediction = adjustedPrediction;
-      }
-    }
+    const prediction = this.resolvePlanningPrediction(placeable.name);
+    this.lastPrediction = prediction;
+    if (prediction == null) return;
 
     const selection = this.selectBestPlacementCandidate(prediction, placeable.name);
     if (selection == null) {
@@ -244,8 +270,8 @@ class PredictiveTopPlacementAssist {
     this.lastResolvedTargetKey = targetKey;
 
     if (selection.kind === "already_supported") {
+      this.clearPitchStrategy();
       this.satisfiedLandingCount++;
-      this.placementCooldownTicks = 2;
       this.log(
         `Using existing support at ${targetKey} ` +
         `predictedTick=${selection.plan.candidates[0].interceptTick} ` +
@@ -259,6 +285,106 @@ class PredictiveTopPlacementAssist {
     void this.placeRecoveryBlocks(selection.plan, placeable.name);
   }
 
+  private getWantedPitchRadians() {
+    return this.controller.getDesiredPitchRadians() ?? this.bot.entity.pitch;
+  }
+
+  private clearPitchStrategy() {
+    this.upwardRecoveryPitch = null;
+    this.activePlanPitchOverride = null;
+    this.controller.setInputPitchOverrideRadians(null);
+  }
+
+  private applyCommittedPitchIfNeeded() {
+    const committedPitch = this.activePlanPitchOverride ?? this.upwardRecoveryPitch;
+    if (committedPitch != null) {
+      this.controller.setInputPitchOverrideRadians(committedPitch);
+      this.applyImmediatePitch(committedPitch);
+    }
+  }
+
+  private setActivePlanPitchOverride(pitchRadians: number) {
+    this.upwardRecoveryPitch = null;
+    this.activePlanPitchOverride = pitchRadians;
+    this.controller.setInputPitchOverrideRadians(pitchRadians);
+    this.applyImmediatePitch(pitchRadians);
+  }
+
+  private enterRecoveryPitch(currentPitchRadians: number, currentPrediction: PlacementPrediction) {
+    const currentPitchDeg = toDegrees(currentPitchRadians);
+    const recoveryPitchDeg = ONE_TICK_UPWARD_RECOVERY_PITCH_DEG;
+    const recoveryPitchRadians = toRadians(recoveryPitchDeg);
+    if (Math.abs(recoveryPitchDeg - currentPitchDeg) <= 1e-3) {
+      return;
+    }
+
+    this.activePlanPitchOverride = null;
+    this.upwardRecoveryPitch = recoveryPitchRadians;
+    this.controller.setInputPitchOverrideRadians(recoveryPitchRadians);
+    this.applyImmediatePitch(recoveryPitchRadians);
+    this.log(
+      `Applied one-tick upward pitch recovery from ${currentPitchDeg.toFixed(1)} deg ` +
+      `to ${recoveryPitchDeg.toFixed(1)} deg delta=${(recoveryPitchDeg - currentPitchDeg).toFixed(1)} deg ` +
+      `currentBotPos=${this.bot.entity.position.toString()} currentBotVel=${this.bot.entity.velocity.toString()} ` +
+      `${this.describePredictionPositions("", currentPrediction)} ` +
+      `predictedTick=${currentPrediction.interceptTick}`,
+    );
+  }
+
+  private resolvePlanningPrediction(blockName: string) {
+    const wantedPitch = this.getWantedPitchRadians();
+    const currentlyBelowTrackedY = this.trackedYLevel != null &&
+      this.bot.entity.position.y + 1e-6 < this.trackedYLevel;
+
+    if (this.upwardRecoveryPitch != null) {
+      if (currentlyBelowTrackedY) {
+        this.applyCommittedPitchIfNeeded();
+        return null;
+      }
+      this.clearPitchStrategy();
+      this.applyImmediatePitch(wantedPitch);
+    }
+
+    const startPitch = this.activePlanPitchOverride ?? wantedPitch;
+    const prediction = this.predictInterceptBelowTrackedY(startPitch);
+    if (prediction == null) {
+      return null;
+    }
+
+    if (prediction.interceptTick !== 1) {
+      return prediction;
+    }
+
+    const alternatePrediction = this.findMinimalTwoTickPitchPlan(startPitch, prediction, blockName);
+    if (alternatePrediction != null) {
+      return alternatePrediction;
+    }
+
+    this.enterRecoveryPitch(startPitch, prediction);
+    return null;
+  }
+
+  private ensurePlaceableEquipped() {
+    if (this.pendingEquip != null || this.pendingPlacement != null) {
+      return;
+    }
+
+    const placeable = findFirstPlaceableBlock(this.bot, this.blockNames);
+    if (placeable == null || this.bot.heldItem?.name === placeable.name) {
+      return;
+    }
+
+    this.pendingEquip = (async () => {
+      try {
+        await this.bot.equip(placeable, "hand");
+      } catch (error) {
+        this.log(`Background equip failed for ${placeable.name}: ${String(error)}`);
+      } finally {
+        this.pendingEquip = null;
+      }
+    })();
+  }
+
   private predictInterceptBelowTrackedY(pitchOverride: number | null = null) {
     if (this.trackedYLevel == null) return null;
 
@@ -266,6 +392,11 @@ class PredictiveTopPlacementAssist {
     if (pitchOverride != null) {
       simCtx.state.pitch = pitchOverride;
     }
+
+    if (simCtx.state.pos.y + 1e-6 < this.trackedYLevel) {
+      return null;
+    }
+
     let tick = 0;
 
     while (true) {
@@ -302,8 +433,12 @@ class PredictiveTopPlacementAssist {
     }
   }
 
-  private tryAdjustPitchForExtraLead(currentPrediction: PlacementPrediction, blockName: string) {
-    const currentPitchDeg = toDegrees(this.bot.entity.pitch);
+  private findMinimalTwoTickPitchPlan(
+    startPitchRadians: number,
+    currentPrediction: PlacementPrediction,
+    blockName: string,
+  ) {
+    const currentPitchDeg = toDegrees(startPitchRadians);
     if (Math.abs(currentPitchDeg) <= 1e-3) {
       return null;
     }
@@ -320,17 +455,17 @@ class PredictiveTopPlacementAssist {
       }
 
       if (
-        adjustedPrediction.interceptTick >= 2 &&
+        adjustedPrediction.interceptTick === 2 &&
         this.hasViablePlacementPlan(adjustedPrediction, blockName)
       ) {
-        this.controller.setTargetPitchDegrees(nextPitchDeg);
-        this.applyImmediatePitch(toRadians(nextPitchDeg));
+        const adjustedPitchRadians = toRadians(nextPitchDeg);
+        this.setActivePlanPitchOverride(adjustedPitchRadians);
         this.log(
           `Adjusted pitch immediately from ${currentPitchDeg.toFixed(1)} deg ` +
           `to ${nextPitchDeg.toFixed(1)} deg delta=${(nextPitchDeg - currentPitchDeg).toFixed(1)} deg ` +
-          `beforePos=${this.bot.entity.position.toString()} beforeVel=${this.bot.entity.velocity.toString()} ` +
-          `beforeCrossing=${currentPrediction.crossingPos.toString()} beforePredictedTick=${currentPrediction.interceptTick} ` +
-          `afterCrossing=${adjustedPrediction.crossingPos.toString()} afterPredictedTick=${adjustedPrediction.interceptTick}`,
+          `currentBotPos=${this.bot.entity.position.toString()} currentBotVel=${this.bot.entity.velocity.toString()} ` +
+          `${this.describePredictionPositions("before", currentPrediction)} beforePredictedTick=${currentPrediction.interceptTick} ` +
+          `${this.describePredictionPositions("after", adjustedPrediction)} afterPredictedTick=${adjustedPrediction.interceptTick}`,
         );
         return adjustedPrediction;
       }
@@ -339,24 +474,89 @@ class PredictiveTopPlacementAssist {
     return null;
   }
 
-  private applyImmediatePitch(pitchRadians: number) {
-    this.bot.entity.pitch = pitchRadians;
+  private applyImmediateLook(yawRadians: number | null, pitchRadians: number | null) {
+    const nextYaw = yawRadians ?? this.bot.entity.yaw;
+    const nextPitch = pitchRadians ?? this.bot.entity.pitch;
+    void this.bot.look(nextYaw, nextPitch, true);
+
+    if (yawRadians != null) {
+      this.bot.entity.yaw = yawRadians;
+    }
+    if (pitchRadians != null) {
+      this.bot.entity.pitch = pitchRadians;
+    }
 
     const livePhysicsState = (this.bot as any).physicsEngineCtx?.state;
-    if (livePhysicsState != null && "pitch" in livePhysicsState) {
-      livePhysicsState.pitch = pitchRadians;
+    if (livePhysicsState != null) {
+      if (yawRadians != null && "yaw" in livePhysicsState) {
+        livePhysicsState.yaw = yawRadians;
+      }
+      if (pitchRadians != null && "pitch" in livePhysicsState) {
+        livePhysicsState.pitch = pitchRadians;
+      }
     }
 
     const switchedState = (this.bot as any).physicsSwitcher?.getState?.();
-    if (switchedState != null && "pitch" in switchedState) {
-      switchedState.pitch = pitchRadians;
+    if (switchedState != null) {
+      if (yawRadians != null && "yaw" in switchedState) {
+        switchedState.yaw = yawRadians;
+      }
+      if (pitchRadians != null && "pitch" in switchedState) {
+        switchedState.pitch = pitchRadians;
+      }
     }
+  }
+
+  private applyImmediatePitch(pitchRadians: number) {
+    this.applyImmediateLook(null, pitchRadians);
+  }
+
+  private describePredictionPositions(label: string, prediction: PlacementPrediction) {
+    return (
+      `${label}PredictedBeforePos=${prediction.beforePos.toString()} ` +
+      `${label}PredictedCrossing=${prediction.crossingPos.toString()} ` +
+      `${label}PredictedLanding=${prediction.landingPos.toString()}`
+    );
+  }
+
+  private handlePlacementRequest(
+    placeableName: string,
+    candidate: PlacementCandidate,
+    swingArm: "right" | undefined,
+  ) {
+    const referenceBlock = this.getPlaceReference(candidate);
+    const placementPromise = (this.bot as any)._genericPlace(referenceBlock, new Vec3(0, 1, 0), {
+      swingArm,
+      forceLook: "ignore",
+    });
+
+    // Mirror the placement immediately after dispatch so the local prediction path
+    // sees the support before any async continuation resumes.
+    this.applyClientSidePlacedBlock(placeableName, candidate.targetPos);
+    this.placedBlockCount++;
+    return placementPromise;
   }
 
   private async placeRecoveryBlocks(plan: PlacementPlan, placeableName: string) {
     const targetKey = plan.candidates.map((candidate) => blockKey(candidate.targetPos)).join("|");
     this.pendingPlacement = (async () => {
+      const placementRequestedAt = Date.now();
       try {
+        if (
+          this.trackedYLevel != null &&
+          this.bot.entity.position.y + 1e-6 < this.trackedYLevel &&
+          this.bot.entity.velocity.y <= 0
+        ) {
+          this.log(
+            `Skipped placement below trackedY at ${targetKey} ` +
+            `pos=${this.bot.entity.position.toString()} vel=${this.bot.entity.velocity.toString()} ` +
+            `trackedY=${this.trackedYLevel.toFixed(3)} ` +
+            `requestMs=${Date.now() - placementRequestedAt}`,
+          );
+          this.clearPitchStrategy();
+          return;
+        }
+
         const placeable = findInventoryItem(this.bot, placeableName);
         if (!placeable) {
           this.log(`Placement block ${placeableName} was no longer available.`);
@@ -364,11 +564,17 @@ class PredictiveTopPlacementAssist {
         }
 
         if (this.bot.heldItem?.name !== placeable.name) {
-          await this.bot.equip(placeable, "hand");
+          this.log(
+            `Skipped placement at ${targetKey} because ${placeable.name} was not yet equipped ` +
+            `held=${this.bot.heldItem?.name ?? "null"} pos=${this.bot.entity.position.toString()} ` +
+            `requestMs=${Date.now() - placementRequestedAt}`,
+          );
+          this.ensurePlaceableEquipped();
+          this.clearPitchStrategy();
+          return;
         }
 
-        this.placementCooldownTicks = 2;
-
+        const placementPromises: Promise<unknown>[] = [];
         for (let i = 0; i < plan.candidates.length; i++) {
           const candidate = plan.candidates[i];
           const existingBlock = this.bot.blockAt(candidate.targetPos);
@@ -376,30 +582,25 @@ class PredictiveTopPlacementAssist {
             continue;
           }
 
-          const referenceBlock = this.bot.blockAt(candidate.referencePos);
-          if (!hasSolidTopSupport(referenceBlock)) {
-            throw new Error(`Missing top support for ${blockKey(candidate.targetPos)}`);
-          }
-
-          // Send each place attempt first, then immediately mirror the block into the
-          // local world so subsequent physics ticks predict against the intended client state.
-          await (this.bot as any)._genericPlace(referenceBlock, new Vec3(0, 1, 0), {
-            swingArm: i === 0 ? 'right' : undefined,
-            forceLook: 'ignore',
-          });
-          this.applyClientSidePlacedBlock(placeable.name, candidate.targetPos);
-          this.placedBlockCount++;
+          placementPromises.push(
+            this.handlePlacementRequest(placeable.name, candidate, i === 0 ? "right" : undefined),
+          );
         }
 
         const primaryCandidate = plan.candidates[0];
         this.log(
           `Placed ${placeable.name} at ${targetKey} ` +
+          `botPos=${this.bot.entity.position.toString()} pitchDeg=${toDegrees(this.bot.entity.pitch).toFixed(1)} ` +
           `predictedTick=${primaryCandidate.interceptTick} ` +
           `reach=${Math.max(...plan.candidates.map((candidate) => candidate.reachDistance)).toFixed(2)} ` +
-          `crossing=${primaryCandidate.crossingPos.toString()} landing=${primaryCandidate.landingPos.toString()}`,
+          `crossing=${primaryCandidate.crossingPos.toString()} landing=${primaryCandidate.landingPos.toString()} ` +
+          `requestMs=${Date.now() - placementRequestedAt}`,
         );
+        await Promise.all(placementPromises);
+        this.clearPitchStrategy();
       } catch (error) {
-        this.log(`Placement failed at ${targetKey}: ${String(error)}`);
+        this.log(`Placement failed at ${targetKey}: ${String(error)} requestMs=${Date.now() - placementRequestedAt}`);
+        this.clearPitchStrategy();
       } finally {
         this.pendingPlacement = null;
       }
@@ -407,7 +608,31 @@ class PredictiveTopPlacementAssist {
   }
 
   private log(message: string) {
-    console.log(`[ebounce-scaffold] ${message}`);
+    this.emit("log", { tick: this.tickNumber, message });
+  }
+
+  private trackHorizontalTravel() {
+    const currentPos = this.bot.entity.position.clone();
+    if (this.previousTravelPos == null) {
+      this.previousTravelPos = currentPos;
+      return;
+    }
+
+    const dx = currentPos.x - this.previousTravelPos.x;
+    const dz = currentPos.z - this.previousTravelPos.z;
+    this.totalHorizontalTravel += Math.sqrt((dx * dx) + (dz * dz));
+    this.previousTravelPos = currentPos;
+
+    while (this.totalHorizontalTravel >= this.nextBlockUsageReportDistance) {
+      const blocksUsedThisSegment = this.placedBlockCount - this.lastBlockUsageReportPlacedBlocks;
+      this.log(
+        `Block usage over last ${BLOCK_USAGE_REPORT_DISTANCE} traveled: ` +
+        `${blocksUsedThisSegment} blocks used ` +
+        `totalTravel=${this.nextBlockUsageReportDistance.toFixed(0)} totalPlaced=${this.placedBlockCount}`,
+      );
+      this.lastBlockUsageReportPlacedBlocks = this.placedBlockCount;
+      this.nextBlockUsageReportDistance += BLOCK_USAGE_REPORT_DISTANCE;
+    }
   }
 
   private logRealHorizontalCollision() {
@@ -543,7 +768,10 @@ class PredictiveTopPlacementAssist {
 
     for (const candidate of candidates) {
       const candidateKey = blockKey(candidate.targetPos);
-      if (this.lastResolvedTargetKey?.split("|").includes(candidateKey)) {
+      if (
+        this.lastResolvedTargetKey?.split("|").includes(candidateKey) &&
+        isReplaceable(this.bot.blockAt(candidate.targetPos))
+      ) {
         continue;
       }
 
@@ -665,12 +893,22 @@ class PredictiveTopPlacementAssist {
     }
   }
 
+  private getPlaceReference(candidate: PlacementCandidate): Block | PlaceReference {
+    const referenceBlock = this.bot.blockAt(candidate.referencePos);
+    if (referenceBlock != null) {
+      if (referenceBlock.type === this.bot.registry.blocksByName["air"].id) {
+        return { position: candidate.targetPos.clone() };
+      }
+      return referenceBlock;
+    }
+
+    return {
+      position: candidate.referencePos.clone(),
+    };
+  }
+
   private resolvePlacementCandidate(prediction: PlacementPrediction, candidate: PlacementCandidate, blockName: string): CandidateResolution {
     const existingBlock = this.bot.blockAt(candidate.targetPos);
-    const referenceBlock = this.bot.blockAt(candidate.referencePos);
-    if (!hasSolidTopSupport(referenceBlock)) {
-      return { kind: "no_support", candidate };
-    }
 
     if (candidate.reachDistance > BLOCK_REACH_DISTANCE) {
       return { kind: "out_of_reach", candidate };
@@ -827,8 +1065,7 @@ class PredictiveTopPlacementAssist {
 
     for (const candidate of plan.candidates) {
       const existingBlock = this.bot.blockAt(candidate.targetPos);
-      const referenceBlock = this.bot.blockAt(candidate.referencePos);
-      if (!hasSolidTopSupport(referenceBlock) || candidate.reachDistance > BLOCK_REACH_DISTANCE) {
+      if (candidate.reachDistance > BLOCK_REACH_DISTANCE) {
         return { ok: false as const, predictedBlocks };
       }
 
@@ -939,6 +1176,18 @@ class PredictiveTopPlacementAssist {
     this.lastWarningKey = key;
     this.log(message);
   }
+}
+
+function registerPlacementAssistLogging(placementAssist: PredictiveTopPlacementAssist) {
+  placementAssist.on("log", ({ tick, message }) => {
+    console.log(`[ebounce-scaffold][tick=${tick}] ${message}`);
+  });
+  placementAssist.on("tick_state", ({ tick, pitchDeg, pos, vel }) => {
+    console.log(
+      `[ebounce-scaffold][tick=${tick}] STATE pitchDeg=${pitchDeg.toFixed(1)} ` +
+      `pos=${pos.toString()} vel=${vel.toString()}`,
+    );
+  });
 }
 
 async function handleChatCommand(
@@ -1054,6 +1303,7 @@ function buildBot() {
       controller = new EBounceController(new MineflayerEBouncePort(bot, helpers.physicsSwitcher, false));
       placementAssist = new PredictiveTopPlacementAssist(bot, controller);
       registerEBounceLogging(bot, controller, false);
+      registerPlacementAssistLogging(placementAssist);
       bot.on("physicsTickBegin", () => {
         controller.tick();
         placementAssist.tick();
