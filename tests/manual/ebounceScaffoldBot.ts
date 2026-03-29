@@ -29,17 +29,10 @@ const MAX_VELOCITY_RECOVERY_STRIP_LENGTH = 5;
 const MAX_VELOCITY_RECOVERY_FRONT_OFFSET = 3;
 const MAX_VELOCITY_RECOVERY_FORWARD_EXTENSION = 1;
 const PITCH_SHALLOW_SEARCH_STEP_DEG = 1;
-const ONE_TICK_UPWARD_RECOVERY_PITCH_DEG = 10;
+const ONE_TICK_UPWARD_RECOVERY_PITCH_DEG = 20;
 const BLOCK_USAGE_REPORT_DISTANCE = 1000;
 const DEFAULT_PLACEABLE_BLOCK_NAMES = [
-  "cobblestone",
-  "stone",
-  "dirt",
-  "netherrack",
-  "andesite",
-  "diorite",
-  "granite",
-  "deepslate",
+  "dirt"
 ] as const;
 
 const REPLACEABLE_BLOCK_NAMES = new Set([
@@ -91,6 +84,13 @@ type PlacementCandidate = {
 
 type PlacementPlan = {
   candidates: PlacementCandidate[];
+};
+
+type DeferredPlacement = {
+  executeTick: number;
+  placeableName: string;
+  plan: PlacementPlan;
+  targetKey: string;
 };
 
 type CandidateResolution =
@@ -170,6 +170,8 @@ class PredictiveTopPlacementAssist extends EventEmitter {
   private nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
   private lastBlockUsageReportPlacedBlocks = 0;
   private tickNumber = 0;
+  private placeOnLastValidTickOnly = false;
+  private deferredPlacement: DeferredPlacement | null = null;
 
   constructor(
     private readonly bot: EBounceBot,
@@ -181,7 +183,11 @@ class PredictiveTopPlacementAssist extends EventEmitter {
   }
 
   public armFromCurrentYLevel() {
-    this.trackedYLevel = this.bot.entity.position.y;
+    this.armFromYLevel(this.bot.entity.position.y);
+  }
+
+  public armFromYLevel(yLevel: number) {
+    this.trackedYLevel = yLevel;
     this.lastPrediction = null;
     this.lastWarningKey = null;
     this.lastResolvedTargetKey = null;
@@ -191,6 +197,7 @@ class PredictiveTopPlacementAssist extends EventEmitter {
     this.totalHorizontalTravel = 0;
     this.nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
     this.lastBlockUsageReportPlacedBlocks = this.placedBlockCount;
+    this.deferredPlacement = null;
     this.log(`Tracked Y level armed at ${this.trackedYLevel.toFixed(3)}`);
   }
 
@@ -209,18 +216,25 @@ class PredictiveTopPlacementAssist extends EventEmitter {
     this.totalHorizontalTravel = 0;
     this.nextBlockUsageReportDistance = BLOCK_USAGE_REPORT_DISTANCE;
     this.lastBlockUsageReportPlacedBlocks = this.placedBlockCount;
+    this.deferredPlacement = null;
   }
 
   public status() {
     return [
       `trackedY=${this.trackedYLevel == null ? "null" : this.trackedYLevel.toFixed(3)}`,
       `predictionTicks=unbounded`,
+      `placeTiming=${this.placeOnLastValidTickOnly ? "last_valid_tick" : "immediate"}`,
       `placeBlocks=${this.blockNames.join(",")}`,
       `placedBlocks=${this.placedBlockCount}`,
       `travel=${this.totalHorizontalTravel.toFixed(1)}`,
       `satisfiedLandings=${this.satisfiedLandingCount}`,
       `lastPredictedTarget=${this.lastPrediction == null ? "null" : blockKey(this.lastPrediction.projectedTargetPos)}`,
     ].join(" ");
+  }
+
+  public setPlaceOnLastValidTickOnly(enabled: boolean) {
+    this.placeOnLastValidTickOnly = enabled;
+    if (!enabled) this.deferredPlacement = null;
   }
 
   public tick() {
@@ -249,6 +263,17 @@ class PredictiveTopPlacementAssist extends EventEmitter {
       return;
     }
 
+    if (
+      this.placeOnLastValidTickOnly &&
+      this.deferredPlacement != null &&
+      this.tickNumber >= this.deferredPlacement.executeTick
+    ) {
+      const deferredPlacement = this.deferredPlacement;
+      this.deferredPlacement = null;
+      void this.placeRecoveryBlocks(deferredPlacement.plan, deferredPlacement.placeableName);
+      return;
+    }
+
     const placeable = findFirstPlaceableBlock(this.bot, this.blockNames);
     if (!placeable) {
       this.log(`No placement block available from [${this.blockNames.join(", ")}].`);
@@ -270,6 +295,7 @@ class PredictiveTopPlacementAssist extends EventEmitter {
     this.lastResolvedTargetKey = targetKey;
 
     if (selection.kind === "already_supported") {
+      this.deferredPlacement = null;
       this.clearPitchStrategy();
       this.satisfiedLandingCount++;
       this.log(
@@ -280,6 +306,20 @@ class PredictiveTopPlacementAssist extends EventEmitter {
         `landing=${selection.plan.candidates[0].landingPos.toString()}`,
       );
       return;
+    }
+
+    if (this.placeOnLastValidTickOnly) {
+      const executeTick = this.tickNumber + Math.max(0, selection.plan.candidates[0].interceptTick - 1);
+      this.deferredPlacement = {
+        executeTick,
+        placeableName: placeable.name,
+        plan: selection.plan,
+        targetKey,
+      };
+      if (this.tickNumber < executeTick) {
+        return;
+      }
+      this.deferredPlacement = null;
     }
 
     void this.placeRecoveryBlocks(selection.plan, placeable.name);
@@ -1220,7 +1260,13 @@ async function handleChatCommand(
         const pitch = Number(args[1]);
         if (!Number.isNaN(pitch)) controller.setTargetPitchDegrees(pitch);
       }
-      placementAssist.armFromCurrentYLevel();
+      if (args[2] != null) {
+        const trackedY = Number(args[2]);
+        if (!Number.isNaN(trackedY)) placementAssist.armFromYLevel(trackedY);
+        else placementAssist.armFromCurrentYLevel();
+      } else {
+        placementAssist.armFromCurrentYLevel();
+      }
       controller.beginBounce();
       bot.chat("Scaffold bounce sequence started.");
       return;
@@ -1238,6 +1284,11 @@ async function handleChatCommand(
       return;
     case "blocks":
       bot.chat(placementAssist.status());
+      return;
+    case "placelasttick":
+    case "lasttickplace":
+      placementAssist.setPlaceOnLastValidTickOnly(args[0] !== "false");
+      bot.chat(`placeOnLastValidTickOnly=${args[0] !== "false"}`);
       return;
     case "yaw":
       if (args[0] === "clear") {
@@ -1315,7 +1366,7 @@ function buildBot() {
     onSpawn: async (bot, helpers) => {
       helpers.physicsSwitcher.enable();
       console.log("[ebounce-scaffold] new engine enabled");
-      console.log("[ebounce-scaffold] chat commands: prep | bounce [yawDeg] [pitchDeg] | boost | stop | status | blocks | yaw <deg|clear> | pitch <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | forcefallflying <true|false> | reset");
+      console.log("[ebounce-scaffold] chat commands: prep | bounce [yawDeg] [pitchDeg] [trackedY] | boost | stop | status | blocks | placelasttick <true|false> | yaw <deg|clear> | pitch <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | forcefallflying <true|false> | reset");
       await ensureBounceLoadout(bot).catch(() => {});
     },
     onChat: async (bot, username, message) => {
