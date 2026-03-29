@@ -131,6 +131,7 @@ type PlacementAssistSettings = {
 type PlacementAssistState = {
   trackedYLevel: number | null;
   lastGroundedYLevel: number | null;
+  fallbackYLevel: number | null;
   pendingEquip: Promise<void> | null;
   pendingPlacement: Promise<void> | null;
   placedBlockCount: number;
@@ -140,7 +141,7 @@ type PlacementAssistState = {
   deferredPlacement: DeferredPlacement | null;
 };
 
-type PlacementVerticalMode = "idle" | "ascending" | "level" | "descending";
+type PlacementVerticalMode = "idle" | "ascending" | "fallback" | "level" | "descending";
 type PlacementOperationalMode = PlacementVerticalMode | "recovery";
 
 function blockKey(pos: Vec3) {
@@ -645,6 +646,7 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
   private readonly state: PlacementAssistState = {
     trackedYLevel: null,
     lastGroundedYLevel: null,
+    fallbackYLevel: null,
     pendingEquip: null,
     pendingPlacement: null,
     placedBlockCount: 0,
@@ -680,7 +682,10 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
 
   public armFromYLevel(yLevel: number) {
     this.state.trackedYLevel = yLevel;
-    this.state.lastGroundedYLevel = this.bot.entity.onGround ? this.bot.entity.position.y : null;
+    if (this.bot.entity.onGround) {
+      this.state.lastGroundedYLevel = this.bot.entity.position.y;
+    }
+    this.state.fallbackYLevel = null;
     this.diagnostics.lastPredictedTargetKey = null;
     this.diagnostics.lastWarningKey = null;
     this.state.lastResolvedTargetKey = null;
@@ -693,6 +698,7 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
   public clear() {
     this.state.trackedYLevel = null;
     this.state.lastGroundedYLevel = null;
+    this.state.fallbackYLevel = null;
     this.diagnostics.lastPredictedTargetKey = null;
     this.state.pendingEquip = null;
     this.state.pendingPlacement = null;
@@ -753,6 +759,7 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
   public tick() {
     this.diagnostics.tickNumber++;
     this.refreshGroundedYLevel();
+    this.refreshFallbackState();
     const planningYLevel = this.getCurrentPlanningYLevel();
     const mode = this.getCurrentMode(planningYLevel);
     this.emit("tick_state", {
@@ -886,6 +893,9 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     const wantedPitch = this.getWantedPitchRadians();
     const currentlyBelowTrackedY = this.bot.entity.position.y + 1e-6 < planningYLevel;
     const mode = this.getCurrentMode(planningYLevel);
+    const activePitch = this.state.pitchOverrideState.mode === "plan"
+      ? this.state.pitchOverrideState.pitch
+      : wantedPitch;
     const wantedPitchReachesPlanningY = mode === "ascending"
       ? this.planner.reachesYLevel(planningYLevel, wantedPitch)
       : false;
@@ -897,6 +907,15 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     ) {
       this.clearPitchStrategy();
       this.applyImmediatePitch(wantedPitch);
+    }
+
+    if (
+      !this.bot.entity.onGround &&
+      this.bot.entity.velocity.y <= 0 &&
+      this.bot.entity.position.y + 1e-6 < planningYLevel - 1
+    ) {
+      this.activateFallback();
+      return null;
     }
 
     if (this.state.pitchOverrideState.mode === "recovery") {
@@ -1303,6 +1322,10 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
       return null;
     }
 
+    if (this.state.fallbackYLevel != null) {
+      return this.state.fallbackYLevel;
+    }
+
     const epsilon = 1e-6;
     const currentY = this.bot.entity.position.y;
     if (currentY + epsilon < this.state.trackedYLevel) {
@@ -1324,6 +1347,10 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
 
     const epsilon = 1e-6;
     const currentY = this.bot.entity.position.y;
+
+    if (this.state.fallbackYLevel != null) {
+      return "fallback";
+    }
 
     // Ascending intent is defined by still being below the final tracked level,
     // even when the staged planning level has advanced to that final target.
@@ -1352,6 +1379,39 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     }
 
     this.state.lastGroundedYLevel = this.bot.entity.position.y;
+  }
+
+  private refreshFallbackState() {
+    const fallbackYLevel = this.state.fallbackYLevel;
+    if (fallbackYLevel == null) {
+      return;
+    }
+
+    if (this.bot.entity.onGround) {
+      this.state.fallbackYLevel = null;
+      return;
+    }
+
+    const currentY = this.bot.entity.position.y;
+    if (currentY + 1e-6 < fallbackYLevel) {
+      this.state.fallbackYLevel = Math.floor(currentY);
+    }
+  }
+
+  private activateFallback() {
+    const fallbackYLevel = Math.floor(this.bot.entity.position.y);
+    if (this.state.fallbackYLevel === fallbackYLevel) {
+      return;
+    }
+
+    this.state.fallbackYLevel = fallbackYLevel;
+    this.clearPitchStrategy();
+    this.applyImmediatePitch(this.getWantedPitchRadians());
+    this.log(
+      `Fallback engaged currentY=${this.bot.entity.position.y.toFixed(3)} ` +
+      `fallbackY=${fallbackYLevel.toFixed(3)} trackedY=${this.state.trackedYLevel?.toFixed(3) ?? "null"} ` +
+      `botVel=${this.bot.entity.velocity.toString()}`,
+    );
   }
 
   private applyClientSidePlacedBlock(blockName: string, targetPos: Vec3) {

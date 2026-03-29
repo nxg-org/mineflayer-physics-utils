@@ -554,9 +554,21 @@ export class EBounceController {
   private handleWarmup(snapshot: BounceSnapshot) {
     const yaw = this.getLockedYaw(snapshot);
     const speedInDirection = this.getForwardSpeed(snapshot.velocity, yaw ?? snapshot.yaw);
+    const horizontalSpeed = Math.hypot(snapshot.velocity.x, snapshot.velocity.z);
 
-    if (speedInDirection > this.options.warmupSpeedThreshold || !snapshot.onGround) {
-      this.port.log(`Warmup Complete (DirSpeed: ${speedInDirection.toFixed(2)}). Launching.`);
+    // Warmup should trigger from real horizontal movement, not only motion that
+    // happens to align with the currently locked yaw. During scaffold climbs we
+    // can drift laterally before launch, and gating purely on projected forward
+    // speed leaves us grounded until we slide off the support.
+    if (
+      speedInDirection > this.options.warmupSpeedThreshold ||
+      horizontalSpeed > this.options.warmupSpeedThreshold ||
+      !snapshot.onGround
+    ) {
+      this.port.log(
+        `Warmup Complete (DirSpeed: ${speedInDirection.toFixed(2)} ` +
+        `HorizSpeed: ${horizontalSpeed.toFixed(2)}). Launching.`,
+      );
       this.transitionTo(FlightState.LAUNCHING);
       return;
     }

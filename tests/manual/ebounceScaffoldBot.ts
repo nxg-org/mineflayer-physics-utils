@@ -268,7 +268,7 @@ function buildBot() {
       console.log("[ebounce-scaffold] chat commands: prep | bounce [yawDeg] [pitchDeg] [trackedY] | boost | stop | status | blocks | placelasttick <true|false> | ascendstep <blocks> | descendstep <blocks> | yaw <deg|clear> | pitch <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | forcefallflying <true|false> | reset");
       
       
-      controller = new EBounceController(new MineflayerEBouncePort(bot, helpers.physicsSwitcher, false));
+      controller = new EBounceController(new MineflayerEBouncePort(bot, helpers.physicsSwitcher, true));
       placementAssist = new PredictiveTopPlacementAssist(bot, controller);
       const logRealBotActivity = createRealBotActivityLogger(bot, controller, placementAssist);
       registerEBounceLogging(bot, controller, false);
