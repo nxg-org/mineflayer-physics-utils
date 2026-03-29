@@ -147,6 +147,7 @@ type EBounceOptions = {
   maxBoostSpeed: number;
   takeoffTimeoutTicks: number;
   targetPitchDeg: number;
+  forceClientSideFallFlying: boolean;
 };
 
 const DEFAULT_EBOUNCE_OPTIONS: EBounceOptions = {
@@ -157,6 +158,7 @@ const DEFAULT_EBOUNCE_OPTIONS: EBounceOptions = {
   maxBoostSpeed: MAX_SPEED,
   takeoffTimeoutTicks: TAKEOFF_TIMEOUT_TICKS,
   targetPitchDeg: TARGET_PITCH_DEG,
+  forceClientSideFallFlying: true,
 };
 
 interface EBouncePort {
@@ -391,6 +393,11 @@ class EBounceController {
     this.setTargetPitchDegrees(null);
   }
 
+  public setForceClientSideFallFlying(enabled: boolean) {
+    this.options.forceClientSideFallFlying = enabled;
+    this.port.log(`forceClientSideFallFlying=${enabled}`);
+  }
+
   public status() {
     const snapshot = this.port.getSnapshot();
     return [
@@ -424,6 +431,7 @@ class EBounceController {
       `lockedYaw=${this.lockedYaw == null ? "null" : toDegrees(this.lockedYaw).toFixed(1)}`,
       `lockYaw=${this.lockYaw}`,
       `lockPitch=${this.lockPitch}`,
+      `forceClientSideFallFlying=${this.options.forceClientSideFallFlying}`,
     ]
       .filter((value): value is string => value != null)
       .join(" ");
@@ -571,7 +579,9 @@ class EBounceController {
       case 5:
         if (!snapshot.onGround) {
           this.sendStartFlyingPacket("launch");
-          this.port.setClientSideFallFlying(true);
+          if (this.options.forceClientSideFallFlying) {
+            this.port.setClientSideFallFlying(true);
+          }
         } else {
           this.stateTicks--;
         }
@@ -629,7 +639,7 @@ class EBounceController {
       yaw: this.getLockedYaw(snapshot),
       pitch: this.getLockedPitch(),
     }, snapshot);
-    if (!snapshot.onGround) {
+    if (!snapshot.onGround && this.options.forceClientSideFallFlying) {
       this.port.setClientSideFallFlying(true);
     }
   }
@@ -869,6 +879,11 @@ async function handleChatCommand(bot: EBounceBot, username: string, message: str
       controller.setLockPitch(args[0] !== "false");
       bot.chat(`lockPitch=${args[0] !== "false"}`);
       return;
+    case "forcefallflying":
+    case "forceff":
+      controller.setForceClientSideFallFlying(args[0] !== "false");
+      bot.chat(`forceClientSideFallFlying=${args[0] !== "false"}`);
+      return;
     case "reset":
       controller.resetState();
       bot.quit();
@@ -911,7 +926,7 @@ function buildBot() {
     onSpawn: async (bot, helpers) => {
       helpers.physicsSwitcher.enable();
       console.log("[ebounce] new engine enabled");
-      console.log("[ebounce] chat commands: prep | bounce [yawDeg] [pitchDeg] | boost | stop | status | yaw <deg|clear> | pitch <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | reset");
+      console.log("[ebounce] chat commands: prep | bounce [yawDeg] [pitchDeg] | boost | stop | status | yaw <deg|clear> | pitch <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | forcefallflying <true|false> | reset");
       await ensureBounceLoadout(bot).catch(() => {});
     },
     onChat: async (bot, username, message) => {
