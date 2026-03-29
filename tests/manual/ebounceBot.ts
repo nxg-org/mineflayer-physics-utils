@@ -8,7 +8,6 @@ import {
 } from "../helpers/manual/botSetup";
 
 type EBounceBot = PhysicsBot & {
-  elytraFly: (options?: { assistTakeoff?: boolean } | boolean) => Promise<void>;
   fireworkRocketDuration: number;
 };
 
@@ -32,17 +31,16 @@ const MAX_TELEPORT_DIST = 50.0;
 const WARMUP_SPEED_THRESHOLD = 0.08;
 const MIN_BOOST_SPEED = 30.0;
 const MAX_SPEED = 100.0;
-const TARGET_PITCH_DEG = -20;
+const TARGET_PITCH_DEG = -72.4;
 const TAKEOFF_TIMEOUT_TICKS = 30;
-const RETRY_DELAY_TICKS = 0;
 
 let activeBot: Bot;
 
 function getBotOptions() {
   return getBotOptionsFromArgs({
     defaultUsername: "testingbot",
-    usernameIndex: 4,
-    versionIndex: 5,
+    versionIndex: 4,
+    usernameIndex: 5,
     authIndex: 6,
   });
 }
@@ -127,6 +125,7 @@ type BounceSnapshot = {
   yaw: number;
   pitch: number;
   onGround: boolean;
+  sprinting: boolean;
   rawFallFlying: boolean;
   pendingFlight: boolean;
   pendingRequest: boolean;
@@ -136,6 +135,7 @@ type BounceSnapshot = {
   fireworkTicks: number;
   clientOnGround: boolean | null;
   clientFallFlying: boolean | null;
+  clientSprinting: boolean | null;
   pose: string | null;
 };
 
@@ -146,7 +146,6 @@ type EBounceOptions = {
   minBoostSpeed: number;
   maxBoostSpeed: number;
   takeoffTimeoutTicks: number;
-  retryDelayTicks: number;
   targetPitchDeg: number;
 };
 
@@ -157,7 +156,6 @@ const DEFAULT_EBOUNCE_OPTIONS: EBounceOptions = {
   minBoostSpeed: MIN_BOOST_SPEED,
   maxBoostSpeed: MAX_SPEED,
   takeoffTimeoutTicks: TAKEOFF_TIMEOUT_TICKS,
-  retryDelayTicks: RETRY_DELAY_TICKS,
   targetPitchDeg: TARGET_PITCH_DEG,
 };
 
@@ -168,8 +166,9 @@ interface EBouncePort {
   setInput(input: BounceInput): void;
   clearInputs(): void;
   setVerticalVelocity(y: number): void;
-  look(yaw: number, pitch: number): Promise<void>;
-  requestGlide(assistTakeoff: boolean): Promise<void>;
+  sendStartFlyingPacket(): void;
+  setClientSideFallFlying(enabled: boolean): void;
+  setClientSideSprinting(enabled: boolean): void;
   activateItem(): void;
   log(message: string): void;
 }
@@ -190,6 +189,7 @@ class MineflayerEBouncePort implements EBouncePort {
       yaw: this.bot.entity.yaw,
       pitch: this.bot.entity.pitch,
       onGround: this.bot.entity.onGround,
+      sprinting: (this.bot.entity as any).sprinting ?? false,
       rawFallFlying,
       pendingFlight,
       pendingRequest: (this.bot.entity as any)._pendingElytraFlyRequest ?? false,
@@ -199,6 +199,7 @@ class MineflayerEBouncePort implements EBouncePort {
       fireworkTicks: this.bot.fireworkRocketDuration,
       clientOnGround: clientState?.onGround ?? null,
       clientFallFlying: clientState?.fallFlying ?? null,
+      clientSprinting: clientState?.sprinting ?? null,
       pose: clientState?.pose != null ? String(clientState.pose) : null,
     };
   }
@@ -242,12 +243,20 @@ class MineflayerEBouncePort implements EBouncePort {
     this.bot.entity.velocity.y = y;
   }
 
-  public async look(yaw: number, pitch: number) {
-    await this.bot.look(yaw, pitch);
+  public sendStartFlyingPacket() {
+    (this.bot as any)._client.write("entity_action", {
+      entityId: this.bot.entity.id,
+      actionId: this.bot.supportFeature("entityActionUsesStringMapper") ? "start_elytra_flying" : 8,
+      jumpBoost: 0,
+    });
   }
 
-  public async requestGlide(assistTakeoff: boolean) {
-    await this.bot.elytraFly({ assistTakeoff });
+  public setClientSideFallFlying(enabled: boolean) {
+    this.applyClientSideFallFlying(enabled);
+  }
+
+  public setClientSideSprinting(enabled: boolean) {
+    this.applyClientSideSprinting(enabled);
   }
 
   public activateItem() {
@@ -256,6 +265,35 @@ class MineflayerEBouncePort implements EBouncePort {
 
   public log(message: string) {
     console.log(`[ebounce] ${message}`);
+  }
+
+  private applyClientSideFallFlying(enabled: boolean) {
+    const applyState = (state: any) => {
+      if (state == null) return;
+      if ("fallFlying" in state) state.fallFlying = enabled;
+      if ("elytraFlying" in state) state.elytraFlying = enabled;
+    };
+
+    if (this.bot.entity) {
+  (this.bot.entity as any).fallFlying = enabled;
+    this.bot.entity.elytraFlying = enabled;
+    (this.bot.entity as any)._pendingElytraFlightConfirmation = false;
+
+    }
+  
+    applyState((this.bot as any).physicsEngineCtx?.state);
+    applyState(this.physicsSwitcher.getState());
+  }
+
+  private applyClientSideSprinting(enabled: boolean) {
+    const applyState = (state: any) => {
+      if (state == null) return;
+      if ("sprinting" in state) state.sprinting = enabled;
+    };
+
+    (this.bot.entity as any).sprinting = enabled;
+    applyState((this.bot as any).physicsEngineCtx?.state);
+    applyState(this.physicsSwitcher.getState());
   }
 }
 
@@ -266,21 +304,22 @@ class EBounceController {
   private lockPitch = true;
   private lockYaw = true;
   private targetYaw: number | null = null;
+  private targetPitch: number | null = null;
   private lockedYaw: number | null = null;
   private equipToken = 0;
   private pendingEquip: Promise<void> | null = null;
-  private sequenceToken = 0;
-  private takeoffInFlight = false;
-  private glideRequested = false;
-  private takeoffAttemptCount = 0;
-  private retryDelayTicks = 0;
+  private startFlyingPacketCount = 0;
   private currentSpeed = 0;
-  private lastRetryBlockReason: string | null = null;
   private bounceTicks = 0;
   private bounceGroundTicks = 0;
+  private bounceFallFlyingTicks = 0;
+  private bounceSprintingTicks = 0;
   private lastBounceOnGround = false;
   private lastJumpCommand = false;
   private jumpAttemptCount = 0;
+  private lastObservedOnGround: boolean | null = null;
+  private lastObservedFallFlying: boolean | null = null;
+  private lastObservedClientFallFlying: boolean | null = null;
   private readonly options: EBounceOptions;
 
   constructor(
@@ -308,7 +347,6 @@ class EBounceController {
   public stopFlight() {
     if (this.currentState === FlightState.IDLE) return;
 
-    this.sequenceToken++;
     this.transitionTo(FlightState.IDLE);
     this.cleanup();
     this.port.clearInputs();
@@ -316,7 +354,6 @@ class EBounceController {
 
   public resetState() {
     this.port.log("Forcing state reset.");
-    this.sequenceToken++;
     this.currentState = FlightState.IDLE;
     this.stateTicks = 0;
     this.pendingEquip = null;
@@ -344,6 +381,16 @@ class EBounceController {
     this.setTargetYawDegrees(null);
   }
 
+  public setTargetPitchDegrees(degrees: number | null) {
+    this.targetPitch = degrees == null ? null : toRadians(degrees);
+    if (degrees == null) this.port.log("Cleared target pitch.");
+    else this.port.log(`Target pitch set to ${degrees.toFixed(1)} deg.`);
+  }
+
+  public clearTargetPitch() {
+    this.setTargetPitchDegrees(null);
+  }
+
   public status() {
     const snapshot = this.port.getSnapshot();
     return [
@@ -353,6 +400,7 @@ class EBounceController {
       `vel=${this.formatVec3(snapshot.velocity)}`,
       `speed=${this.currentSpeed.toFixed(2)}`,
       `onGround=${snapshot.onGround}`,
+      `sprinting=${snapshot.sprinting}`,
       `sentOnGround=${snapshot.lastSentOnGround}`,
       `fallFlying=${snapshot.rawFallFlying}`,
       `confirmedFallFlying=${this.isConfirmedFallFlying(snapshot)}`,
@@ -361,14 +409,18 @@ class EBounceController {
       `controlJump=${snapshot.controlJump}`,
       `jumpTicks=${snapshot.jumpTicks}`,
       `fireworkTicks=${snapshot.fireworkTicks}`,
-      `takeoffAttempts=${this.takeoffAttemptCount}`,
+      `startFlyingPackets=${this.startFlyingPacketCount}`,
       `jumpAttempts=${this.jumpAttemptCount}`,
       `bounceTicks=${this.bounceTicks}`,
       `bounceOnGroundTicks=${this.bounceGroundTicks}`,
+      `bounceFallFlyingTicks=${this.bounceFallFlyingTicks}`,
+      `bounceSprintingTicks=${this.bounceSprintingTicks}`,
       snapshot.clientOnGround == null ? null : `clientOnGround=${snapshot.clientOnGround}`,
       snapshot.clientFallFlying == null ? null : `clientFallFlying=${snapshot.clientFallFlying}`,
+      snapshot.clientSprinting == null ? null : `clientSprinting=${snapshot.clientSprinting}`,
       snapshot.pose == null ? null : `pose=${snapshot.pose}`,
       `targetYaw=${this.targetYaw == null ? "null" : toDegrees(this.targetYaw).toFixed(1)}`,
+      `targetPitch=${this.targetPitch == null ? "null" : toDegrees(this.targetPitch).toFixed(1)}`,
       `lockedYaw=${this.lockedYaw == null ? "null" : toDegrees(this.lockedYaw).toFixed(1)}`,
       `lockYaw=${this.lockYaw}`,
       `lockPitch=${this.lockPitch}`,
@@ -379,12 +431,9 @@ class EBounceController {
 
   public tick() {
     this.stateTicks++;
-    if (this.retryDelayTicks > 0) {
-      this.retryDelayTicks--;
-    }
-
     const snapshot = this.port.getSnapshot();
     this.currentSpeed = this.calculateSpeed(snapshot.position);
+    this.logStateEdges(snapshot);
 
     switch (this.currentState) {
       case FlightState.PRE_SYNC:
@@ -416,7 +465,11 @@ class EBounceController {
     if (this.currentState === newState) return;
 
     if (this.currentState === FlightState.BOUNCING && newState !== FlightState.BOUNCING && this.bounceTicks > 0) {
-      this.port.log(`Bounce summary: onGroundTicks=${this.bounceGroundTicks}/${this.bounceTicks}`);
+      this.port.log(
+        `Bounce summary: onGroundTicks=${this.bounceGroundTicks}/${this.bounceTicks} ` +
+        `fallFlyingTicks=${this.bounceFallFlyingTicks}/${this.bounceTicks} ` +
+        `sprintingTicks=${this.bounceSprintingTicks}/${this.bounceTicks}`,
+      );
     }
 
     this.port.log(`State: ${this.currentState} -> ${newState}`);
@@ -427,13 +480,13 @@ class EBounceController {
       this.lockedYaw = this.port.getSnapshot().yaw;
       this.bounceTicks = 0;
       this.bounceGroundTicks = 0;
+      this.bounceFallFlyingTicks = 0;
+      this.bounceSprintingTicks = 0;
       this.lastBounceOnGround = false;
     }
 
     if (newState === FlightState.IDLE) {
       this.pendingEquip = null;
-      this.takeoffInFlight = false;
-      this.glideRequested = false;
     }
   }
 
@@ -483,7 +536,6 @@ class EBounceController {
 
   private handleWarmup(snapshot: BounceSnapshot) {
     const yaw = this.getLockedYaw(snapshot);
-    const pitch = this.getLockedPitch();
     const speedInDirection = this.getForwardSpeed(snapshot.velocity, yaw ?? snapshot.yaw);
 
     if (speedInDirection > this.options.warmupSpeedThreshold || !snapshot.onGround) {
@@ -492,7 +544,7 @@ class EBounceController {
       return;
     }
 
-    this.submitInput({ forward: true, sprint: true, jump: false, yaw, pitch }, snapshot);
+    this.submitInput({ forward: true, sprint: true, jump: false, yaw, pitch: null }, snapshot);
   }
 
   private handleLaunching(snapshot: BounceSnapshot) {
@@ -502,54 +554,84 @@ class EBounceController {
       return;
     }
 
-    if (this.takeoffInFlight) return;
+    const yaw = this.getLockedYaw(snapshot);
 
-    const yaw = this.getLockedYaw(snapshot) ?? snapshot.yaw;
-    const pitch = this.getLockedPitch() ?? snapshot.pitch;
-    void this.runTakeoffSequence(yaw, pitch, snapshot.onGround);
+    // This intentionally mirrors the provided Java ebounce sequence rather than
+    // mineflayer's assistTakeoff helper: settle the jump edges ourselves, send
+    // START_FLYING_WITH_ELYTRA on the launch window, then carry that local
+    // fall-flying bit forward through rebounces for anticheat experiments.
+    switch (this.stateTicks) {
+      case 1:
+        this.port.setClientSideSprinting(true);
+        this.submitInput({ forward: true, sprint: true, jump: true, yaw, pitch: null }, snapshot);
+        return;
+      case 2:
+        this.submitInput({ forward: true, sprint: true, jump: false, yaw, pitch: null }, snapshot);
+        return;
+      case 5:
+        if (!snapshot.onGround) {
+          this.sendStartFlyingPacket("launch");
+          this.port.setClientSideFallFlying(true);
+        } else {
+          this.stateTicks--;
+        }
+        this.port.setClientSideSprinting(true);
+        this.submitInput({ forward: true, sprint: true, jump: true, yaw, pitch: null }, snapshot);
+        return;
+      case 6:
+        this.submitInput({ forward: true, sprint: true, jump: false, yaw, pitch: null }, snapshot);
+        this.transitionTo(FlightState.BOUNCING);
+        return;
+      default:
+        this.submitInput({ forward: true, sprint: true, jump: false, yaw, pitch: null }, snapshot);
+        return;
+    }
   }
 
   private handleBouncing(snapshot: BounceSnapshot, speedBps: number) {
     this.bounceTicks++;
     this.lastBounceOnGround = snapshot.onGround;
+    const jumpThisTick = snapshot.onGround;
     if (snapshot.onGround) {
       this.bounceGroundTicks++;
     }
+    if (snapshot.rawFallFlying) {
+      this.bounceFallFlyingTicks++;
+    }
+    if (snapshot.sprinting) {
+      this.bounceSprintingTicks++;
+    }
+
+    this.port.log(
+      `Bounce tick=${this.bounceTicks} onGround=${snapshot.onGround} ` +
+      `jump=${jumpThisTick} controlJump=${snapshot.controlJump} ` +
+      `fallFlying=${snapshot.rawFallFlying} sprinting=${snapshot.sprinting}` +
+      (snapshot.clientOnGround == null ? "" : ` clientOnGround=${snapshot.clientOnGround}`) +
+      (snapshot.clientFallFlying == null ? "" : ` clientFallFlying=${snapshot.clientFallFlying}`) +
+      (snapshot.clientSprinting == null ? "" : ` clientSprinting=${snapshot.clientSprinting}`),
+    );
 
     if (snapshot.onGround && speedBps < this.options.maxBoostSpeed && speedBps > this.options.minBoostSpeed) {
       this.port.setVerticalVelocity(0);
     }
 
-    if (snapshot.onGround && this.hasActiveGlideRequest(snapshot)) {
-      this.port.log(`Clearing glide request on ground contact. retryDelay=${this.options.retryDelayTicks}`);
-      this.glideRequested = false;
-      this.retryDelayTicks = this.options.retryDelayTicks;
-    }
-
-    const canRetry = !this.hasActiveGlideRequest(snapshot) && !this.takeoffInFlight && this.retryDelayTicks === 0;
-    if (snapshot.onGround && canRetry) {
-      this.lastRetryBlockReason = null;
-      this.port.log("Retrying grounded glide request.");
-      void this.requestGlide(true).catch(() => {
-        this.port.log("WARN: grounded bounce glide request failed.");
-      });
-    } else if (!snapshot.onGround && canRetry) {
-      this.lastRetryBlockReason = null;
-      this.port.log("Retrying glide request.");
-      void this.requestGlide(false).catch(() => {
-        this.port.log("WARN: bounce glide request failed.");
-      });
-    } else {
-      this.logRetryBlock(snapshot);
+    if (snapshot.onGround) {
+      this.port.setClientSideSprinting(true);
+    } else if (!snapshot.rawFallFlying) {
+      this.port.log("State correction: resending START_FLYING_WITH_ELYTRA.");
+      this.sendStartFlyingPacket("state_correction");
     }
 
     this.submitInput({
       forward: true,
       sprint: true,
-      jump: snapshot.onGround,
+      jump: jumpThisTick,
       yaw: this.getLockedYaw(snapshot),
       pitch: this.getLockedPitch(),
     }, snapshot);
+    if (!snapshot.onGround) {
+      this.port.setClientSideFallFlying(true);
+    }
   }
 
   private processEquipResult(result: EquipResult) {
@@ -572,16 +654,18 @@ class EBounceController {
     this.lastPos = null;
     this.lockedYaw = null;
     this.targetYaw = null;
+    this.targetPitch = null;
     this.currentSpeed = 0;
-    this.takeoffInFlight = false;
-    this.glideRequested = false;
-    this.takeoffAttemptCount = 0;
-    this.retryDelayTicks = 0;
-    this.lastRetryBlockReason = null;
+    this.startFlyingPacketCount = 0;
     this.lastJumpCommand = false;
     this.jumpAttemptCount = 0;
+    this.lastObservedOnGround = null;
+    this.lastObservedFallFlying = null;
+    this.lastObservedClientFallFlying = null;
     this.bounceTicks = 0;
     this.bounceGroundTicks = 0;
+    this.bounceFallFlyingTicks = 0;
+    this.bounceSprintingTicks = 0;
     this.lastBounceOnGround = false;
   }
 
@@ -623,15 +707,12 @@ class EBounceController {
   }
 
   private getLockedPitch() {
+    if (this.targetPitch != null) return this.targetPitch;
     return this.lockPitch ? toRadians(this.options.targetPitchDeg) : null;
   }
 
   private isConfirmedFallFlying(snapshot: BounceSnapshot) {
     return snapshot.rawFallFlying && !snapshot.pendingFlight;
-  }
-
-  private hasActiveGlideRequest(snapshot: BounceSnapshot) {
-    return this.glideRequested || snapshot.pendingRequest || snapshot.pendingFlight || this.isConfirmedFallFlying(snapshot);
   }
 
   private recordJumpAttempt(jump: boolean, snapshot: BounceSnapshot) {
@@ -649,63 +730,57 @@ class EBounceController {
     this.lastJumpCommand = true;
   }
 
-  private async runTakeoffSequence(yaw: number, pitch: number, assistTakeoff: boolean) {
-    const token = this.sequenceToken;
-    this.takeoffInFlight = true;
-
-    try {
-      await this.port.look(yaw, pitch);
-      await this.requestGlide(assistTakeoff);
-      if (token !== this.sequenceToken || this.currentState !== FlightState.LAUNCHING) return;
-
-      this.port.log("Takeoff sequence sent. Entering bounce state.");
-      this.transitionTo(FlightState.BOUNCING);
-    } catch (error) {
-      if (token !== this.sequenceToken || this.currentState !== FlightState.LAUNCHING) return;
-      this.port.log(`FAIL: ${String(error)}`);
-      this.stopFlight();
-    } finally {
-      this.takeoffInFlight = false;
-    }
+  private sendStartFlyingPacket(reason: "launch" | "state_correction") {
+    this.startFlyingPacketCount++;
+    this.port.log(`Sending START_FLYING_WITH_ELYTRA. count=${this.startFlyingPacketCount} reason=${reason}`);
+    this.port.sendStartFlyingPacket();
   }
 
-  private async requestGlide(assistTakeoff: boolean) {
-    const token = this.sequenceToken;
-    this.takeoffAttemptCount++;
-    this.retryDelayTicks = this.options.retryDelayTicks;
-    this.glideRequested = true;
-    this.port.log(`Requesting glide. attempt=${this.takeoffAttemptCount} assistTakeoff=${assistTakeoff}`);
-
-    try {
-      await this.port.requestGlide(assistTakeoff);
-      if (token !== this.sequenceToken) return;
-      this.port.log("Glide request accepted.");
-    } catch (error) {
-      if (token !== this.sequenceToken) return;
-      this.port.log(`Glide request failed: ${String(error)}`);
-      throw error;
-    } finally {
-      this.glideRequested = false;
+  private logStateEdges(snapshot: BounceSnapshot) {
+    if (this.currentState === FlightState.IDLE) {
+      this.lastObservedOnGround = snapshot.onGround;
+      this.lastObservedFallFlying = snapshot.rawFallFlying;
+      this.lastObservedClientFallFlying = snapshot.clientFallFlying;
+      return;
     }
-  }
 
-  private logRetryBlock(snapshot: BounceSnapshot) {
-    const blockParts = [
-      snapshot.onGround ? "onGround" : null,
-      this.glideRequested ? "glideRequested=true" : null,
-      snapshot.pendingRequest ? "pendingRequest=true" : null,
-      snapshot.pendingFlight ? "pendingFlight=true" : null,
-      this.isConfirmedFallFlying(snapshot) ? "confirmedFallFlying=true" : null,
-      snapshot.rawFallFlying && !this.isConfirmedFallFlying(snapshot) ? "entityFallFlying=speculative" : null,
-      this.takeoffInFlight ? "takeoffInFlight=true" : null,
-      this.retryDelayTicks > 0 ? `retryDelay=${this.retryDelayTicks}` : null,
-    ].filter((value): value is string => value != null);
-
-    const blockReason = blockParts.join(", ");
-    if (blockReason.length > 0 && blockReason !== this.lastRetryBlockReason) {
-      this.lastRetryBlockReason = blockReason;
-      this.port.log(`Retry blocked: ${blockReason}`);
+    if (this.lastObservedOnGround != null && this.lastObservedOnGround !== snapshot.onGround) {
+      if (snapshot.onGround) {
+        this.port.log(
+          `Ground contact state=${this.currentState} tick=${this.stateTicks} ` +
+          `speed=${this.currentSpeed.toFixed(2)} pos=${this.formatVec3(snapshot.position)} vel=${this.formatVec3(snapshot.velocity)}`,
+        );
+      } else {
+        this.port.log(
+          `Left ground state=${this.currentState} tick=${this.stateTicks} ` +
+          `speed=${this.currentSpeed.toFixed(2)} pos=${this.formatVec3(snapshot.position)} vel=${this.formatVec3(snapshot.velocity)}`,
+        );
+      }
     }
+
+    if (this.lastObservedFallFlying != null && this.lastObservedFallFlying !== snapshot.rawFallFlying) {
+      this.port.log(
+        `FallFlying=${snapshot.rawFallFlying} state=${this.currentState} tick=${this.stateTicks} ` +
+        `pendingFlight=${snapshot.pendingFlight} pos=${this.formatVec3(snapshot.position)} vel=${this.formatVec3(snapshot.velocity)}`,
+      );
+    }
+
+    if (
+      this.lastObservedClientFallFlying != null &&
+      snapshot.clientFallFlying != null &&
+      this.lastObservedClientFallFlying !== snapshot.clientFallFlying &&
+      snapshot.clientFallFlying === false
+    ) {
+      this.port.log(
+        `WARN: clientFallFlying=false state=${this.currentState} tick=${this.stateTicks} ` +
+        `rawFallFlying=${snapshot.rawFallFlying} pendingFlight=${snapshot.pendingFlight} ` +
+        `pos=${this.formatVec3(snapshot.position)} vel=${this.formatVec3(snapshot.velocity)}`,
+      );
+    }
+
+    this.lastObservedOnGround = snapshot.onGround;
+    this.lastObservedFallFlying = snapshot.rawFallFlying;
+    this.lastObservedClientFallFlying = snapshot.clientFallFlying;
   }
 
   private getForwardSpeed(velocity: BounceVector, yaw: number) {
@@ -739,6 +814,10 @@ async function handleChatCommand(bot: EBounceBot, username: string, message: str
         const yaw = Number(args[0]);
         if (!Number.isNaN(yaw)) controller.setTargetYawDegrees(yaw);
       }
+      if (args[1] != null) {
+        const pitch = Number(args[1]);
+        if (!Number.isNaN(pitch)) controller.setTargetPitchDegrees(pitch);
+      }
       controller.beginBounce();
       bot.chat("Bounce sequence started.");
       return;
@@ -764,6 +843,21 @@ async function handleChatCommand(bot: EBounceBot, username: string, message: str
         if (!Number.isNaN(yaw)) {
           controller.setTargetYawDegrees(yaw);
           bot.chat(`Target yaw set to ${yaw.toFixed(1)}.`);
+        }
+      }
+      return;
+    case "pitch":
+      if (args[0] === "clear") {
+        controller.clearTargetPitch();
+        bot.chat("Target pitch cleared.");
+        return;
+      }
+
+      if (args[0] != null) {
+        const pitch = Number(args[0]);
+        if (!Number.isNaN(pitch)) {
+          controller.setTargetPitchDegrees(pitch);
+          bot.chat(`Target pitch set to ${pitch.toFixed(1)}.`);
         }
       }
       return;
@@ -817,7 +911,7 @@ function buildBot() {
     onSpawn: async (bot, helpers) => {
       helpers.physicsSwitcher.enable();
       console.log("[ebounce] new engine enabled");
-      console.log("[ebounce] chat commands: prep | bounce [yawDeg] | boost | stop | status | yaw <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | reset");
+      console.log("[ebounce] chat commands: prep | bounce [yawDeg] [pitchDeg] | boost | stop | status | yaw <deg|clear> | pitch <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | reset");
       await ensureBounceLoadout(bot).catch(() => {});
     },
     onChat: async (bot, username, message) => {

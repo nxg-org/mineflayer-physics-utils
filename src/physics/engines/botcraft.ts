@@ -629,7 +629,7 @@ export class BotcraftPhysics implements IPhysics {
       const hasBlindness = this.getEffectLevel(CheapEffects.BLINDNESS, player.effects) > 0;
 
       // Stop sprinting when crouching fix in 1.21.4+
-      if (player.fallFlying || hasBlindness || isMovingSlowly) {
+      if (hasBlindness || isMovingSlowly) {
         this.setSprinting(ctx, false);
       }
     }
@@ -667,20 +667,11 @@ export class BotcraftPhysics implements IPhysics {
   private inputsToSprint(ctx: EPhysicsCtx, heading: Heading, world: World) {
     const player = ctx.state as PlayerState;
 
-    // Vanilla treats fall-flying as an unconditional sprint stop condition.
-    // If sprint persists through gliding, the landing transition can inherit a
-    // sprinting ground state one tick too early.
-    if (player.fallFlying) {
-      this.setSprinting(ctx, false);
-      return;
-    }
-
     // console.log('is sprinting', player.sprinting, 'can sprint', this.canStartSprinting(ctx, heading), player.sprinting)
     if (this.canStartSprinting(ctx, heading) &&
       (player.control.sprint || (player.sprintTriggerTime > 0 && heading.forward >= (player.isInWater ? 1e-5 : 0.8)))) {
       this.setSprinting(ctx, true);
     }
-
 
     // console.log('should stop', this.shouldStopRunSprinting(ctx, heading), 'minor collision', player.isCollidedHorizontallyMinor)
     // Stop sprinting if necessary

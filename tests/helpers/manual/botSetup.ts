@@ -12,7 +12,7 @@ export type PhysicsBot = Bot & {
   };
   physicsEngine?: unknown;
   physicsEngineCtx?: unknown;
-  elytraFly?: (options?: { assistTakeoff?: boolean } | boolean) => Promise<void>;
+  elytraFly?: (options?: { assistTakeoff?: boolean; force?: boolean } | boolean) => Promise<void>;
   fireworkRocketDuration?: number;
 };
 
@@ -38,6 +38,14 @@ const rl = require("readline").createInterface({
   output: process.stdout,
 });
 const DEFAULT_CLI_USERNAME = "cli";
+const CLI_SAY_PREFIXES = ["chat ", "say "] as const;
+const consoleRelayHandlers = new Set<(line: string) => void>();
+
+rl.on("line", (line: string) => {
+  for (const handler of consoleRelayHandlers) {
+    handler(line);
+  }
+});
 
 export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -184,18 +192,31 @@ export function registerConsoleRelay<TBot extends PhysicsBot>(
   hooks: ManagedBotHooks<TBot>,
   helpers: BotHelpers<TBot>,
 ) {
-  rl.removeAllListeners("line");
-  rl.on("line", (line: string) => {
+  const relay = (line: string) => {
     const trimmed = line.trim();
     if (trimmed.length === 0) return;
 
-    if (trimmed.startsWith("chat ")) {
-      bot.chat(trimmed.slice(5));
+    for (const prefix of CLI_SAY_PREFIXES) {
+      if (!trimmed.startsWith(prefix)) continue;
+
+      const message = trimmed.slice(prefix.length).trim();
+      if (message.length > 0) {
+        bot.chat(message);
+      }
       return;
     }
 
     void hooks.onChat?.(bot, DEFAULT_CLI_USERNAME, trimmed, helpers);
-  });
+  };
+
+  consoleRelayHandlers.add(relay);
+
+  const unregister = () => {
+    consoleRelayHandlers.delete(relay);
+  };
+
+  bot.once("end", unregister);
+  return unregister;
 }
 
 export function buildManagedBot<TBot extends PhysicsBot>(
