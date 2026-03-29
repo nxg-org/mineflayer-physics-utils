@@ -1,4 +1,6 @@
 import { Bot } from "mineflayer";
+import type { Block } from "prismarine-block";
+import { Vec3 } from "vec3";
 import {
   buildManagedBot,
   getBotOptionsFromArgs,
@@ -9,14 +11,36 @@ import {
   EBounceController,
   MineflayerEBouncePort,
   ensureBounceLoadout,
+  findInventoryItem,
   registerEBounceLogging,
 } from "../helpers/manual/ebounceShared";
 import {
+  type PlacementAssistEquipRequest,
+  type PlacementAssistPlacementRequest,
   PredictiveTopPlacementAssist,
   registerPlacementAssistLogging,
 } from "../helpers/manual/ebounceScaffoldPlacement";
 
 const BLOCK_USAGE_REPORT_DISTANCE = 1000;
+const REPLACEABLE_BLOCK_NAMES = new Set([
+  "air",
+  "cave_air",
+  "void_air",
+  "water",
+  "lava",
+  "short_grass",
+  "tall_grass",
+  "fern",
+  "large_fern",
+  "seagrass",
+  "tall_seagrass",
+  "snow",
+  "vine",
+  "weeping_vines",
+  "weeping_vines_plant",
+  "twisting_vines",
+  "twisting_vines_plant",
+]);
 
 let activeBot: Bot;
 
@@ -120,6 +144,114 @@ function createRealBotActivityLogger(
       `support=${(bot.entity as any).supportingBlockPos?.toString() ?? "null"}`,
     );
   };
+}
+
+function isReplaceableForPlacement(block: Block | null) {
+  if (block == null) return true;
+  if (REPLACEABLE_BLOCK_NAMES.has(block.name)) return true;
+  return block.boundingBox === "empty";
+}
+
+function applyClientSidePlacedBlock(bot: EBounceBot, blockName: string, targetPos: Vec3) {
+  const blockInfo = bot.registry.blocksByName[blockName];
+  if (!blockInfo) {
+    return;
+  }
+
+  const updater = (bot as any)._updateBlockState;
+  if (typeof updater === "function") {
+    updater(targetPos, blockInfo.defaultState);
+  }
+}
+
+function getPlaceReference(bot: EBounceBot, targetPos: Vec3): Block | { position: Vec3 } {
+  const referencePos = new Vec3(targetPos.x, targetPos.y - 1, targetPos.z);
+  const referenceBlock = bot.blockAt(referencePos);
+  if (referenceBlock != null) {
+    if (referenceBlock.type === bot.registry.blocksByName.air.id) {
+      return { position: targetPos.clone() };
+    }
+    return referenceBlock;
+  }
+
+  return { position: referencePos };
+}
+
+function registerPlacementActionHandlers(
+  bot: EBounceBot,
+  placementAssist: PredictiveTopPlacementAssist,
+) {
+  placementAssist.on("equip_request", async ({ placeableName }: PlacementAssistEquipRequest) => {
+    try {
+      const placeable = findInventoryItem(bot, placeableName);
+      if (!placeable) {
+        placementAssist.resolveEquipRequest(new Error(`Placement block ${placeableName} was no longer available.`));
+        return;
+      }
+
+      if (bot.heldItem?.name !== placeable.name) {
+        await bot.equip(placeable, "hand");
+      }
+      placementAssist.resolveEquipRequest();
+    } catch (error) {
+      placementAssist.resolveEquipRequest(error);
+    }
+  });
+
+  placementAssist.on("placement_request", async (request: PlacementAssistPlacementRequest) => {
+    const placementRequestedAt = Date.now();
+    try {
+      const placeable = findInventoryItem(bot, request.placeableName);
+      if (!placeable) {
+        console.log(
+          `[ebounce-scaffold][tick=${request.tick}] Placement block ${request.placeableName} was no longer available.`,
+        );
+        placementAssist.resolvePlacementRequest({ placedCount: 0 });
+        return;
+      }
+
+      if (bot.heldItem?.name !== placeable.name) {
+        await bot.equip(placeable, "hand");
+      }
+
+      const placementPromises: Promise<unknown>[] = [];
+      let placedCount = 0;
+      for (let i = 0; i < request.targetPositions.length; i++) {
+        const targetPos = request.targetPositions[i];
+        const existingBlock = bot.blockAt(targetPos);
+        if (!isReplaceableForPlacement(existingBlock)) {
+          continue;
+        }
+
+        const referenceBlock = getPlaceReference(bot, targetPos);
+        placementPromises.push(
+          (bot as any)._genericPlace(referenceBlock, new Vec3(0, 1, 0), {
+            swingArm: i === 0 ? "right" : undefined,
+            forceLook: "ignore",
+          }),
+        );
+        applyClientSidePlacedBlock(bot, placeable.name, targetPos);
+        placedCount++;
+      }
+
+      console.log(
+        `[ebounce-scaffold][tick=${request.tick}] Placed ${placeable.name} at ${request.targetKey} ` +
+        `botPos=${request.botPos.toString()} pitchDeg=${request.pitchDeg.toFixed(1)} ` +
+        `predictedTick=${request.predictedTick} ` +
+        `reach=${request.reach.toFixed(2)} ` +
+        `crossing=${request.crossingPos.toString()} landing=${request.landingPos.toString()} ` +
+        `requestMs=${Date.now() - placementRequestedAt}`,
+      );
+      await Promise.all(placementPromises);
+      placementAssist.resolvePlacementRequest({ placedCount });
+    } catch (error) {
+      console.log(
+        `[ebounce-scaffold][tick=${request.tick}] Placement failed at ${request.targetKey}: ${String(error)} ` +
+        `requestMs=${Date.now() - placementRequestedAt}`,
+      );
+      placementAssist.resolvePlacementRequest({ placedCount: 0, error });
+    }
+  });
 }
 
 async function handleChatCommand(
@@ -273,6 +405,7 @@ function buildBot() {
       const logRealBotActivity = createRealBotActivityLogger(bot, controller, placementAssist);
       registerEBounceLogging(bot, controller, false);
       registerPlacementAssistLogging(placementAssist);
+      registerPlacementActionHandlers(bot, placementAssist);
       bot.on("physicsTickBegin", () => {
         controller.tick();
         placementAssist.tick();

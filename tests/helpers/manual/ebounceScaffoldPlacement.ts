@@ -60,10 +60,6 @@ type OverlayWorld = {
   getBlock: (pos: Vec3) => Block;
 };
 
-type PlaceReference = {
-  position: Vec3;
-};
-
 type PlacementCandidate = {
   interceptTick: number;
   landingPos: Vec3;
@@ -132,13 +128,31 @@ type PlacementAssistState = {
   trackedYLevel: number | null;
   lastGroundedYLevel: number | null;
   fallbackYLevel: number | null;
-  pendingEquip: Promise<void> | null;
-  pendingPlacement: Promise<void> | null;
+  pendingEquip: boolean;
+  pendingPlacement: boolean;
   placedBlockCount: number;
   satisfiedLandingCount: number;
   lastResolvedTargetKey: string | null;
   pitchOverrideState: PitchOverrideState;
   deferredPlacement: DeferredPlacement | null;
+};
+
+export type PlacementAssistEquipRequest = {
+  tick: number;
+  placeableName: string;
+};
+
+export type PlacementAssistPlacementRequest = {
+  tick: number;
+  placeableName: string;
+  targetKey: string;
+  targetPositions: Vec3[];
+  predictedTick: number;
+  reach: number;
+  crossingPos: Vec3;
+  landingPos: Vec3;
+  pitchDeg: number;
+  botPos: Vec3;
 };
 
 type PlacementVerticalMode = "idle" | "ascending" | "fallback" | "level" | "descending";
@@ -647,8 +661,8 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     trackedYLevel: null,
     lastGroundedYLevel: null,
     fallbackYLevel: null,
-    pendingEquip: null,
-    pendingPlacement: null,
+    pendingEquip: false,
+    pendingPlacement: false,
     placedBlockCount: 0,
     satisfiedLandingCount: 0,
     lastResolvedTargetKey: null,
@@ -700,8 +714,8 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     this.state.lastGroundedYLevel = null;
     this.state.fallbackYLevel = null;
     this.diagnostics.lastPredictedTargetKey = null;
-    this.state.pendingEquip = null;
-    this.state.pendingPlacement = null;
+    this.state.pendingEquip = false;
+    this.state.pendingPlacement = false;
     this.diagnostics.lastWarningKey = null;
     this.state.lastResolvedTargetKey = null;
     this.diagnostics.lastSimulationDebug = null;
@@ -774,6 +788,8 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
 
     if (!this.controller.isBouncing() || planningYLevel == null) {
       this.diagnostics.lastPredictedTargetKey = null;
+      this.state.pendingEquip = false;
+      this.state.pendingPlacement = false;
       this.clearPitchStrategy();
       return;
     }
@@ -781,7 +797,7 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     this.ensurePlaceableEquipped();
     this.applyCommittedPitchIfNeeded();
 
-    if (this.state.pendingPlacement != null) {
+    if (this.state.pendingPlacement) {
       return;
     }
 
@@ -792,7 +808,7 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     ) {
       const deferredPlacement = this.state.deferredPlacement;
       this.state.deferredPlacement = null;
-      void this.placeRecoveryBlocks(deferredPlacement.plan, deferredPlacement.placeableName);
+      this.requestPlacement(deferredPlacement.plan, deferredPlacement.placeableName);
       return;
     }
 
@@ -843,7 +859,23 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
       this.state.deferredPlacement = null;
     }
 
-    void this.placeRecoveryBlocks(selection.plan, placeable.name);
+    this.requestPlacement(selection.plan, placeable.name);
+  }
+
+  public resolveEquipRequest(error?: unknown) {
+    this.state.pendingEquip = false;
+    if (error != null) {
+      this.log(`Background equip failed: ${String(error)}`);
+    }
+  }
+
+  public resolvePlacementRequest(result: { placedCount: number; error?: unknown }) {
+    this.state.pendingPlacement = false;
+    this.state.placedBlockCount += result.placedCount;
+    this.clearPitchStrategy();
+    if (result.error != null) {
+      this.log(`Placement failed: ${String(result.error)}`);
+    }
   }
 
   // Control logic
@@ -893,9 +925,6 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     const wantedPitch = this.getWantedPitchRadians();
     const currentlyBelowTrackedY = this.bot.entity.position.y + 1e-6 < planningYLevel;
     const mode = this.getCurrentMode(planningYLevel);
-    const activePitch = this.state.pitchOverrideState.mode === "plan"
-      ? this.state.pitchOverrideState.pitch
-      : wantedPitch;
     const wantedPitchReachesPlanningY = mode === "ascending"
       ? this.planner.reachesYLevel(planningYLevel, wantedPitch)
       : false;
@@ -972,9 +1001,8 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     return null;
   }
 
-  // Inventory / equipment helpers
   private ensurePlaceableEquipped() {
-    if (this.state.pendingEquip != null || this.state.pendingPlacement != null) {
+    if (this.state.pendingEquip || this.state.pendingPlacement) {
       return;
     }
 
@@ -983,15 +1011,11 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
       return;
     }
 
-    this.state.pendingEquip = (async () => {
-      try {
-        await this.bot.equip(placeable, "hand");
-      } catch (error) {
-        this.log(`Background equip failed for ${placeable.name}: ${String(error)}`);
-      } finally {
-        this.state.pendingEquip = null;
-      }
-    })();
+    this.state.pendingEquip = true;
+    this.emit("equip_request", {
+      tick: this.diagnostics.tickNumber,
+      placeableName: placeable.name,
+    } satisfies PlacementAssistEquipRequest);
   }
 
   private findMinimalTwoTickPitchPlan(
@@ -1153,94 +1177,37 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     );
   }
 
-  // Placement execution
-  private handlePlacementRequest(
-    placeableName: string,
-    candidate: PlacementCandidate,
-    swingArm: "right" | undefined,
-  ) {
-    const referenceBlock = this.getPlaceReference(candidate);
-    const placementPromise = (this.bot as any)._genericPlace(referenceBlock, new Vec3(0, 1, 0), {
-      swingArm,
-      forceLook: "ignore",
-    });
-
-    // Mirror the placement immediately after dispatch so the local prediction path
-    // sees the support before any async continuation resumes.
-    this.applyClientSidePlacedBlock(placeableName, candidate.targetPos);
-    this.state.placedBlockCount++;
-    return placementPromise;
-  }
-
-  private async placeRecoveryBlocks(plan: PlacementPlan, placeableName: string) {
+  private requestPlacement(plan: PlacementPlan, placeableName: string) {
     const targetKey = plan.candidates.map((candidate) => blockKey(candidate.targetPos)).join("|");
-    this.state.pendingPlacement = (async () => {
-      const placementRequestedAt = Date.now();
-      try {
-        const planningYLevel = this.getCurrentPlanningYLevel();
-        if (
-          planningYLevel != null &&
-          this.bot.entity.position.y + 1e-6 < planningYLevel &&
-          this.bot.entity.velocity.y <= 0
-        ) {
-          this.log(
-            `Skipped placement below trackedY at ${targetKey} ` +
-            `pos=${this.bot.entity.position.toString()} vel=${this.bot.entity.velocity.toString()} ` +
-            `trackedY=${planningYLevel.toFixed(3)} ` +
-            `requestMs=${Date.now() - placementRequestedAt}`,
-          );
-          this.clearPitchStrategy();
-          return;
-        }
+    const planningYLevel = this.getCurrentPlanningYLevel();
+    if (
+      planningYLevel != null &&
+      this.bot.entity.position.y + 1e-6 < planningYLevel &&
+      this.bot.entity.velocity.y <= 0
+    ) {
+      this.log(
+        `Skipped placement below trackedY at ${targetKey} ` +
+        `pos=${this.bot.entity.position.toString()} vel=${this.bot.entity.velocity.toString()} ` +
+        `trackedY=${planningYLevel.toFixed(3)}`,
+      );
+      this.clearPitchStrategy();
+      return;
+    }
 
-        const placeable = findInventoryItem(this.bot, placeableName);
-        if (!placeable) {
-          this.log(`Placement block ${placeableName} was no longer available.`);
-          return;
-        }
-
-        if (this.bot.heldItem?.name !== placeable.name) {
-          this.log(
-            `Skipped placement at ${targetKey} because ${placeable.name} was not yet equipped ` +
-            `held=${this.bot.heldItem?.name ?? "null"} pos=${this.bot.entity.position.toString()} ` +
-            `requestMs=${Date.now() - placementRequestedAt}`,
-          );
-          this.ensurePlaceableEquipped();
-          this.clearPitchStrategy();
-          return;
-        }
-
-        const placementPromises: Promise<unknown>[] = [];
-        for (let i = 0; i < plan.candidates.length; i++) {
-          const candidate = plan.candidates[i];
-          const existingBlock = this.bot.blockAt(candidate.targetPos);
-          if (!isReplaceable(existingBlock)) {
-            continue;
-          }
-
-          placementPromises.push(
-            this.handlePlacementRequest(placeable.name, candidate, i === 0 ? "right" : undefined),
-          );
-        }
-
-        const primaryCandidate = plan.candidates[0];
-        this.log(
-          `Placed ${placeable.name} at ${targetKey} ` +
-          `botPos=${this.bot.entity.position.toString()} pitchDeg=${toDegrees(this.bot.entity.pitch).toFixed(1)} ` +
-          `predictedTick=${primaryCandidate.interceptTick} ` +
-          `reach=${Math.max(...plan.candidates.map((candidate) => candidate.reachDistance)).toFixed(2)} ` +
-          `crossing=${primaryCandidate.crossingPos.toString()} landing=${primaryCandidate.landingPos.toString()} ` +
-          `requestMs=${Date.now() - placementRequestedAt}`,
-        );
-        await Promise.all(placementPromises);
-        this.clearPitchStrategy();
-      } catch (error) {
-        this.log(`Placement failed at ${targetKey}: ${String(error)} requestMs=${Date.now() - placementRequestedAt}`);
-        this.clearPitchStrategy();
-      } finally {
-        this.state.pendingPlacement = null;
-      }
-    })();
+    this.state.pendingPlacement = true;
+    const primaryCandidate = plan.candidates[0];
+    this.emit("placement_request", {
+      tick: this.diagnostics.tickNumber,
+      placeableName,
+      targetKey,
+      targetPositions: plan.candidates.map((candidate) => candidate.targetPos.clone()),
+      predictedTick: primaryCandidate.interceptTick,
+      reach: Math.max(...plan.candidates.map((candidate) => candidate.reachDistance)),
+      crossingPos: primaryCandidate.crossingPos.clone(),
+      landingPos: primaryCandidate.landingPos.clone(),
+      pitchDeg: toDegrees(this.bot.entity.pitch),
+      botPos: this.bot.entity.position.clone(),
+    } satisfies PlacementAssistPlacementRequest);
   }
 
   private selectBestPlacementCandidate(prediction: PlacementPrediction, blockName: string, silent = false) {
@@ -1412,32 +1379,6 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
       `fallbackY=${fallbackYLevel.toFixed(3)} trackedY=${this.state.trackedYLevel?.toFixed(3) ?? "null"} ` +
       `botVel=${this.bot.entity.velocity.toString()}`,
     );
-  }
-
-  private applyClientSidePlacedBlock(blockName: string, targetPos: Vec3) {
-    const blockInfo = this.bot.registry.blocksByName[blockName];
-    if (!blockInfo) {
-      return;
-    }
-
-    const updater = (this.bot as any)._updateBlockState;
-    if (typeof updater === "function") {
-      updater(targetPos, blockInfo.defaultState);
-    }
-  }
-
-  private getPlaceReference(candidate: PlacementCandidate): Block | PlaceReference {
-    const referenceBlock = this.bot.blockAt(candidate.referencePos);
-    if (referenceBlock != null) {
-      if (referenceBlock.type === this.bot.registry.blocksByName.air.id) {
-        return { position: candidate.targetPos.clone() };
-      }
-      return referenceBlock;
-    }
-
-    return {
-      position: candidate.referencePos.clone(),
-    };
   }
 
   // Candidate resolution / support simulation
