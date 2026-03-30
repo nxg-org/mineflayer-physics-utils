@@ -14,15 +14,17 @@ import {
   toRadians,
 } from "./ebounceShared";
 
-const BLOCK_REACH_DISTANCE = 4.5;
+const BLOCK_REACH_DISTANCE = 3;
 const SUPPORT_CONFIRMATION_TICKS = 6;
-const SUPPORT_VELOCITY_RETENTION_RATIO = 0.8;
+const SUPPORT_VELOCITY_RETENTION_RATIO = 0.9;
 const MAX_VELOCITY_RECOVERY_STRIP_LENGTH = 5;
 const MAX_VELOCITY_RECOVERY_FRONT_OFFSET = 3;
 const MAX_VELOCITY_RECOVERY_FORWARD_EXTENSION = 1;
 const PITCH_SHALLOW_SEARCH_STEP_DEG = 1;
 const ONE_TICK_UPWARD_RECOVERY_PITCH_DEG = 20;
 const DEFAULT_PLACEABLE_BLOCK_NAMES = [
+  "gravel",
+  "obsidian",
   "dirt",
 ] as const;
 
@@ -115,6 +117,7 @@ type PlacementAssistDiagnostics = {
   lastPredictedTargetKey: string | null;
   lastWarningKey: string | null;
   lastSimulationDebug: string | null;
+  lastDecisionDurationMs: number | null;
 };
 
 type PlacementAssistSettings = {
@@ -676,6 +679,7 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     lastPredictedTargetKey: null,
     lastWarningKey: null,
     lastSimulationDebug: null,
+    lastDecisionDurationMs: null,
   };
 
   constructor(
@@ -772,25 +776,34 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
   // Tick orchestration
   public tick() {
     this.diagnostics.tickNumber++;
+    const decisionStartNs = process.hrtime.bigint();
     this.refreshGroundedYLevel();
     this.refreshFallbackState();
     const planningYLevel = this.getCurrentPlanningYLevel();
     const mode = this.getCurrentMode(planningYLevel);
-    this.emit("tick_state", {
-      tick: this.diagnostics.tickNumber,
-      mode,
-      trackedYLevel: this.state.trackedYLevel,
-      activeTrackedYLevel: planningYLevel,
-      pitchDeg: toDegrees(this.bot.entity.pitch),
-      pos: this.bot.entity.position.clone(),
-      vel: this.bot.entity.velocity.clone(),
-    });
+    const emitTickState = () => {
+      this.emit("tick_state", {
+        tick: this.diagnostics.tickNumber,
+        mode,
+        trackedYLevel: this.state.trackedYLevel,
+        activeTrackedYLevel: planningYLevel,
+        pitchDeg: toDegrees(this.bot.entity.pitch),
+        pos: this.bot.entity.position.clone(),
+        vel: this.bot.entity.velocity.clone(),
+        decisionMs: this.diagnostics.lastDecisionDurationMs,
+      });
+    };
+    const finishDecision = () => {
+      this.diagnostics.lastDecisionDurationMs = Number(process.hrtime.bigint() - decisionStartNs) / 1_000_000;
+      emitTickState();
+    };
 
     if (!this.controller.isBouncing() || planningYLevel == null) {
       this.diagnostics.lastPredictedTargetKey = null;
       this.state.pendingEquip = false;
       this.state.pendingPlacement = false;
       this.clearPitchStrategy();
+      finishDecision();
       return;
     }
 
@@ -798,6 +811,7 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
     this.applyCommittedPitchIfNeeded();
 
     if (this.state.pendingPlacement) {
+      finishDecision();
       return;
     }
 
@@ -809,21 +823,27 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
       const deferredPlacement = this.state.deferredPlacement;
       this.state.deferredPlacement = null;
       this.requestPlacement(deferredPlacement.plan, deferredPlacement.placeableName);
+      finishDecision();
       return;
     }
 
     const placeable = findFirstPlaceableBlock(this.bot, this.settings.blockNames);
     if (!placeable) {
       this.log(`No placement block available from [${this.settings.blockNames.join(", ")}].`);
+      finishDecision();
       return;
     }
 
     const prediction = this.resolvePlanningPrediction(placeable.name, planningYLevel);
     this.diagnostics.lastPredictedTargetKey = prediction == null ? null : blockKey(prediction.projectedTargetPos);
-    if (prediction == null) return;
+    if (prediction == null) {
+      finishDecision();
+      return;
+    }
 
     const selection = this.selectBestPlacementCandidate(prediction, placeable.name);
     if (selection == null) {
+      finishDecision();
       return;
     }
 
@@ -843,6 +863,7 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
         `crossing=${selection.plan.candidates[0].crossingPos.toString()} ` +
         `landing=${selection.plan.candidates[0].landingPos.toString()}`,
       );
+      finishDecision();
       return;
     }
 
@@ -854,12 +875,14 @@ export class PredictiveTopPlacementAssist extends EventEmitter {
         plan: selection.plan,
       };
       if (this.diagnostics.tickNumber < executeTick) {
+        finishDecision();
         return;
       }
       this.state.deferredPlacement = null;
     }
 
     this.requestPlacement(selection.plan, placeable.name);
+    finishDecision();
   }
 
   public resolveEquipRequest(error?: unknown) {
@@ -1517,7 +1540,7 @@ export function registerPlacementAssistLogging(placementAssist: PredictiveTopPla
   placementAssist.on("log", ({ tick, message }) => {
     console.log(`[ebounce-scaffold][tick=${tick}] ${message}`);
   });
-  placementAssist.on("tick_state", ({ tick, mode, trackedYLevel, activeTrackedYLevel, pitchDeg, pos, vel }) => {
+  placementAssist.on("tick_state", ({ tick, mode, trackedYLevel, activeTrackedYLevel, pitchDeg, pos, vel, decisionMs }) => {
     if (mode === "idle") {
       return;
     }
@@ -1527,7 +1550,8 @@ export function registerPlacementAssistLogging(placementAssist: PredictiveTopPla
       `trackedY=${trackedYLevel == null ? "null" : trackedYLevel.toFixed(3)} ` +
       `activeTrackedY=${activeTrackedYLevel == null ? "null" : activeTrackedYLevel.toFixed(3)} ` +
       `pitchDeg=${pitchDeg.toFixed(1)} ` +
-      `pos=${pos.toString()} vel=${vel.toString()}`,
+      `pos=${pos.toString()} vel=${vel.toString()} ` +
+      `decisionMs=${decisionMs == null ? "null" : decisionMs.toFixed(3)}`,
     );
   });
 }

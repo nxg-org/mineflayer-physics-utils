@@ -152,6 +152,51 @@ function isReplaceableForPlacement(block: Block | null) {
   return block.boundingBox === "empty";
 }
 
+function tryEquipPlaceableToMainHandSameTick(bot: EBounceBot, placeableName: string) {
+  if (bot.heldItem?.name === placeableName) {
+    return true;
+  }
+
+  const placeable = findInventoryItem(bot, placeableName);
+  if (placeable == null) {
+    return false;
+  }
+
+  if (placeable.slot >= 36 && placeable.slot <= 44) {
+    bot.setQuickBarSlot(placeable.slot - 36);
+    return bot.heldItem?.name === placeableName;
+  }
+
+  return false;
+}
+
+function sendSwapItemWithOffhand(bot: EBounceBot) {
+  const body: Record<string, unknown> = {
+    status: 6,
+    location: new Vec3(0, 0, 0),
+    face: 0,
+  };
+
+  if (bot.supportFeature("useItemWithOwnPacket")) {
+    body.sequence = 0;
+  }
+
+  (bot as any)._client.write("block_dig", body);
+}
+
+function mirrorSwapMainHandWithOffhand(bot: EBounceBot) {
+  const heldSlot = 36 + bot.quickBarSlot;
+  const inventory = bot.inventory.slots;
+  const offhandItem = inventory[45] ?? null;
+  inventory[45] = inventory[heldSlot] ?? null;
+  inventory[heldSlot] = offhandItem;
+  bot.updateHeldItem();
+}
+
+function getOffhandItem(bot: EBounceBot) {
+  return bot.inventory.slots[45] ?? null;
+}
+
 function applyClientSidePlacedBlock(bot: EBounceBot, blockName: string, targetPos: Vec3) {
   const blockInfo = bot.registry.blocksByName[blockName];
   if (!blockInfo) {
@@ -175,6 +220,84 @@ function getPlaceReference(bot: EBounceBot, targetPos: Vec3): Block | { position
   }
 
   return { position: referencePos };
+}
+
+function failPlacementRequest(
+  placementAssist: PredictiveTopPlacementAssist,
+  request: PlacementAssistPlacementRequest,
+  message: string,
+) {
+  console.log(`[ebounce-scaffold][tick=${request.tick}] ${message}`);
+  placementAssist.resolvePlacementRequest({ placedCount: 0 });
+}
+
+function preparePlaceableInOffhand(
+  bot: EBounceBot,
+  request: PlacementAssistPlacementRequest,
+) {
+  const offhandItem = getOffhandItem(bot);
+  if (offhandItem?.name === request.placeableName && bot.heldItem?.name !== request.placeableName) {
+    sendSwapItemWithOffhand(bot);
+    mirrorSwapMainHandWithOffhand(bot);
+  }
+
+  if (!tryEquipPlaceableToMainHandSameTick(bot, request.placeableName)) {
+    return {
+      ok: false as const,
+      message: `Placement block ${request.placeableName} was no longer available.`,
+    };
+  }
+
+  const mainHandItem = bot.heldItem;
+  if (mainHandItem == null || mainHandItem.name !== request.placeableName) {
+    return {
+      ok: false as const,
+      message: `Placement block ${request.placeableName} could not be moved to the main hand synchronously.`,
+    };
+  }
+
+  sendSwapItemWithOffhand(bot);
+  mirrorSwapMainHandWithOffhand(bot);
+
+  const placeable = getOffhandItem(bot);
+  if (placeable == null || placeable.name !== request.placeableName) {
+    return {
+      ok: false as const,
+      message: `Placement block ${request.placeableName} was not available in offhand for placement.`,
+    };
+  }
+
+  return { ok: true as const, placeableName: placeable.name };
+}
+
+function placeBlocksFromOffhand(
+  bot: EBounceBot,
+  targetPositions: Vec3[],
+  placeableName: string,
+) {
+  const placementPromises: Promise<unknown>[] = [];
+  let placedCount = 0;
+
+  for (let i = 0; i < targetPositions.length; i++) {
+    const targetPos = targetPositions[i];
+    const existingBlock = bot.blockAt(targetPos);
+    if (!isReplaceableForPlacement(existingBlock)) {
+      continue;
+    }
+
+    const referenceBlock = getPlaceReference(bot, targetPos);
+    placementPromises.push(
+      (bot as any)._genericPlace(referenceBlock, new Vec3(0, 1, 0), {
+        offhand: true,
+        swingArm: i === 0 ? "left" : undefined,
+        forceLook: "ignore",
+      }),
+    );
+    applyClientSidePlacedBlock(bot, placeableName, targetPos);
+    placedCount++;
+  }
+
+  return { placementPromises, placedCount };
 }
 
 function registerPlacementActionHandlers(
@@ -201,41 +324,23 @@ function registerPlacementActionHandlers(
   placementAssist.on("placement_request", async (request: PlacementAssistPlacementRequest) => {
     const placementRequestedAt = Date.now();
     try {
-      const placeable = findInventoryItem(bot, request.placeableName);
-      if (!placeable) {
-        console.log(
-          `[ebounce-scaffold][tick=${request.tick}] Placement block ${request.placeableName} was no longer available.`,
-        );
-        placementAssist.resolvePlacementRequest({ placedCount: 0 });
+      const prepared = preparePlaceableInOffhand(bot, request);
+      if (!prepared.ok) {
+        failPlacementRequest(placementAssist, request, prepared.message);
         return;
       }
 
-      if (bot.heldItem?.name !== placeable.name) {
-        await bot.equip(placeable, "hand");
-      }
+      const { placementPromises, placedCount } = placeBlocksFromOffhand(
+        bot,
+        request.targetPositions,
+        prepared.placeableName,
+      );
 
-      const placementPromises: Promise<unknown>[] = [];
-      let placedCount = 0;
-      for (let i = 0; i < request.targetPositions.length; i++) {
-        const targetPos = request.targetPositions[i];
-        const existingBlock = bot.blockAt(targetPos);
-        if (!isReplaceableForPlacement(existingBlock)) {
-          continue;
-        }
-
-        const referenceBlock = getPlaceReference(bot, targetPos);
-        placementPromises.push(
-          (bot as any)._genericPlace(referenceBlock, new Vec3(0, 1, 0), {
-            swingArm: i === 0 ? "right" : undefined,
-            forceLook: "ignore",
-          }),
-        );
-        applyClientSidePlacedBlock(bot, placeable.name, targetPos);
-        placedCount++;
-      }
+      sendSwapItemWithOffhand(bot);
+      mirrorSwapMainHandWithOffhand(bot);
 
       console.log(
-        `[ebounce-scaffold][tick=${request.tick}] Placed ${placeable.name} at ${request.targetKey} ` +
+        `[ebounce-scaffold][tick=${request.tick}] Placed ${prepared.placeableName} at ${request.targetKey} ` +
         `botPos=${request.botPos.toString()} pitchDeg=${request.pitchDeg.toFixed(1)} ` +
         `predictedTick=${request.predictedTick} ` +
         `reach=${request.reach.toFixed(2)} ` +
@@ -400,7 +505,7 @@ function buildBot() {
       console.log("[ebounce-scaffold] chat commands: prep | bounce [yawDeg] [pitchDeg] [trackedY] | boost | stop | status | blocks | placelasttick <true|false> | ascendstep <blocks> | descendstep <blocks> | yaw <deg|clear> | pitch <deg|clear> | lockyaw <true|false> | lockpitch <true|false> | forcefallflying <true|false> | reset");
       
       
-      controller = new EBounceController(new MineflayerEBouncePort(bot, helpers.physicsSwitcher, true));
+      controller = new EBounceController(new MineflayerEBouncePort(bot, helpers.physicsSwitcher, false));
       placementAssist = new PredictiveTopPlacementAssist(bot, controller);
       const logRealBotActivity = createRealBotActivityLogger(bot, controller, placementAssist);
       registerEBounceLogging(bot, controller, false);
