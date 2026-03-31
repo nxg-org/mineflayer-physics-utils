@@ -34,8 +34,8 @@ importers:
         specifier: ^16.0.0
         version: 16.5.0
       minecraft-data:
-        specifier: ^3.83.1
-        version: 3.105.0
+        specifier: ^3.109.0
+        version: 3.109.0
       mineflayer:
         specifier: link:/home/genpc/github_stuff/mineflayer
         version: link:../mineflayer
@@ -709,8 +709,8 @@ packages:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
     engines: {node: '>=8.6'}
 
-  minecraft-data@3.105.0:
-    resolution: {integrity: sha512-4bu0PYcd7qFDmLHYA0wzFYS9jqO4EpbbD4ntzdNg/wsLgqpQ/Mku8UbQcQFdap0X2zN+7Eiio0GYq2SOEoOCfg==}
+  minecraft-data@3.109.0:
+    resolution: {integrity: sha512-WdeFQAogj0pX30dXMm2mYBd7x1DlKs7LCs8qtFGZ+S+IhnCh0DgHNSGd8dgL7wFxS6I9eJaF8zdGksdUi2PwYg==}
 
   mineflayer-pathfinder@2.4.5:
     resolution: {integrity: sha512-Jh3JnUgRLwhMh2Dugo4SPza68C41y+NPP5sdsgxRu35ydndo70i1JJGxauVWbXrpNwIxYNztUw78aFyb7icw8g==}
@@ -1678,11 +1678,11 @@ snapshots:
       braces: 3.0.3
       picomatch: 2.3.2
 
-  minecraft-data@3.105.0: {}
+  minecraft-data@3.109.0: {}
 
   mineflayer-pathfinder@2.4.5:
     dependencies:
-      minecraft-data: 3.105.0
+      minecraft-data: 3.109.0
       prismarine-block: 1.22.0
       prismarine-entity: 2.5.0
       prismarine-item: 1.17.0
@@ -1791,15 +1791,15 @@ snapshots:
       ansi-styles: 5.2.0
       react-is: 18.3.1
 
-  prismarine-biome@1.3.0(minecraft-data@3.105.0)(prismarine-registry@1.11.0):
+  prismarine-biome@1.3.0(minecraft-data@3.109.0)(prismarine-registry@1.11.0):
     dependencies:
-      minecraft-data: 3.105.0
+      minecraft-data: 3.109.0
       prismarine-registry: 1.11.0
 
   prismarine-block@1.22.0:
     dependencies:
-      minecraft-data: 3.105.0
-      prismarine-biome: 1.3.0(minecraft-data@3.105.0)(prismarine-registry@1.11.0)
+      minecraft-data: 3.109.0
+      prismarine-biome: 1.3.0(minecraft-data@3.109.0)(prismarine-registry@1.11.0)
       prismarine-chat: 1.12.0
       prismarine-item: 1.17.0
       prismarine-nbt: 2.8.0
@@ -1829,13 +1829,13 @@ snapshots:
 
   prismarine-physics@1.10.0:
     dependencies:
-      minecraft-data: 3.105.0
+      minecraft-data: 3.109.0
       prismarine-nbt: 2.8.0
       vec3: 0.1.10
 
   prismarine-registry@1.11.0:
     dependencies:
-      minecraft-data: 3.105.0
+      minecraft-data: 3.109.0
       prismarine-block: 1.22.0
       prismarine-nbt: 2.8.0
 
