@@ -71,6 +71,14 @@ export function whichHandIsEntityUsingBoolean(entity: Entity, supportFeature: Su
     return (entity.metadata[getMetadataIndex(supportFeature)] as any) > 2;
 }
 
+export function isUsableElytraItem(item: { name?: string; durabilityUsed?: number; maxDurability?: number } | null): boolean {
+    if (!item || item.name !== "elytra") return false;
+    if (typeof item.durabilityUsed === "number" && typeof item.maxDurability === "number") {
+        return item.durabilityUsed < item.maxDurability - 1;
+    }
+    return true;
+}
+
 export function getStatusEffectNamesForVersion(supportFeature: SupportFeature) {
     if (supportFeature("effectNamesAreRegistryNames")) {
         // seems to not matter right now.
@@ -224,7 +232,7 @@ export function convertPlayerState(bot: Bot, oldState: any, ctx: IPhysics): Play
     
     // 4. Map movement and action states
     newState.fallFlying = oldState.fallFlying ?? oldState.elytraFlying ?? newState.fallFlying;
-    newState.elytraEquipped = oldState.elytraEquipped ?? newState.elytraEquipped;
+    newState.validElytraEquipped = oldState.validElytraEquipped ?? oldState.elytraEquipped ?? newState.validElytraEquipped;
     newState.jumpTicks = oldState.jumpTicks ?? newState.jumpTicks;
     newState.jumpQueued = oldState.jumpQueued ?? newState.jumpQueued;
     newState.fireworkRocketDuration = oldState.fireworkRocketDuration ?? newState.fireworkRocketDuration;
@@ -281,7 +289,8 @@ export function applyToPlayerState(newState: PlayerState, oldState: any): void {
     // 3. Map Movement & Actions
     oldState.fallFlying = newState.fallFlying;
     oldState.elytraFlying = newState.fallFlying;
-    oldState.elytraEquipped = newState.elytraEquipped;
+    oldState.validElytraEquipped = newState.validElytraEquipped;
+    oldState.elytraEquipped = newState.validElytraEquipped;
     oldState.jumpTicks = newState.jumpTicks;
     oldState.jumpQueued = newState.jumpQueued;
     oldState.fireworkRocketDuration = newState.fireworkRocketDuration;

@@ -787,7 +787,7 @@ export class EntityPhysics implements IPhysics {
             }
         }
 
-        entity.state.fallFlying = entity.state.fallFlying && entity.state.elytraEquipped && !entity.state.onGround && !entity.state.levitation
+        entity.state.fallFlying = entity.state.fallFlying && entity.state.validElytraEquipped && !entity.state.onGround && !entity.state.levitation
 
 
         if (entity.state.fireworkRocketDuration > 0) {

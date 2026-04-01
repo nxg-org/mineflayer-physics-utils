@@ -1,5 +1,5 @@
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
-import { CheapEffects, CheapEnchantments, isEntityUsingItem, whichHandIsEntityUsingBoolean } from "../../util/physicsUtils";
+import { CheapEffects, CheapEnchantments, isEntityUsingItem, isUsableElytraItem, whichHandIsEntityUsingBoolean } from "../../util/physicsUtils";
 import type { Bot, Effect } from "mineflayer";
 import { Vec3 } from "vec3";
 
@@ -24,7 +24,7 @@ export class EntityState implements IEntityState {
     public isInLava: boolean;
     public isInWeb: boolean;
     public fallFlying: boolean;
-    public elytraEquipped: boolean;
+    public validElytraEquipped: boolean;
     public isCollidedHorizontally: boolean;
     public isCollidedVertically: boolean;
     public jumpTicks: number;
@@ -83,7 +83,7 @@ export class EntityState implements IEntityState {
         this.isInLava = false;
         this.isInWeb = false;
         this.fallFlying = false;
-        this.elytraEquipped = false;
+        this.validElytraEquipped = false;
         this.isCollidedHorizontally = false;
         this.isCollidedVertically = false;
         this.sneakCollision = false; //TODO
@@ -194,8 +194,8 @@ export class EntityState implements IEntityState {
             this.sneakCollision = false; //TODO
             this.attributes ||= entity.attributes;
 
-            this.elytraEquipped = entity.equipment[4] && entity.equipment[4]?.name.includes("elytra");
-            this.fallFlying = this.elytraEquipped && this.fallFlying
+            this.validElytraEquipped = isUsableElytraItem(entity.equipment[4]);
+            this.fallFlying = this.validElytraEquipped && this.fallFlying
         }
         this.pos = entity.position.clone();
 
@@ -258,7 +258,7 @@ export class EntityState implements IEntityState {
         this.isInLava = other.isInLava ?? this.isInLava;
         this.isInWeb = other.isInWeb ?? this.isInWeb;
         this.fallFlying = other.fallFlying ?? other.elytraFlying ?? this.fallFlying;
-        this.elytraEquipped = other.elytraEquipped ?? this.elytraEquipped;
+        this.validElytraEquipped = other.validElytraEquipped ?? this.validElytraEquipped;
         return this;
     }
 
@@ -278,7 +278,7 @@ export class EntityState implements IEntityState {
         (bot.entity as any).isInWeb = this.isInWeb;
         (bot.entity as any).fallFlying = this.fallFlying;
         bot.entity.elytraFlying = this.fallFlying;
-        (bot.entity as any).elytraEquipped = this.elytraEquipped;
+        (bot.entity as any).elytraEquipped = this.validElytraEquipped;
         (bot.entity as any).isCollidedHorizontally = this.isCollidedHorizontally;
         (bot.entity as any).isCollidedVertically = this.isCollidedVertically;
         (bot.entity as any).sneakCollision = this.sneakCollision;
@@ -323,7 +323,7 @@ export class EntityState implements IEntityState {
         other.isInLava = this.isInLava;
         other.isInWeb = this.isInWeb;
         other.fallFlying = this.fallFlying;
-        other.elytraEquipped = this.elytraEquipped;
+        other.validElytraEquipped = this.validElytraEquipped;
         other.fireworkRocketDuration = this.fireworkRocketDuration;
         other.jumpTicks = this.jumpTicks;
         other.jumpQueued = this.jumpQueued;
@@ -356,7 +356,7 @@ export class EntityState implements IEntityState {
         this.isInLava = other.isInLava;
         this.isInWeb = other.isInWeb;
         this.fallFlying = other.fallFlying;
-        this.elytraEquipped = other.elytraEquipped;
+        this.validElytraEquipped = other.validElytraEquipped;
         this.fireworkRocketDuration = other.fireworkRocketDuration;
         this.jumpTicks = other.jumpTicks;
         this.jumpQueued = other.jumpQueued;

@@ -15,7 +15,7 @@ function createFallFlyingRig(sprint: boolean) {
 
   rig.playerState.control.forward = true;
   rig.playerState.control.sprint = sprint;
-  rig.playerState.elytraEquipped = true;
+  rig.playerState.validElytraEquipped = true;
   rig.playerState.fallFlying = true;
   rig.playerState.vel = new Vec3(0, -0.1, -0.6);
 

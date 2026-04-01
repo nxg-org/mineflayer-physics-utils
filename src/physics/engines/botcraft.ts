@@ -563,6 +563,7 @@ export class BotcraftPhysics implements IPhysics {
         }
       }
 
+
       // Refresh pose before movement so the first fall-flying tick uses the
       // correct collider instead of the standing bounding box.
       if (this.verGreaterThan("1.13.2")) {
@@ -832,7 +833,7 @@ export class BotcraftPhysics implements IPhysics {
       /* !player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying) && */ !player.fallFlying &&
       !hasLevitationEffect
     ) {
-      const hasElytra = player.elytraEquipped;
+      const hasElytra = player.validElytraEquipped;
       if (hasElytra) {
         player.fallFlying = true;
         // https://github.com/adepierre/Botcraft/blob/6c572071b0237c27a85211a246ce10565ef4d80f/botcraft/src/Game/Physics/PhysicsManager.cpp#L792

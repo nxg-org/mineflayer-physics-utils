@@ -3,7 +3,6 @@ import { Bot } from "mineflayer";
 import { performElytraTakeoff, type PhysicsBot } from "./botSetup";
 import {
   ensureBounceLoadout,
-  findElytra,
   findFireworkRocket,
   findInventoryItem,
   isUsableElytra,
@@ -26,9 +25,6 @@ export type Pitch40Config = {
   fireworkCooldownTicks: number;
   emergencyEnabled: boolean;
   emergencyPitchDeg: number;
-  preserveDurabilityBySwap: boolean;
-  elytraSwapIntervalTicks: number;
-  elytraSwapDurationTicks: number;
 };
 
 export const DEFAULT_PITCH40_CONFIG: Pitch40Config = {
@@ -43,9 +39,6 @@ export const DEFAULT_PITCH40_CONFIG: Pitch40Config = {
   fireworkCooldownTicks: 60,
   emergencyEnabled: true,
   emergencyPitchDeg: 10,
-  preserveDurabilityBySwap: false,
-  elytraSwapIntervalTicks: 15,
-  elytraSwapDurationTicks: 2,
 };
 
 export type Pitch40Snapshot = {
@@ -58,7 +51,6 @@ export type Pitch40Snapshot = {
   holdingFirework: boolean;
   hasFirework: boolean;
   hasUsableElytra: boolean;
-  elytraEquipped: boolean;
 };
 
 export type Pitch40StatusEvent = {
@@ -81,17 +73,12 @@ export interface Pitch40Port {
   getSnapshot(): Pitch40Snapshot;
   setPitchDegrees(pitchDeg: number): void;
   ensureFireworkHeld(): Promise<boolean>;
-  ensureElytraEquipped(): Promise<boolean>;
-  unequipElytra(): Promise<boolean>;
-  forceElytraFlightWithTakeoffSync(): Promise<boolean>;
   activateFirework(): void;
   log(message: string): void;
 }
 
 export class MineflayerPitch40Port implements Pitch40Port {
   private pendingFireworkEquip: Promise<boolean> | null = null;
-  private pendingElytraEquip: Promise<boolean> | null = null;
-  private pendingElytraUnequip: Promise<boolean> | null = null;
 
   constructor(
     private readonly bot: Pitch40Bot,
@@ -100,7 +87,8 @@ export class MineflayerPitch40Port implements Pitch40Port {
 
   public getSnapshot(): Pitch40Snapshot {
     const firework = findFireworkRocket(this.bot);
-    const elytra = this.bot.entity.equipment[4] ?? findInventoryItem(this.bot, "elytra");
+    const equippedElytra = this.bot.entity.equipment[4]?.name === "elytra" ? this.bot.entity.equipment[4] : null;
+    const inventoryElytra = findInventoryItem(this.bot, "elytra");
     return {
       y: this.bot.entity.position.y,
       yaw: this.bot.entity.yaw,
@@ -110,8 +98,8 @@ export class MineflayerPitch40Port implements Pitch40Port {
       fireworkTicks: this.bot.fireworkRocketDuration ?? 0,
       holdingFirework: this.bot.heldItem?.name === "firework_rocket",
       hasFirework: firework != null,
-      hasUsableElytra: isUsableElytra(elytra as ReturnType<typeof findInventoryItem>),
-      elytraEquipped: this.bot.entity.equipment[4]?.name === "elytra",
+      hasUsableElytra: isUsableElytra(equippedElytra as ReturnType<typeof findInventoryItem>) ||
+        isUsableElytra(inventoryElytra as ReturnType<typeof findInventoryItem>),
     };
   }
 
@@ -149,55 +137,6 @@ export class MineflayerPitch40Port implements Pitch40Port {
     this.bot.activateItem();
   }
 
-  public async ensureElytraEquipped(): Promise<boolean> {
-    if (this.bot.entity.equipment[4]?.name === "elytra") return true;
-    if (this.pendingElytraEquip) return this.pendingElytraEquip;
-
-    this.pendingElytraEquip = (async () => {
-      try {
-        const elytra = findElytra(this.bot);
-        if (!isUsableElytra(elytra) || elytra == null) {
-          return false;
-        }
-
-        await this.bot.equip(elytra, "torso");
-        return this.bot.entity.equipment[4]?.name === "elytra";
-      } finally {
-        this.pendingElytraEquip = null;
-      }
-    })();
-
-    return this.pendingElytraEquip;
-  }
-
-  public async unequipElytra(): Promise<boolean> {
-    if (this.bot.entity.equipment[4]?.name !== "elytra") return true;
-    if (this.pendingElytraUnequip) return this.pendingElytraUnequip;
-
-    this.pendingElytraUnequip = (async () => {
-      try {
-        await (this.bot as any).unequip("torso");
-        return this.bot.entity.equipment[4] == null;
-      } finally {
-        this.pendingElytraUnequip = null;
-      }
-    })();
-
-    return this.pendingElytraUnequip;
-  }
-
-  public async forceElytraFlightWithTakeoffSync(): Promise<boolean> {
-    if (typeof this.bot.elytraFly !== "function") {
-      return false;
-    }
-
-    await this.bot.elytraFly({
-      assistTakeoff: true,
-      force: true,
-    });
-    return true;
-  }
-
   public log(message: string) {
     if (!this.loggingEnabled) return;
     console.log(`[pitch40] ${message}`);
@@ -221,10 +160,6 @@ export class Pitch40Controller extends EventEmitter {
   private lastAppliedPitchDeg: number | null = null;
   private transition: TransitionState | null = null;
   private noFireworksLogged = false;
-  private elytraSwapTickCounter = 0;
-  private elytraSwapTicksRemaining = 0;
-  private elytraSwapPending: Promise<void> | null = null;
-  private elytraSwapPhase: "idle" | "unequipping" | "waiting" | "equipping" = "idle";
   private readonly config: Pitch40Config;
 
   constructor(
@@ -260,10 +195,6 @@ export class Pitch40Controller extends EventEmitter {
     this.emergency = false;
     this.fireworkDelay = 0;
     this.noFireworksLogged = false;
-    this.elytraSwapTickCounter = 0;
-    this.elytraSwapTicksRemaining = 0;
-    this.elytraSwapPending = null;
-    this.elytraSwapPhase = "idle";
     this.lastY = snapshot.y;
 
     if (snapshot.y < this.config.maxHeight) {
@@ -292,10 +223,6 @@ export class Pitch40Controller extends EventEmitter {
     this.lastY = null;
     this.lastAppliedPitchDeg = null;
     this.noFireworksLogged = false;
-    this.elytraSwapTickCounter = 0;
-    this.elytraSwapTicksRemaining = 0;
-    this.elytraSwapPending = null;
-    this.elytraSwapPhase = "idle";
     this.log("Stopped.");
     this.emit("disabled");
   }
@@ -328,16 +255,17 @@ export class Pitch40Controller extends EventEmitter {
     }
 
     const snapshot = this.port.getSnapshot();
+    if (!snapshot.hasUsableElytra) {
+      this.log("No usable elytra available. Stopping pitch40.");
+      this.stop();
+      return;
+    }
+
     const currentPitchDeg = this.getCurrentPitchDegrees(snapshot);
     const nextPitchDeg = this.advanceTransition(currentPitchDeg);
     this.lastAppliedPitchDeg = nextPitchDeg;
     this.port.setPitchDegrees(nextPitchDeg);
     this.emit("tick_state", { status: this.getStatusEvent(snapshot, nextPitchDeg) });
-
-    if (this.handleElytraSwap(snapshot)) {
-      this.lastY = snapshot.y;
-      return;
-    }
 
     if (this.usingFireworkRecovery) {
       void this.handleFireworkRecovery(snapshot);
@@ -393,9 +321,6 @@ export class Pitch40Controller extends EventEmitter {
       `usingFireworkRecovery=${this.usingFireworkRecovery}`,
       `emergency=${this.emergency}`,
       `fireworkDelay=${this.fireworkDelay}`,
-      `durabilitySwap=${this.config.preserveDurabilityBySwap}`,
-      `swapPhase=${this.elytraSwapPhase}`,
-      `swapTicks=${this.elytraSwapTickCounter}`,
       `transition=${transition}`,
       `cfg(up=${this.config.upPitchDeg},down=${this.config.downPitchDeg},min=${this.config.minHeight},max=${this.config.maxHeight},steps=${this.config.transitionSteps})`,
     ].join(" ");
@@ -436,51 +361,9 @@ export class Pitch40Controller extends EventEmitter {
       case "emergencypitch":
         this.config.emergencyPitchDeg = Number(value);
         return `emergencyPitchDeg=${this.config.emergencyPitchDeg}`;
-      case "durabilityswap":
-      case "infiniteelytra":
-        this.config.preserveDurabilityBySwap = value !== "false";
-        return `preserveDurabilityBySwap=${this.config.preserveDurabilityBySwap}`;
-      case "swapinterval":
-        this.config.elytraSwapIntervalTicks = Math.max(1, Number(value));
-        return `elytraSwapIntervalTicks=${this.config.elytraSwapIntervalTicks}`;
-      case "swapduration":
-        this.config.elytraSwapDurationTicks = Math.max(1, Number(value));
-        return `elytraSwapDurationTicks=${this.config.elytraSwapDurationTicks}`;
       default:
         return null;
     }
-  }
-
-  private handleElytraSwap(snapshot: Pitch40Snapshot) {
-    if (!this.config.preserveDurabilityBySwap) {
-      this.resetElytraSwapCycle();
-      return false;
-    }
-
-    if (this.elytraSwapPending != null) {
-      return true;
-    }
-
-    if (this.elytraSwapPhase === "waiting") {
-      this.elytraSwapTicksRemaining--;
-      if (this.elytraSwapTicksRemaining <= 0) {
-        this.beginElytraReequip(snapshot);
-      }
-      return true;
-    }
-
-    if (!snapshot.fallFlying || snapshot.onGround) {
-      this.resetElytraSwapCycle();
-      return false;
-    }
-
-    this.elytraSwapTickCounter++;
-    if (this.elytraSwapTickCounter < this.config.elytraSwapIntervalTicks) {
-      return false;
-    }
-
-    this.beginElytraUnequip(snapshot);
-    return true;
   }
 
   private async handleFireworkRecovery(snapshot: Pitch40Snapshot) {
@@ -627,84 +510,6 @@ export class Pitch40Controller extends EventEmitter {
   private getTargetPitchDescription() {
     if (this.transition == null) return "none";
     return this.transition.targetPitchDeg.toFixed(1);
-  }
-
-  private beginElytraUnequip(snapshot: Pitch40Snapshot) {
-    this.elytraSwapPhase = "unequipping";
-    this.log(
-      `Durability-swap: unequipping elytra at y=${snapshot.y.toFixed(2)} ` +
-      `after ${this.elytraSwapTickCounter} flight ticks.`,
-    );
-    this.emit("elytra_swap", {
-      phase: "unequipping",
-      y: snapshot.y,
-      intervalTicks: this.config.elytraSwapIntervalTicks,
-      durationTicks: this.config.elytraSwapDurationTicks,
-    });
-
-    this.elytraSwapPending = (async () => {
-      try {
-        const removed = await this.port.unequipElytra();
-        if (!removed) {
-          this.log("Durability-swap: failed to unequip elytra.");
-          this.resetElytraSwapCycle();
-          return;
-        }
-
-        this.elytraSwapPhase = "waiting";
-        this.elytraSwapTicksRemaining = this.config.elytraSwapDurationTicks;
-      } catch (error) {
-        this.log(`Durability-swap unequip failed: ${String(error)}`);
-        this.resetElytraSwapCycle();
-      } finally {
-        this.elytraSwapPending = null;
-      }
-    })();
-  }
-
-  private beginElytraReequip(snapshot: Pitch40Snapshot) {
-    this.elytraSwapPhase = "equipping";
-    this.log(`Durability-swap: re-equipping elytra at y=${snapshot.y.toFixed(2)}.`);
-    this.emit("elytra_swap", {
-      phase: "equipping",
-      y: snapshot.y,
-      intervalTicks: this.config.elytraSwapIntervalTicks,
-      durationTicks: this.config.elytraSwapDurationTicks,
-    });
-
-    this.elytraSwapPending = (async () => {
-      try {
-        const equipped = await this.port.ensureElytraEquipped();
-        if (!equipped) {
-          this.log("Durability-swap: failed to re-equip elytra.");
-          this.resetElytraSwapCycle();
-          return;
-        }
-
-        // Re-equipping the elytra alone is not enough. We need a fresh,
-        // forced START_FLYING_WITH_ELYTRA request plus mineflayer's assisted
-        // jump-edge sync so the server sees the renewed glide state.
-        const forced = await this.port.forceElytraFlightWithTakeoffSync();
-        if (!forced) {
-          this.log("Durability-swap: unable to re-force elytra flight after re-equip.");
-          this.resetElytraSwapCycle();
-          return;
-        }
-
-        this.resetElytraSwapCycle();
-      } catch (error) {
-        this.log(`Durability-swap equip failed: ${String(error)}`);
-        this.resetElytraSwapCycle();
-      } finally {
-        this.elytraSwapPending = null;
-      }
-    })();
-  }
-
-  private resetElytraSwapCycle() {
-    this.elytraSwapTickCounter = 0;
-    this.elytraSwapTicksRemaining = 0;
-    this.elytraSwapPhase = "idle";
   }
 
   private getStatusEvent(snapshot: Pitch40Snapshot, pitchDegOverride?: number): Pitch40StatusEvent {

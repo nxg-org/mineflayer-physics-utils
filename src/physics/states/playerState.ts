@@ -7,6 +7,7 @@ import {
     CheapEnchantments,
     getStatusEffectNamesForVersion,
     isEntityUsingItem,
+    isUsableElytraItem,
     makeSupportFeature,
     whichHandIsEntityUsing,
     whichHandIsEntityUsingBoolean,
@@ -98,7 +99,7 @@ export class PlayerState implements IEntityState {
     public isInLava: boolean = false;
     public isUnderLava: boolean = false;
     public isInWeb: boolean = false;
-    public elytraEquipped: boolean = false;
+    public validElytraEquipped: boolean = false;
     public fireworkRocketDuration: number = 0;
     public isCollidedHorizontally: boolean = false;
     public isCollidedHorizontallyMinor: boolean = false;
@@ -259,7 +260,7 @@ export class PlayerState implements IEntityState {
         this.isInLava = (bot.entity as any).isInLava;
         this.isUnderLava = (bot.entity as any).isUnderLava;
         this.isInWeb = (bot.entity as any).isInWeb;
-        this.elytraEquipped = bot.inventory.slots[bot.getEquipmentDestSlot('torso')]?.name === 'elytra';
+        this.validElytraEquipped = isUsableElytraItem(bot.inventory.slots[bot.getEquipmentDestSlot('torso')]);
         this.fireworkRocketDuration = bot.fireworkRocketDuration;
         this.isCollidedHorizontally = (bot.entity as any).isCollidedHorizontally;
         this.isCollidedHorizontallyMinor = (bot.entity as any).isCollidedHorizontallyMinor;
@@ -362,7 +363,7 @@ export class PlayerState implements IEntityState {
         (bot.entity as any).isInLava = this.isInLava;
         (bot.entity as any).isUnderLava = this.isUnderLava;
         (bot.entity as any).isInWeb = this.isInWeb;
-        (bot.entity as any).elytraEquipped = this.elytraEquipped;
+        (bot.entity as any).elytraEquipped = this.validElytraEquipped;
         bot.fireworkRocketDuration = this.fireworkRocketDuration;
         (bot.entity as any).isCollidedHorizontally = this.isCollidedHorizontally;
         (bot.entity as any).isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
@@ -406,7 +407,7 @@ export class PlayerState implements IEntityState {
         tmp.isInLava = this.isInLava;
         tmp.isUnderLava = this.isUnderLava;
         tmp.isInWeb = this.isInWeb;
-        tmp.elytraEquipped = this.elytraEquipped;
+        tmp.validElytraEquipped = this.validElytraEquipped;
         tmp.fireworkRocketDuration = this.fireworkRocketDuration;
         tmp.isCollidedHorizontally = this.isCollidedHorizontally;
         tmp.isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
@@ -475,7 +476,7 @@ export class PlayerState implements IEntityState {
         this.isInLava = other.isInLava;
         this.isUnderLava = other.isUnderLava;
         this.isInWeb = other.isInWeb;
-        this.elytraEquipped = other.elytraEquipped;
+        this.validElytraEquipped = other.validElytraEquipped;
         this.fireworkRocketDuration = other.fireworkRocketDuration;
         this.isCollidedHorizontally = other.isCollidedHorizontally;
         this.isCollidedHorizontallyMinor = other.isCollidedHorizontallyMinor

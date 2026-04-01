@@ -34,7 +34,7 @@ export interface IEntityState {
     isInWeb: boolean;
     fallFlying: boolean;
     elytraFlying: boolean;
-    elytraEquipped: boolean;
+    validElytraEquipped: boolean;
     fireworkRocketDuration: number;
     sneakCollision: boolean;
     isCollidedHorizontally: boolean;

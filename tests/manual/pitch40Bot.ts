@@ -88,7 +88,7 @@ async function handleChatCommand(bot: Pitch40Bot, username: string, message: str
     case "set": {
       if (args.length < 2) {
         bot.chat(
-          "Usage: set <up|down|min|max|steps|fireworks|extra|maintain|cooldown|emergency|emergencypitch|durabilityswap|swapinterval|swapduration> <value>",
+          "Usage: set <up|down|min|max|steps|fireworks|extra|maintain|cooldown|emergency|emergencypitch> <value>",
         );
         return;
       }
@@ -124,9 +124,6 @@ function buildBot() {
       controller.on("mode_change", (payload: unknown) => {
         console.log("[pitch40:event] mode_change", payload);
       });
-      controller.on("elytra_swap", (payload: unknown) => {
-        console.log("[pitch40:event] elytra_swap", payload);
-      });
     },
     onSpawn: async (bot, helpers) => {
       bot.physics.yawSpeed = 6000;
@@ -136,7 +133,7 @@ function buildBot() {
       console.log("[pitch40] new engine enabled");
       console.log(
         "[pitch40] chat commands: prep | launch [yawDeg] [takeoffPitchDeg] [useInitialFirework] | start | stop | boost | status | " +
-        "set <up|down|min|max|steps|fireworks|extra|maintain|cooldown|emergency|emergencypitch|durabilityswap|swapinterval|swapduration> <value> | reset",
+        "set <up|down|min|max|steps|fireworks|extra|maintain|cooldown|emergency|emergencypitch> <value> | reset",
       );
       await ensurePitch40Loadout(bot).catch(() => {});
     },

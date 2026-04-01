@@ -20,7 +20,7 @@ describe("Botcraft fall-flying landing", () => {
     rig.playerState.control.forward = true;
     rig.playerState.control.sprint = true;
     rig.playerState.sprinting = true;
-    rig.playerState.elytraEquipped = true;
+    rig.playerState.validElytraEquipped = true;
     rig.playerState.fallFlying = true;
     rig.playerState.vel = new Vec3(0, -0.5, -1.5);
 
@@ -43,7 +43,7 @@ describe("Botcraft fall-flying landing", () => {
     const fakeWorld = createFlatWorld(version, groundLevel) as any;
 
     rig.playerState.control.forward = true;
-    rig.playerState.elytraEquipped = true;
+    rig.playerState.validElytraEquipped = true;
     rig.playerState.fallFlying = true;
     rig.playerState.pose = PlayerPoses.FALL_FLYING;
     rig.playerState.vel = new Vec3(0, -1.5, -1.5);
