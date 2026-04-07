@@ -32,8 +32,9 @@ export interface IEntityState {
     isInWater: boolean;
     isInLava: boolean;
     isInWeb: boolean;
+    fallFlying: boolean;
     elytraFlying: boolean;
-    elytraEquipped: boolean;
+    validElytraEquipped: boolean;
     fireworkRocketDuration: number;
     sneakCollision: boolean;
     isCollidedHorizontally: boolean;
@@ -62,4 +63,3 @@ export function getPose(entity: Entity) {
     const pose = entity.metadata.find((e) => (e as any)?.type === 18);
     return pose ? ((pose as any).value as number) : PlayerPoses.STANDING;
 }
-

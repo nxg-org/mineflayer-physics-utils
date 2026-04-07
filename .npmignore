@@ -4,3 +4,8 @@
 src/
 lib/example.*
 tsconfig.json
+research_refs/
+tests/
+AGENTS.md
+debug_notes/
+pnpm-lock.yaml

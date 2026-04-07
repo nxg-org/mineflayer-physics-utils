@@ -71,6 +71,14 @@ export function whichHandIsEntityUsingBoolean(entity: Entity, supportFeature: Su
     return (entity.metadata[getMetadataIndex(supportFeature)] as any) > 2;
 }
 
+export function isUsableElytraItem(item: { name?: string; durabilityUsed?: number; maxDurability?: number } | null): boolean {
+    if (!item || item.name !== "elytra") return false;
+    if (typeof item.durabilityUsed === "number" && typeof item.maxDurability === "number") {
+        return item.durabilityUsed < item.maxDurability - 1;
+    }
+    return true;
+}
+
 export function getStatusEffectNamesForVersion(supportFeature: SupportFeature) {
     if (supportFeature("effectNamesAreRegistryNames")) {
         // seems to not matter right now.
@@ -223,8 +231,8 @@ export function convertPlayerState(bot: Bot, oldState: any, ctx: IPhysics): Play
     newState.isCollidedVertically = oldState.isCollidedVertically ?? newState.isCollidedVertically;
     
     // 4. Map movement and action states
-    newState.elytraFlying = oldState.elytraFlying ?? newState.elytraFlying;
-    newState.elytraEquipped = oldState.elytraEquipped ?? newState.elytraEquipped;
+    newState.fallFlying = oldState.fallFlying ?? oldState.elytraFlying ?? newState.fallFlying;
+    newState.validElytraEquipped = oldState.validElytraEquipped ?? oldState.elytraEquipped ?? newState.validElytraEquipped;
     newState.jumpTicks = oldState.jumpTicks ?? newState.jumpTicks;
     newState.jumpQueued = oldState.jumpQueued ?? newState.jumpQueued;
     newState.fireworkRocketDuration = oldState.fireworkRocketDuration ?? newState.fireworkRocketDuration;
@@ -279,8 +287,10 @@ export function applyToPlayerState(newState: PlayerState, oldState: any): void {
     oldState.isCollidedVertically = newState.isCollidedVertically;
     
     // 3. Map Movement & Actions
-    oldState.elytraFlying = newState.elytraFlying;
-    oldState.elytraEquipped = newState.elytraEquipped;
+    oldState.fallFlying = newState.fallFlying;
+    oldState.elytraFlying = newState.fallFlying;
+    oldState.validElytraEquipped = newState.validElytraEquipped;
+    oldState.elytraEquipped = newState.validElytraEquipped;
     oldState.jumpTicks = newState.jumpTicks;
     oldState.jumpQueued = newState.jumpQueued;
     oldState.fireworkRocketDuration = newState.fireworkRocketDuration;

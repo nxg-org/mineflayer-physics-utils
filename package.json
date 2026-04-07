@@ -1,6 +1,6 @@
 {
     "name": "@nxg-org/mineflayer-physics-util",
-    "version": "1.8.19",
+    "version": "1.9.0",
     "description": "Provides functionality for more accurate entity and projectile tracking.",
     "keywords": [
         "mineflayer",
@@ -32,16 +32,19 @@
         "eslint": "^9.23.0",
         "expect": "^29.7.0",
         "globals": "^16.0.0",
-        "minecraft-data": "^3.83.1",
-        "mineflayer": "^4.26.0",
+        "minecraft-data": "^3.109.0",
+        "mineflayer": "link:/home/genpc/github_stuff/mineflayer",
         "mineflayer-pathfinder": "^2.4.4",
         "mocha": "^11.1.0",
+        "prismarine-block": "^1.22.0",
         "prismarine-entity": "^2.4.0",
+        "prismarine-nbt": "^2.8.0",
         "prismarine-physics": "^1.10.0",
         "prismarine-registry": "^1.11.0",
+        "prismarine-world": "^3.6.3",
         "ts-node": "^10.9.2",
         "typescript": "^5.8.2",
-        "typescript-eslint": "^8.27.0"
-    },
-    "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+        "typescript-eslint": "^8.27.0",
+        "vec3": "^0.1.10"
+    }
 }

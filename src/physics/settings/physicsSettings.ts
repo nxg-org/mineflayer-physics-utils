@@ -1,5 +1,3 @@
-import { Entity } from "prismarine-entity";
-import { IPhysics } from "../engines/IPhysics";
 import md from "minecraft-data";
 
 type BubbleColumnInfo = {
@@ -24,7 +22,7 @@ export class PhysicsWorldSettings {
     public negligeableVelocity: number = 0.003; // actually 0.005 for 1.8; but seems fine
     public soulsandSpeed: number = 0.4;
     public honeyblockSpeed: number = 0.4;
-    public honeyblockJumpSpeed: number = 0.4;
+    public honeyblockJumpSpeed: number = 0.5;
     public ladderMaxSpeed: number = 0.15;
     public ladderClimbSpeed: number = 0.2;
 

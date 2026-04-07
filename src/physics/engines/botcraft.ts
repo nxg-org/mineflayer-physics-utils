@@ -25,7 +25,7 @@ type CheapEffectNames = keyof ReturnType<typeof getStatusEffectNamesForVersion>;
 type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersion>;
 
 type Heading = { forward: number; strafe: number };
-type World = world.WorldSync;
+type World = { getBlock: world.WorldSync["getBlock"]};
 
 
 function extractAttribute(ctx: IPhysics, genericName: string) {
@@ -486,8 +486,21 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
+  private isMovingSlowly(ctx: EPhysicsCtx, world: World) {
+    const player = ctx.state as PlayerState;
+    if (this.verGreaterThan("1.13.2")) {
+      const visuallyCrawling =
+        (player.pose === PlayerPoses.SWIMMING || (!player.fallFlying && player.pose === PlayerPoses.FALL_FLYING)) &&
+        !player.isInWater;
+      return player.crouching || visuallyCrawling;
+    }
+
+    return player.crouching;
+  }
+
   private localPlayerAIStep(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
+    const tickStartedOnGround = player.onGround;
     const heading = convInpToAxes(player);
     player.heading = heading;
 
@@ -512,12 +525,6 @@ export class BotcraftPhysics implements IPhysics {
     {
       player.flyJumpTriggerTime = Math.max(0, player.flyJumpTriggerTime - 1);
     }
-
-    // TODO: find a good way to implement this.
-    player.prevHeading.forward = heading.forward;
-    player.prevHeading.strafe = heading.strafe;
-    player.prevControl.jump = player.control.jump;
-    player.prevControl.sneak = player.control.sneak;
 
     // livingEntity::AiStep
     {
@@ -557,6 +564,12 @@ export class BotcraftPhysics implements IPhysics {
       }
 
 
+      // Refresh pose before movement so the first fall-flying tick uses the
+      // correct collider instead of the standing bounding box.
+      if (this.verGreaterThan("1.13.2")) {
+        this.updatePoses(ctx, world);
+      }
+
       const velY = player.vel.y;
       this.movePlayer(ctx, world); // TODO: should be in player-specific logic??
       if (player.flying) {
@@ -580,6 +593,14 @@ export class BotcraftPhysics implements IPhysics {
       this.updatePoses(ctx, world);
     }
 
+    // Preserve the current inputs for the next tick after all previous-state
+    // consumers in this tick have already read the prior values.
+    player.lastOnGround = player.onGround;
+    player.prevHeading.forward = heading.forward;
+    player.prevHeading.strafe = heading.strafe;
+    player.prevControl.jump = player.control.jump;
+    player.prevControl.sneak = player.control.sneak;
+
   }
 
   private inputsToCrouch(ctx: EPhysicsCtx, heading: Heading, world: World) {
@@ -601,12 +622,7 @@ export class BotcraftPhysics implements IPhysics {
 
 
     // Determine if moving slowly
-    let isMovingSlowly: boolean;
-    if (this.verGreaterThan("1.13.2")) {
-      isMovingSlowly = player.crouching || (player.pose === PlayerPoses.SWIMMING && !player.isInWater);
-    } else {
-      isMovingSlowly = player.crouching;
-    }
+    const isMovingSlowly = this.isMovingSlowly(ctx, world);
 
     // Handle post-1.21.3 sprinting conditions
     if (this.verGreaterThan("1.21.3")) {
@@ -614,7 +630,7 @@ export class BotcraftPhysics implements IPhysics {
       const hasBlindness = this.getEffectLevel(CheapEffects.BLINDNESS, player.effects) > 0;
 
       // Stop sprinting when crouching fix in 1.21.4+
-      if (player.fallFlying || hasBlindness || isMovingSlowly) {
+      if (hasBlindness || isMovingSlowly) {
         this.setSprinting(ctx, false);
       }
     }
@@ -657,7 +673,6 @@ export class BotcraftPhysics implements IPhysics {
       (player.control.sprint || (player.sprintTriggerTime > 0 && heading.forward >= (player.isInWater ? 1e-5 : 0.8)))) {
       this.setSprinting(ctx, true);
     }
-
 
     // console.log('should stop', this.shouldStopRunSprinting(ctx, heading), 'minor collision', player.isCollidedHorizontallyMinor)
     // Stop sprinting if necessary
@@ -705,6 +720,34 @@ export class BotcraftPhysics implements IPhysics {
   private isSwimming(ctx: EPhysicsCtx): boolean {
     const player = ctx.state as PlayerState;
     return player.isInWater && player.isUnderWater;
+  }
+
+  private handleFallFlyingCollisions(player: PlayerState, previousHorizontalSpeed: number) {
+    if (!player.isCollidedHorizontally) return;
+
+    const currentHorizontalSpeed = Math.sqrt(player.vel.x * player.vel.x + player.vel.z * player.vel.z);
+    const deltaSpeed = previousHorizontalSpeed - currentHorizontalSpeed;
+    const collisionDamage = deltaSpeed * 10.0 - 3.0;
+
+    if (collisionDamage > 0.0) {
+      // Vanilla applies fly-into-wall damage and sound here.
+      // BotcraftPhysics currently does not model those side effects.
+    }
+  }
+
+  private applyFireworkBoost(player: PlayerState) {
+    if (player.fireworkRocketDuration <= 0) return;
+
+    if (!player.fallFlying) {
+      player.fireworkRocketDuration = 0;
+      return;
+    }
+
+    const { lookDir } = getLookingVector(player);
+    player.vel.x += lookDir.x * 0.1 + (lookDir.x * 1.5 - player.vel.x) * 0.5;
+    player.vel.y += lookDir.y * 0.1 + (lookDir.y * 1.5 - player.vel.y) * 0.5;
+    player.vel.z += lookDir.z * 0.1 + (lookDir.z * 1.5 - player.vel.z) * 0.5;
+    --player.fireworkRocketDuration;
   }
 
   private shouldStopRunSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
@@ -790,7 +833,7 @@ export class BotcraftPhysics implements IPhysics {
       /* !player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying) && */ !player.fallFlying &&
       !hasLevitationEffect
     ) {
-      const hasElytra = player.elytraEquipped;
+      const hasElytra = player.validElytraEquipped;
       if (hasElytra) {
         player.fallFlying = true;
         // https://github.com/adepierre/Botcraft/blob/6c572071b0237c27a85211a246ce10565ef4d80f/botcraft/src/Game/Physics/PhysicsManager.cpp#L792
@@ -805,54 +848,71 @@ export class BotcraftPhysics implements IPhysics {
     if (entity instanceof PlayerState) {
       const player = entity as PlayerState;
 
-      if (player.control.jump && !player.flying) {
-        if (player.isInWater || player.isInLava) {
-          player.vel.y += 0.03999999910593033; // magic number
-        } else if (player.onGround && player.jumpTicks === 0) {
-          let blockJumpFactor = 1.0;
-          const jumpBoost = 0.1 * player.jumpBoost; // in mineflayer, level 1 is 1, not 0.
+      if (!player.control.jump) {
+        player.jumpTicks = 0;
+        return;
+      }
 
-          // get below block
-          const blFeet = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
-          if (blFeet && this.honeyblockId !== blFeet.type) {
-            const blBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
-            if (blBelow && this.honeyblockId === blBelow.type) {
-              blockJumpFactor = 0.4;
-            }
-          } else {
-            blockJumpFactor = 0.4;
-          }
+      if (player.flying) {
+        return;
+      }
 
-          if (this.verLessThan("1.20.5")) {
-            // console.log(blockJumpFactor)
-            player.vel.y = Math.fround(0.42) * blockJumpFactor + jumpBoost;
-            if (player.sprinting) {
-              const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
-              // potential inconsistency here. This may not be accurate.
-              const offsetX = Math.fround(Math.sin(yawRad)) * 0.2;
-              const offsetZ = Math.fround(Math.cos(yawRad)) * 0.2;
-              player.vel.x -= offsetX
-              player.vel.z += offsetZ
-            }
-          } else {
-            // something about getting an attribute for jump strength?
-            const value = entity.attributes[this.jumpStrengthAttribute]?.value ?? Math.fround(0.42) // default value from previous versions
-            const jumpPower = value * blockJumpFactor + jumpBoost;
-            if (jumpPower > 1e-5) {
-              player.vel.y = jumpPower;
-              if (player.sprinting) {
-                const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
-                player.vel.x -= Math.sin(yawRad) * 0.2;
-                player.vel.z += Math.cos(yawRad) * 0.2;
-              }
-            }
-            player.jumpTicks = worldSettings.autojumpCooldown;
+      if (player.isInWater || player.isInLava) {
+        player.vel.y += 0.03999999910593033; // magic number
+      } else if (player.onGround && player.jumpTicks === 0) {
+        const blockJumpFactor = this.getBlockJumpFactor(player, world, worldSettings);
+        const jumpBoost = Math.fround(0.1 * player.jumpBoost); // in mineflayer, level 1 is 1, not 0.
+
+        if (this.verLessThan("1.20.5")) {
+          const jumpPower = Math.fround(Math.fround(0.42) * Math.fround(blockJumpFactor) + jumpBoost);
+          player.vel.y = Math.max(jumpPower, player.vel.y);
+          if (player.sprinting) {
+            const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
+            // potential inconsistency here. This may not be accurate.
+            const offsetX = Math.fround(Math.sin(yawRad)) * 0.2;
+            const offsetZ = Math.fround(Math.cos(yawRad)) * 0.2;
+            player.vel.x -= offsetX
+            player.vel.z += offsetZ
           }
         } else {
-          player.jumpTicks = 0;
+          const value = Math.fround(entity.attributes[this.jumpStrengthAttribute]?.value ?? Math.fround(0.42));
+          const jumpPower = Math.fround(value * Math.fround(blockJumpFactor) + jumpBoost);
+          if (jumpPower > 1e-5) {
+            player.vel.y = Math.max(jumpPower, player.vel.y);
+            if (player.sprinting) {
+              const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
+              player.vel.x -= Math.sin(yawRad) * 0.2;
+              player.vel.z += Math.cos(yawRad) * 0.2;
+            }
+          }
         }
+
+        player.jumpTicks = worldSettings.autojumpCooldown;
       }
     }
+  }
+
+  private getBlockJumpFactor(entity: IEntityState, world: World, worldSettings: PhysicsWorldSettings) {
+    const feetBlock = world.getBlock(new Vec3(entity.pos.x, entity.pos.y, entity.pos.z));
+    const feetJumpFactor = this.getKnownJumpFactor(feetBlock?.type, worldSettings);
+    if (feetJumpFactor !== 1.0) return feetJumpFactor;
+
+    const supportBlock = world.getBlock(this.getBlockBelowAffectingMovement(entity, world));
+    return this.getKnownJumpFactor(supportBlock?.type, worldSettings);
+  }
+
+  private getKnownJumpFactor(blockType: number | undefined, worldSettings: PhysicsWorldSettings) {
+    if (blockType == null) return 1.0;
+    if (blockType === this.honeyblockId) return worldSettings.honeyblockJumpSpeed;
+    return 1.0;
+  }
+
+  private getOffGroundSpeed(player: PlayerState) {
+    if (player.flying) {
+      return player.sprinting ? player.flySpeed * 2.0 : player.flySpeed;
+    }
+
+    return player.sprinting ? Math.fround(0.025999999) : Math.fround(0.02);
   }
 
   private getBlockBelowAffectingMovement(entity: IEntityState, world: World) {
@@ -1017,6 +1077,8 @@ export class BotcraftPhysics implements IPhysics {
       }
       // elytra flying.
       else if (player.fallFlying) {
+        const previousHorizontalSpeed = Math.sqrt(player.vel.x * player.vel.x + player.vel.z * player.vel.z);
+
         // slight deviation
         // sqrt(front_vector.x² + front_vector.z²) to follow vanilla code
         const { pitch, sinPitch, cosPitch, lookDir } = getLookingVector(player);
@@ -1033,10 +1095,10 @@ export class BotcraftPhysics implements IPhysics {
           player.vel.y += deltaSpeed;
         }
 
-        if (player.pitch < 0.0 && cosPitchFromLength > 0.0) {
-          const deltaSpeed = hVel * -lookDir.y * 0.04;
-          player.vel.x += (lookDir.x * deltaSpeed) / cosPitchFromLength;
-          player.vel.z += (lookDir.z * deltaSpeed) / cosPitchFromLength;
+        if (player.pitch > 0.0 && cosPitchFromLength > 0.0) {
+          const deltaSpeed = hVel * lookDir.y * 0.04;
+          player.vel.x += (-lookDir.x * deltaSpeed) / cosPitchFromLength;
+          player.vel.z += (-lookDir.z * deltaSpeed) / cosPitchFromLength;
           player.vel.y += deltaSpeed * 3.2; // magic number
         }
 
@@ -1049,27 +1111,8 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.y *= Math.fround(0.98); // magic number, this DEFINITELY should be replaced by a drag value.
         this.applyMovement(ctx, world);
 
-        if (player.onGround) {
-          player.fallFlying = false;
-        }
-
-        // Potentially not the correct place for this logic, but it is easier to implement here for now. This is the firework boost from elytra flying.
-        if (player.fireworkRocketDuration > 0) {
-          const { lookDir } = getLookingVector(player);
-          player.vel.x += lookDir.x * 0.1 + (lookDir.x * 1.5 - player.vel.x) * 0.5;
-          player.vel.y += lookDir.y * 0.1 + (lookDir.y * 1.5 - player.vel.y) * 0.5;
-          player.vel.z += lookDir.z * 0.1 + (lookDir.z * 1.5 - player.vel.z) * 0.5;
-          --player.fireworkRocketDuration;
-        }
-
-        // we're on ground or in air, not flying.
+        this.handleFallFlyingCollisions(player, previousHorizontalSpeed);
       } else {
-
-        // clear firework boost if on ground or in air without flying, otherwise it can cause issues with movement.
-        if (player.fireworkRocketDuration > 0) {
-          player.fireworkRocketDuration = 0;
-        }
-
         const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
 
         // deviation. using our stores slipperiness values.
@@ -1078,22 +1121,16 @@ export class BotcraftPhysics implements IPhysics {
           : ctx.worldSettings.defaultSlipperiness;
 
         // console.log(blockBelow.name, blockBelow.position, player.supportingBlockPos, friction)
-        const inertia = player.onGround ? friction * ctx.airborneInertia : ctx.airborneInertia;
+        const inertia = player.lastOnGround ? friction * ctx.airborneInertia : ctx.airborneInertia;
 
         // deviation, adding additional logic for changing attribute values.
         const movementSpeedAttr = this.getMovementSpeedAttribute(ctx);
 
         let inputStrength: number;
-        if (player.onGround) {
+        if (player.lastOnGround) {
           inputStrength = movementSpeedAttr * (0.21600002 / (friction * friction * friction));
         } else {
-          inputStrength = 0.02;
-
-          // DEVIATION: taken from p-physics, fixes motion!
-          if (player.sprinting) {
-            const airSprintFactor = ctx.airborneAccel * 0.3
-            inputStrength += airSprintFactor
-          }
+          inputStrength = this.getOffGroundSpeed(player);
         }
 
        
@@ -1131,6 +1168,8 @@ export class BotcraftPhysics implements IPhysics {
         // this can be generalized.
         player.vel.y *= 0.9800000190734863;
       }
+
+      this.applyFireworkBoost(player);
     }
   }
 
@@ -1271,8 +1310,12 @@ export class BotcraftPhysics implements IPhysics {
     // TODO: add minor horizontal collision check
     {
       // Entity::setOnGroundWithKnownMovement
-      player.onGround = movementBeforeCollisions.y < 0.0 && collisionY;
-      if (player.onGround) {
+      const wasOnGround = player.onGround;
+      const groundedByCollision = movementBeforeCollisions.y < 0.0 && collisionY;
+      const shouldCheckStandingSupport = wasOnGround && Math.abs(movementBeforeCollisions.y) <= 1e-7;
+
+      player.onGround = groundedByCollision;
+      if (player.onGround || shouldCheckStandingSupport) {
         const halfWidth = player.halfWidth;
         const feetSliceAABB = new AABB(
           player.pos.x - halfWidth,
@@ -1289,6 +1332,10 @@ export class BotcraftPhysics implements IPhysics {
         } else {
 
           player.supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB.translate(-movement.x, 0.0, -movement.z));
+        }
+
+        if (!player.onGround && player.supportingBlockPos != null) {
+          player.onGround = true;
         }
         // unnecessary due to it being a getter.
         //  player->on_ground_without_supporting_block = !player->supporting_block_pos.has_value();

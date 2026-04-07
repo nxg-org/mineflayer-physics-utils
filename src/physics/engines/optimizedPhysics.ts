@@ -636,7 +636,7 @@ export class EntityPhysics implements IPhysics {
 
             vel.x *= inertia;
             vel.z *= inertia;
-        }  else if (entity.state.elytraFlying) {
+        }  else if (entity.state.fallFlying) {
             const {
               pitch,
               sinPitch,
@@ -673,7 +673,7 @@ export class EntityPhysics implements IPhysics {
             this.moveEntity(entity, world, vel.x, vel.y, vel.z)
       
             if (entity.state.onGround) {
-              entity.state.elytraFlying = false
+              entity.state.fallFlying = false
             }
           }
         
@@ -787,11 +787,11 @@ export class EntityPhysics implements IPhysics {
             }
         }
 
-        entity.state.elytraFlying = entity.state.elytraFlying && entity.state.elytraEquipped && !entity.state.onGround && !entity.state.levitation
+        entity.state.fallFlying = entity.state.fallFlying && entity.state.validElytraEquipped && !entity.state.onGround && !entity.state.levitation
 
 
         if (entity.state.fireworkRocketDuration > 0) {
-            if (!entity.state.elytraFlying) {
+            if (!entity.state.fallFlying) {
               entity.state.fireworkRocketDuration = 0
             } else {
               const { lookDir } = getLookingVector(entity.state)

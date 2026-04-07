@@ -1,7 +1,6 @@
 import { createBot } from "mineflayer";
 import { Vec3 } from "vec3";
-import loader, { EntityPhysics, EPhysicsCtx } from "../src/index";
-import { SimulationTypes } from "../src/wrapper";
+import loader, { EntityPhysics, EPhysicsCtx } from "../../src/index";
 import { Entity } from "prismarine-entity";
 
 const bot = createBot({
