@@ -59,11 +59,11 @@ export class EPhysicsCtx<State extends IEntityState=IEntityState> {
         affectedAfterCollision: true,
     };
 
-    public get position(): Readonly<Vec3> {
+    public get position(): Vec3 {
         return this.state.pos
     }
 
-    public get velocity(): Readonly<Vec3> {
+    public get velocity(): Vec3 {
         return this.state.vel
     }
 
