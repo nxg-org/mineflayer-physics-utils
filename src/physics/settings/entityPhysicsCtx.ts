@@ -34,10 +34,6 @@ export class EPhysicsCtx<State extends IEntityState=IEntityState> {
 
     // public static globalSettings = PhysicsSettings
 
-
-    public readonly position: Vec3;
-    public readonly velocity: Vec3;
-
     public stepHeight: number = 0;
     public gravity: number = 0.08;
     public waterGravity: number;
@@ -63,6 +59,14 @@ export class EPhysicsCtx<State extends IEntityState=IEntityState> {
         affectedAfterCollision: true,
     };
 
+    public get position(): Readonly<Vec3> {
+        return this.state.pos
+    }
+
+    public get velocity(): Readonly<Vec3> {
+        return this.state.vel
+    }
+
     constructor(
         public readonly ctx: IPhysics, 
         public readonly worldSettings: PhysicsWorldSettings, 
@@ -70,8 +74,6 @@ export class EPhysicsCtx<State extends IEntityState=IEntityState> {
         public readonly state: State, 
         public readonly entityType: md.Entity = DefaultPlayer
     ) {
-        this.position = state.pos;
-        this.velocity = state.vel;
 
         // TODO cleanup all of this code.
         if (entityType.type === "player" || !!EPhysicsCtx.mobData[entityType.id]) {
