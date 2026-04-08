@@ -182,7 +182,7 @@ export class EntityState implements IEntityState {
 
         if (all) {
             // most mobs don't have this defined, so ignore it (only self does).
-            this.vel = entity.velocity.clone();
+            this.vel.set(entity.velocity.x, entity.velocity.y, entity.velocity.z);
             this.onGround = entity.onGround;
             this.onClimbable = (entity as any).onClimbable;
             this.isInWater = (entity as any).isInWater;
@@ -197,7 +197,7 @@ export class EntityState implements IEntityState {
             this.elytraEquipped = entity.equipment[4] && entity.equipment[4]?.name.includes("elytra");
             this.fallFlying = this.elytraEquipped && this.fallFlying
         }
-        this.pos = entity.position.clone();
+        this.pos.set(entity.position.x, entity.position.y, entity.position.z);
 
 
         //not sure what to do here, ngl.
@@ -292,8 +292,8 @@ export class EntityState implements IEntityState {
      * No idea when you'd use this.
      */
     public applyToEntity(entity: Entity) {
-        entity.position = this.pos
-        entity.velocity = this.vel
+        entity.position.set(this.pos.x, this.pos.y, this.pos.z)
+        entity.velocity.set(this.vel.x, this.vel.y, this.vel.z)
         // entity.position.set(this.position.x, this.position.y, this.position.z);
         // entity.velocity.set(this.velocity.x, this.velocity.y, this.velocity.z);
         entity.onGround = this.onGround;
@@ -346,8 +346,8 @@ export class EntityState implements IEntityState {
 
     public merge(other: EntityState) {
         this.age = other.age
-        this.pos = other.pos.clone();
-        this.vel = other.vel.clone();
+        this.pos.set(other.pos.x, other.pos.y, other.pos.z)
+        this.vel.set(other.vel.x, other.vel.y, other.vel.z)
         this.onGround = other.onGround;
         this.onClimbable = other.onClimbable;
         this.isCollidedHorizontally = other.isCollidedHorizontally;
