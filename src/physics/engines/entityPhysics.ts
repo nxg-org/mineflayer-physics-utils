@@ -717,22 +717,23 @@ export class EntityPhysics implements IPhysics {
   }
 
   simulate(entity: EPhysicsCtx, world: any /*prismarine-world*/): IEntityState {
-    if (!this.shouldMoveEntity(entity)) {
-      entity.velocity.set(0, 0, 0);
-      return entity.state;
-    }
-
     const vel = entity.velocity;
     const pos = entity.position;
 
     const offset = vel.y < 0 ? 0.4 : 0;
-    const waterBB = this.getEntityBB(entity, pos).contract(0.001, offset + 0.001, 0.001);
-    const lavaBB = this.getEntityBB(entity, pos).contract(0.1, offset, 0.1);
-
-    // assume that if we shouldn't move entity, isInWater and isInLava are already properly set.
+    const safeYContract = Math.min(offset + 0.001, entity.height / 2 - 0.001);
+    const waterBB = this.getEntityBB(entity, pos).contract(0.001, safeYContract, 0.001);
+    const safeLavaYContract = Math.min(offset, entity.height / 2 - 0.001);
+    const lavaBB = this.getEntityBB(entity, pos).contract(0.1, safeLavaYContract, 0.1);
 
     entity.state.isInWater = this.isInWaterApplyCurrent(waterBB, vel, world);
     entity.state.isInLava = this.isMaterialInBB(lavaBB, this.lavaId, world);
+
+    // assume that if we shouldn't move entity, isInWater and isInLava are already properly set.
+    if (!this.shouldMoveEntity(entity)) {
+      entity.velocity.set(0, 0, 0);
+      return entity.state;
+    }
 
     // Reset velocity component if it falls under the threshold
     if (Math.abs(vel.x) < entity.worldSettings.negligeableVelocity) vel.x = 0;
