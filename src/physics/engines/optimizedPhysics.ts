@@ -728,8 +728,9 @@ export class EntityPhysics implements IPhysics {
         const vel = entity.velocity;
         const pos = entity.position;
 
-        const waterBB = this.getEntityBB(entity, pos).contract(0.001, 0.401, 0.001);
-        const lavaBB = this.getEntityBB(entity, pos).contract(0.1, 0.4, 0.1);
+        const safeYContract = Math.min(0.001, entity.height / 2 - 0.001);
+        const waterBB = this.getEntityBB(entity, pos).contract(0.001, safeYContract, 0.001);
+        const lavaBB = this.getEntityBB(entity, pos).contract(0.1, safeYContract, 0.1);
 
         // assume that if we shouldn't move entity, isInWater and isInLava are already properly set.
 
