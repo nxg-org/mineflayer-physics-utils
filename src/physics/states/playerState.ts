@@ -378,6 +378,9 @@ export class PlayerState implements IEntityState {
 
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;
+        bot.entity.height = this.height;
+        bot.entity.width = this.halfWidth * 2;
+        (bot.entity as any).eyeHeight = this.eyeHeight;
 
         Object.assign(bot.entity, this.pose)
         bot.game.gameMode = this.gameMode; // this should never actually be in charge.
