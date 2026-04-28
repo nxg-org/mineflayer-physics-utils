@@ -15,10 +15,11 @@ import { getPose, PlayerState } from "../states";
 
 
 function load(data: md.IndexedData) {
+    const dataStr = data.version.type === "pc" ? data.version.minecraftVersion : `bedrock_${data.version.minecraftVersion}`
     EPhysicsCtx.mcData = data;
     EPhysicsCtx.entityData = data["entitiesByName"];
     EPhysicsCtx.mobData = data["mobs"];
-    EPhysicsCtx.entityConstructor = (entityLoader as any)(data.version.minecraftVersion);
+    EPhysicsCtx.entityConstructor = (entityLoader as any)(dataStr);
 }
 
 export const emptyVec = new Vec3(0, 0, 0);

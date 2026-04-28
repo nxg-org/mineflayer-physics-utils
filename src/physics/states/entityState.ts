@@ -269,6 +269,8 @@ export class EntityState implements IEntityState {
         (bot.entity as any).onClimbable = this.onClimbable;
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;
+        bot.entity.height = this.height;
+        bot.entity.width = this.halfWidth * 2;
         bot.controlState = this.control;
         (bot as any).jumpTicks = this.jumpTicks;
         (bot as any).jumpQueued = this.jumpQueued;
