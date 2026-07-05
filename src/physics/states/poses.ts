@@ -30,8 +30,12 @@ export const playerPoseCtx: PlayerPoseContext = {
   7: { width: 0.2, height: 0.2 },
 };
 
-export function getCollider(entityPose: PlayerPoses, middleBottomPos: Vec3): AABB {
-  const { width, height } = playerPoseCtx[entityPose];
+export function getCollider(entityPose: PlayerPoses, middleBottomPos: Vec3, scale: number = 1.0): AABB {
+  let { width, height } = playerPoseCtx[entityPose];
+  if (scale !== 1.0 && entityPose !== PlayerPoses.SLEEPING && entityPose !== PlayerPoses.DYING) {
+    width *= scale;
+    height *= scale;
+  }
   return new AABB(-width / 2, 0, -width / 2, width / 2, height, width / 2).translate(
     middleBottomPos.x,
     middleBottomPos.y,

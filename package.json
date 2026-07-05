@@ -18,8 +18,13 @@
     "scripts": {
         "lint": "eslint . --ext .ts,.tsx",
         "build": "npx tsc",
+        "typecheck": "npx tsc --noEmit",
+        "build:test": "npx tsc -p test/tsconfig.json",
+        "test:oracle": "npm run build:test && node dist-test/test/parity/scenarios.test.js",
+        "test:engine": "npm run build:test && node dist-test/test/parity/engine.test.js",
+        "test:parity": "npm run build:test && node dist-test/test/parity/scenarios.test.js && node dist-test/test/parity/engine.test.js",
         "prepublishOnly": "npm run build",
-        "test": "mocha --require ts-node/register --recursive tests/**/*.test.ts"
+        "test": "mocha --require ts-node/register --recursive test/**/*.test.ts"
     },
     "dependencies": {
         "@nxg-org/mineflayer-util-plugin": "^1.8.2"

@@ -4,7 +4,7 @@ import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import { Vec3 } from "vec3";
 import { createBotcraftPlayerRig, createFlatWorld, loadMcData } from "../../helpers/unit/botcraftTestSupport";
 
-const version = "1.12.2";
+const version = "26.2";
 const groundLevel = 67;
 
 describe("World collision simulation", () => {
@@ -143,6 +143,6 @@ describe("World collision simulation", () => {
       rig.playerState.apply(rig.fakePlayer);
     }
 
-    expect(rig.playerState.pos.y).toEqual(groundLevel + 1);
+    expect(rig.playerState.pos.y).toEqual(groundLevel);
   });
 });

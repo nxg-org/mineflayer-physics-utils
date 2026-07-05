@@ -18,8 +18,10 @@ import { ControlStateHandler } from "../player/playerControls";
 import { IEntityState } from ".";
 import { IPhysics } from "../engines/IPhysics";
 import type { Entity } from "prismarine-entity";
+import type { PistonMoveEvent } from "../../subsystems/piston-push";
 import { PlayerPoses, getCollider, playerPoseCtx } from "./poses";
 import { Heading, getPose } from ".";
+import { getAttributeValue } from "../info/attributes";
 
 
 export function convInpToAxes(player: PlayerState): Heading {
@@ -28,6 +30,116 @@ export function convInpToAxes(player: PlayerState): Heading {
       strafe: (player.control.left as unknown as number) - (player.control.right as unknown as number),
     };
   }
+
+/**
+ * Normalize an item's enchantments into the array shape getEnchantmentLevel() consumes:
+ * `[{ id, lvl, level, name }]`. Handles both the 26.2 components era and legacy NBT.
+ *
+ * We surface BOTH `lvl` and `level` so the consumer works regardless of which key it reads.
+ */
+function getItemEnchantments(item: any, registry?: any): any[] {
+    if (!item) return [];
+
+    // Resolve a runtime-synced enchantment registry index -> namespaced name (e.g. 36 -> "soul_speed").
+    // The 26.2 component carries the RUNTIME registry id, which is connection/datapack-specific and does
+    // NOT necessarily equal minecraft-data's static enchantmentsByName[name].id -- so resolve it via the
+    // bot's synced registry and attach the NAME, making the engine's string-name match path the reliable one.
+    const idToName = (id: any): string | undefined => {
+        if (typeof id === "string") return id.replace(/^minecraft:/, "");
+        if (registry?.enchantmentsByName && typeof id === "number") {
+            for (const k of Object.keys(registry.enchantmentsByName)) {
+                if (registry.enchantmentsByName[k]?.id === id) return k;
+            }
+        }
+        return undefined;
+    };
+    const norm = (e: any) => {
+        const name = idToName(e.id);
+        return {
+            // Prefer the resolved name as `id` so getEnchantmentLevel's string match fires; keep numeric too.
+            id: name ?? e.id,
+            numericId: typeof e.id === "number" ? e.id : undefined,
+            name,
+            lvl: e.lvl ?? e.level,
+            level: e.level ?? e.lvl,
+        };
+    };
+
+    // 26.2 components path (preferred). `item.enchants` getter returns the component data unchanged.
+    try {
+        if (item.componentMap?.has?.("enchantments")) {
+            const data = item.componentMap.get("enchantments")?.data;
+            const list = Array.isArray(data) ? data : data?.enchantments;
+            if (Array.isArray(list)) return list.map(norm);
+        }
+    } catch (_e) { /* fall through to legacy */ }
+
+    // Legacy NBT path (pre-1.20.5 / other-entity items).
+    if (item.nbt) {
+        try {
+            const simplified: any = nbt.simplify(item.nbt);
+            const list = simplified.Enchantments ?? simplified.ench ?? [];
+            if (Array.isArray(list)) return list.map(norm);
+        } catch (_e) { /* ignore */ }
+    }
+    return [];
+}
+
+function getItemUseEffects(item: any): { canSprint: boolean; speedMultiplier: number } {
+    if (item) {
+        try {
+            const data = item.componentMap?.get?.("use_effects")?.data;
+            if (data) {
+                return {
+                    canSprint: data.can_sprint ?? false,
+                    speedMultiplier: typeof data.speed_multiplier === "number" ? data.speed_multiplier : 0.2,
+                };
+            }
+        } catch (_e) { /* fall through to defaults */ }
+        const name: string | undefined = item.name;
+        if (typeof name === "string" && name.endsWith("_spear")) {
+            return { canSprint: true, speedMultiplier: 1.0 };
+        }
+    }
+    return { canSprint: false, speedMultiplier: 0.2 };
+}
+
+const PUSHABLE_LIVING_CATEGORIES = new Set([
+    "mob", "animal", "hostile", "passive", "ambient", "living",
+    "water_creature", "water_ambient", "underground_water_creature", "creature",
+]);
+
+function isPushableEntityType(e: any): boolean {
+    if (!e) return false;
+    if (e.type === "player") return true;
+    return typeof e.type === "string" && PUSHABLE_LIVING_CATEGORIES.has(e.type);
+}
+
+function collectPushableEntityBoxes(bot: any, px: number, pz: number): AABB[] {
+    const out: AABB[] = [];
+    const entities = bot?.entities;
+    if (!entities) return out;
+    const selfId = bot.entity?.id;
+    for (const id in entities) {
+        const e = entities[id];
+        if (!e || e === bot.entity || (selfId != null && e.id === selfId)) continue;
+        const pos = e.position;
+        if (!pos) continue;
+        if (!isPushableEntityType(e)) continue;
+        const ddx = pos.x - px;
+        const ddz = pos.z - pz;
+        if (ddx * ddx + ddz * ddz > 16) continue;
+        const hw = (typeof e.width === "number" ? e.width : 0.6) / 2;
+        const h = typeof e.height === "number" ? e.height : 1.8;
+        out.push(new AABB(pos.x - hw, pos.y, pos.z - hw, pos.x + hw, pos.y + h, pos.z + hw));
+    }
+    return out;
+}
+
+function collectPistonMoveEvents(bot: any): PistonMoveEvent[] {
+    const evs = bot?.pistonEvents ?? bot?._activePistons;
+    return Array.isArray(evs) ? evs : [];
+}
 
 const defaultMoves: ControlStateHandler = ControlStateHandler.DEFAULT();
 
@@ -93,11 +205,18 @@ export class PlayerState implements IEntityState {
 
     public onGround: boolean = false;
     public lastOnGround: boolean = false;
+    public fallDistance: number = 0;
     public onClimbable: boolean = false;
+    public isInPowderSnow: boolean = false;
+    public wasInPowderSnow: boolean = false;
+    public canWalkOnPowderSnow: boolean = false;
     public isInWater: boolean = false;
     public isUnderWater: boolean = false;
+    public wasEyeInWater: boolean = false;
     public isInLava: boolean = false;
     public isUnderLava: boolean = false;
+    public waterHeight: number = 0;
+    public lavaHeight: number = 0;
     public isInWeb: boolean = false;
     public validElytraEquipped: boolean = false;
     public fireworkRocketDuration: number = 0;
@@ -107,8 +226,17 @@ export class PlayerState implements IEntityState {
     public supportingBlockPos: Vec3 | null = null;
     public stuckSpeedMultiplier: Vec3 = new Vec3(0, 0, 0);
 
+    public pushableEntities: AABB[] = [];
+
+    public pistonEvents: PistonMoveEvent[] = [];
+
     public jumpTicks: number = 0;
     public jumpQueued: boolean = false;
+
+    public autoSpinAttackTicks: number = 0;
+    public riptideQueued: boolean = false;
+    public riptideLevel: number = 0;
+
     public sprintTriggerTime: number = 0;
     public flyJumpTriggerTime: number = 0;
 
@@ -126,6 +254,15 @@ export class PlayerState implements IEntityState {
     public isUsingMainHand: boolean = false;
     public isUsingOffHand: boolean = false;
 
+    public itemUseSpeedMultiplier: number = 0.2;
+    public itemUseCanSprint: boolean = false;
+
+    public isPassenger: boolean = false;
+
+    public get isSlowDueToUsingItem(): boolean {
+        return this.isUsingItem && !this.itemUseCanSprint;
+    }
+
     public jumpBoost: number = 0;
     public speed: number = 0;
     public slowness: number = 0;
@@ -133,6 +270,7 @@ export class PlayerState implements IEntityState {
     public slowFalling: number = 0;
     public levitation: number = 0;
     public blindness: number = 0;
+    public weaving: number = 0;
 
     public depthStrider: number = 0;
     public swiftSneak: number = 0;
@@ -208,11 +346,24 @@ export class PlayerState implements IEntityState {
         return this.onGround && !this.supportingBlockPos;
     }
 
-    public get height(): number {
-        return playerPoseCtx[this.pose].height;
+    public get scale(): number {
+        const attrName = this.ctx.scaleAttribute;
+        if (!attrName) return 1.0;
+        const attr = (this.attributes as any)?.[attrName];
+        if (!attr) return 1.0;
+        return Math.fround(getAttributeValue(attr, attrName));
     }
 
-    public get eyeHeight(): number {
+    private get appliedScale(): number {
+        if (this.pose === PlayerPoses.SLEEPING || this.pose === PlayerPoses.DYING) return 1.0;
+        return this.scale;
+    }
+
+    public get height(): number {
+        return playerPoseCtx[this.pose].height * this.appliedScale;
+    }
+
+    private get baseEyeHeight(): number {
         switch (this.pose) {
             case PlayerPoses.STANDING:
                 return 1.62;
@@ -229,8 +380,12 @@ export class PlayerState implements IEntityState {
         }
     }
 
+    public get eyeHeight(): number {
+        return this.baseEyeHeight * this.appliedScale;
+    }
+
     public get halfWidth(): number {
-        return playerPoseCtx[this.pose].width / 2;
+        return (playerPoseCtx[this.pose].width * this.appliedScale) / 2;
     }
 
     public readonly ctx: IPhysics;
@@ -254,9 +409,13 @@ export class PlayerState implements IEntityState {
         this.supportingBlockPos = (bot.entity as any).supportingBlockPos ?? null;
         this.onGround = bot.entity.onGround;
         this.lastOnGround = (bot.entity as any).lastOnGround ?? bot.entity.onGround;
+        this.fallDistance = (bot.entity as any).fallDistance ?? 0;
+        this.wasInPowderSnow = (bot.entity as any).isInPowderSnow ?? false;
+        this.isInPowderSnow = false;
         this.onClimbable = (bot.entity as any).onClimbable;
         this.isInWater = (bot.entity as any).isInWater;
         this.isUnderWater = (bot.entity as any).isUnderWater;
+        this.wasEyeInWater = (bot.entity as any).wasEyeInWater ?? (bot.entity as any).isUnderWater ?? false;
         this.isInLava = (bot.entity as any).isInLava;
         this.isUnderLava = (bot.entity as any).isUnderLava;
         this.isInWeb = (bot.entity as any).isInWeb;
@@ -266,9 +425,16 @@ export class PlayerState implements IEntityState {
         this.isCollidedHorizontallyMinor = (bot.entity as any).isCollidedHorizontallyMinor;
         this.isCollidedVertically = (bot.entity as any).isCollidedVertically;
 
+        this.pushableEntities = collectPushableEntityBoxes(bot, this.pos.x, this.pos.z);
+
+        this.pistonEvents = collectPistonMoveEvents(bot);
+
         // dunno what to do about these, ngl.
         this.jumpTicks = (bot as any).jumpTicks ?? 0;
         this.jumpQueued = (bot as any).jumpQueued ?? false;
+        this.autoSpinAttackTicks = (bot.entity as any).autoSpinAttackTicks ?? 0;
+        this.riptideQueued = (bot as any).riptideQueued ?? false;
+        this.riptideLevel = (bot as any).riptideLevel ?? 0;
         this.flyJumpTriggerTime = (bot as any).flyJumpTriggerTime ?? 0;
         this.sprintTriggerTime = (bot as any).sprintTriggerTime ?? 0;
 
@@ -283,6 +449,12 @@ export class PlayerState implements IEntityState {
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
         this.isUsingOffHand = whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
 
+        this.isPassenger = !!(bot as any).vehicle;
+        const usedItem = this.isUsingOffHand ? bot.inventory?.slots?.[45] : bot.heldItem;
+        const useEffects = getItemUseEffects(usedItem);
+        this.itemUseSpeedMultiplier = useEffects.speedMultiplier;
+        this.itemUseCanSprint = useEffects.canSprint;
+
         // effects
         this.effects = bot.entity.effects;
 
@@ -293,29 +465,23 @@ export class PlayerState implements IEntityState {
         this.dolphinsGrace = this.ctx.getEffectLevel(CheapEffects.DOLPHINS_GRACE, this.effects);
         this.slowFalling = this.ctx.getEffectLevel(CheapEffects.SLOW_FALLING, this.effects);
         this.levitation = this.ctx.getEffectLevel(CheapEffects.LEVITATION, this.effects);
+        this.weaving = this.ctx.getEffectLevel(CheapEffects.WEAVING, this.effects);
 
 
         // armour enchantments
-        //const boots = bot.inventory.slots[8];
-        const boots = bot.entity.equipment[5];
-        if (boots && boots.nbt) {
-            const simplifiedNbt = nbt.simplify(boots.nbt);
-            const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
-            this.depthStrider = this.ctx.getEnchantmentLevel(CheapEnchantments.DEPTH_STRIDER, enchantments);
-            this.soulSpeed = this.ctx.getEnchantmentLevel(CheapEnchantments.SOUL_SPEED, enchantments);
-        } else {
-            this.depthStrider = 0;
-            this.soulSpeed = 0;
-        }
+        // The bot's OWN equipped armour arrives via set_slot into bot.inventory.slots (feet=8, legs=7,
+        // chest=6, head=5) -- NOT bot.entity.equipment, which stays null for the local player. Read the
+        // inventory slot first, falling back to entity.equipment for pre-1.20.5 / other-entity cases.
+        const reg = (bot as any).registry;
+        const bootsItem = (bot.inventory?.slots?.[8]) ?? bot.entity.equipment[5];
+        const bootsEnch = getItemEnchantments(bootsItem, reg);
+        this.depthStrider = this.ctx.getEnchantmentLevel(CheapEnchantments.DEPTH_STRIDER, bootsEnch);
+        this.soulSpeed = this.ctx.getEnchantmentLevel(CheapEnchantments.SOUL_SPEED, bootsEnch);
+        this.canWalkOnPowderSnow = (bootsItem as any)?.name === "leather_boots";
 
-        const leggings = bot.entity.equipment[3];
-        if (leggings && leggings.nbt) {
-            const simplifiedNbt = nbt.simplify(leggings.nbt);
-            const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
-            this.swiftSneak = this.ctx.getEnchantmentLevel(CheapEnchantments.SWIFT_SNEAK, enchantments);
-        } else {
-            this.swiftSneak = 0;
-        }
+        const leggingsItem = (bot.inventory?.slots?.[7]) ?? bot.entity.equipment[3];
+        const leggingsEnch = getItemEnchantments(leggingsItem, reg);
+        this.swiftSneak = this.ctx.getEnchantmentLevel(CheapEnchantments.SWIFT_SNEAK, leggingsEnch);
 
         this.pose = getPose(bot.entity);
         this.gameMode = bot.game.gameMode;
@@ -357,9 +523,12 @@ export class PlayerState implements IEntityState {
         bot.entity.velocity.set(this.vel.x, this.vel.y, this.vel.z);
         bot.entity.onGround = this.onGround;
         (bot.entity as any).lastOnGround = this.lastOnGround;
+        (bot.entity as any).fallDistance = this.fallDistance;
+        (bot.entity as any).isInPowderSnow = this.isInPowderSnow;
         (bot.entity as any).onClimbable = this.onClimbable;
         (bot.entity as any).isInWater = this.isInWater;
         (bot.entity as any).isUnderWater = this.isUnderWater;
+        (bot.entity as any).wasEyeInWater = this.wasEyeInWater;
         (bot.entity as any).isInLava = this.isInLava;
         (bot.entity as any).isUnderLava = this.isUnderLava;
         (bot.entity as any).isInWeb = this.isInWeb;
@@ -373,6 +542,8 @@ export class PlayerState implements IEntityState {
         // dunno what to do about these, ngl.
         (bot as any).jumpTicks = this.jumpTicks;
         (bot as any).jumpQueued = this.jumpQueued;
+        (bot.entity as any).autoSpinAttackTicks = this.autoSpinAttackTicks;
+        (bot as any).riptideQueued = false;
         (bot as any).flyJumpTriggerTime = this.flyJumpTriggerTime;
         (bot as any).sprintTriggerTime = this.sprintTriggerTime;
 
@@ -404,9 +575,14 @@ export class PlayerState implements IEntityState {
         tmp.vel.set(this.vel.x, this.vel.y, this.vel.z);
         tmp.onGround = this.onGround;
         tmp.lastOnGround = this.lastOnGround;
+        tmp.fallDistance = this.fallDistance;
+        tmp.isInPowderSnow = this.isInPowderSnow;
+        tmp.wasInPowderSnow = this.wasInPowderSnow;
+        tmp.canWalkOnPowderSnow = this.canWalkOnPowderSnow;
         tmp.onClimbable = this.onClimbable;
         tmp.isInWater = this.isInWater;
         tmp.isUnderWater = this.isUnderWater;
+        tmp.wasEyeInWater = this.wasEyeInWater;
         tmp.isInLava = this.isInLava;
         tmp.isUnderLava = this.isUnderLava;
         tmp.isInWeb = this.isInWeb;
@@ -416,12 +592,17 @@ export class PlayerState implements IEntityState {
         tmp.isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         tmp.isCollidedVertically = this.isCollidedVertically;
         tmp.supportingBlockPos = this.supportingBlockPos;
+        tmp.pushableEntities = this.pushableEntities;
+        tmp.pistonEvents = this.pistonEvents;
 
         tmp.sneakCollision = false; //TODO
 
         //not sure what to do here, ngl.
         tmp.jumpTicks = this.jumpTicks ?? 0;
         tmp.jumpQueued = this.jumpQueued ?? false;
+        tmp.autoSpinAttackTicks = this.autoSpinAttackTicks ?? 0;
+        tmp.riptideQueued = this.riptideQueued ?? false;
+        tmp.riptideLevel = this.riptideLevel ?? 0;
         tmp.flyJumpTriggerTime = this.flyJumpTriggerTime ?? 0;
         tmp.sprintTriggerTime = this.sprintTriggerTime ?? 0;
 
@@ -435,6 +616,9 @@ export class PlayerState implements IEntityState {
         tmp.isUsingItem = this.isUsingItem;
         tmp.isUsingMainHand = this.isUsingMainHand;
         tmp.isUsingOffHand = this.isUsingOffHand;
+        tmp.itemUseSpeedMultiplier = this.itemUseSpeedMultiplier;
+        tmp.itemUseCanSprint = this.itemUseCanSprint;
+        tmp.isPassenger = this.isPassenger;
 
         // effects
         tmp.effects = this.effects;
@@ -448,6 +632,7 @@ export class PlayerState implements IEntityState {
         tmp.slowFalling = this.slowFalling;
         tmp.levitation = this.levitation;
         tmp.blindness = this.blindness;
+        tmp.weaving = this.weaving;
         tmp.soulSpeed = this.soulSpeed;
         tmp.swiftSneak = this.swiftSneak;
         tmp.depthStrider = this.depthStrider;
@@ -473,9 +658,14 @@ export class PlayerState implements IEntityState {
         this.vel.set(other.vel.x, other.vel.y, other.vel.z);
         this.onGround = other.onGround;
         this.lastOnGround = other.lastOnGround;
+        this.fallDistance = other.fallDistance;
+        this.isInPowderSnow = other.isInPowderSnow;
+        this.wasInPowderSnow = other.wasInPowderSnow;
+        this.canWalkOnPowderSnow = other.canWalkOnPowderSnow;
         this.onClimbable = other.onClimbable;
         this.isInWater = other.isInWater;
         this.isUnderWater = other.isUnderWater;
+        this.wasEyeInWater = other.wasEyeInWater;
         this.isInLava = other.isInLava;
         this.isUnderLava = other.isUnderLava;
         this.isInWeb = other.isInWeb;
@@ -485,12 +675,17 @@ export class PlayerState implements IEntityState {
         this.isCollidedHorizontallyMinor = other.isCollidedHorizontallyMinor
         this.isCollidedVertically = other.isCollidedVertically;
         this.supportingBlockPos = other.supportingBlockPos;
+        this.pushableEntities = other.pushableEntities;
+        this.pistonEvents = other.pistonEvents;
 
         this.sneakCollision = false; //TODO
 
         //not sure what to do here, ngl.
         this.jumpTicks = other.jumpTicks ?? 0;
         this.jumpQueued = other.jumpQueued ?? false;
+        this.autoSpinAttackTicks = other.autoSpinAttackTicks ?? 0;
+        this.riptideQueued = other.riptideQueued ?? false;
+        this.riptideLevel = other.riptideLevel ?? 0;
         this.flyJumpTriggerTime = other.flyJumpTriggerTime ?? 0;
         this.sprintTriggerTime = other.sprintTriggerTime ?? 0;
 
@@ -504,6 +699,9 @@ export class PlayerState implements IEntityState {
         this.isUsingItem = other.isUsingItem;
         this.isUsingMainHand = other.isUsingMainHand;
         this.isUsingOffHand = other.isUsingOffHand;
+        this.itemUseSpeedMultiplier = other.itemUseSpeedMultiplier;
+        this.itemUseCanSprint = other.itemUseCanSprint;
+        this.isPassenger = other.isPassenger;
 
         // effects
         this.effects = other.effects;
@@ -518,6 +716,7 @@ export class PlayerState implements IEntityState {
         this.swiftSneak = other.swiftSneak;
         this.soulSpeed = other.soulSpeed;
         this.levitation = other.levitation;
+        this.weaving = other.weaving;
         this.depthStrider = other.depthStrider;
 
         this.pose = other.pose;

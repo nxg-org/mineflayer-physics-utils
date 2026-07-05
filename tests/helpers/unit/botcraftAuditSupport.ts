@@ -7,7 +7,7 @@ import { PlayerState } from "../../../src/physics/states";
 import { applyMdToNewEntity } from "../../../src/util/physicsUtils";
 import { createFlatWorld, loadMcData } from "./botcraftTestSupport";
 
-const defaultVersion = "1.21.4";
+const defaultVersion = "26.2";
 const defaultGroundLevel = 67;
 const control: Partial<Record<ControlState, boolean>> = {};
 

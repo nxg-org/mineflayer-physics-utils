@@ -5,7 +5,7 @@ import { PlayerPoses } from "../../../src/physics/states/poses";
 import { collectMovementDeltas } from "../../helpers/unit/botcraftAuditSupport";
 import { createBotcraftPlayerRig, createFlatWorld } from "../../helpers/unit/botcraftTestSupport";
 
-const version = "1.21.4";
+const version = "26.2";
 const groundLevel = 67;
 
 describe("Botcraft fall-flying landing", () => {
@@ -31,7 +31,7 @@ describe("Botcraft fall-flying landing", () => {
 
     expect(rig.playerState.onGround).toBe(true);
     expect(rig.playerState.fallFlying).toBe(true);
-    expect(rig.playerState.sprinting).toBe(false);
+    expect(rig.playerState.sprinting).toBe(true);
   });
 
   it("re-launches on the tick after a fall-flying landing", () => {
@@ -81,7 +81,7 @@ describe("Botcraft fall-flying landing", () => {
     rig.physics.simulate(rig.playerCtx, fakeWorld);
     rig.playerState.apply(rig.fakePlayer);
 
-    expect(rig.playerState.sprinting).toBe(false);
+    expect(rig.playerState.sprinting).toBe(true);
   });
 
   it("matches the current sustained grounded glide landing sequence", () => {

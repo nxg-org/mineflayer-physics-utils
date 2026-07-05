@@ -6,7 +6,7 @@ import { EntityState, PlayerState } from "../../../src/physics/states";
 import { applyToPlayerState, convertPlayerState } from "../../../src/util/physicsUtils";
 import { createBotcraftPlayerRig } from "../../helpers/unit/botcraftTestSupport";
 
-const version = "1.21.4";
+const version = "26.2";
 
 function createFakeBot() {
   const rig = createBotcraftPlayerRig({

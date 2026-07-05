@@ -597,7 +597,7 @@ export class EntityPhysics implements IPhysics {
                     }
                 }
                 // Calculate what the speed is (0.1 if no modification)
-                const attributeSpeed = attributes.getAttributeValue(playerSpeedAttribute);
+                const attributeSpeed = attributes.getAttributeValue(playerSpeedAttribute, this.movementSpeedAttribute);
                 inertia = (this.blockSlipperiness[blockUnder.type] || entity.worldSettings.defaultSlipperiness) * 0.91;
                 acceleration = attributeSpeed * (0.1627714 / (inertia * inertia * inertia));
                 if (acceleration < 0) acceleration = 0; // acceleration should not be negative
