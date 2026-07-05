@@ -3,7 +3,7 @@ import expect from "expect";
 import { Vec3 } from "vec3";
 import { createBotcraftPlayerRig, createFlatWorld } from "../../helpers/unit/botcraftTestSupport";
 
-const version = "1.12.2";
+const version = "26.2";
 const groundLevel = 67;
 const floatingOffset = 100 - groundLevel;
 
@@ -31,7 +31,7 @@ describe("World movement simulation", () => {
 
     expect(rig.fakePlayer.entity.position.x).toBe(0);
     expect(rig.fakePlayer.entity.position.y).toBe(groundLevel);
-    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-2.4694803842498265, 8);
+    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-2.4694806673123386, 8);
   });
 
   it("supports sprint-jumping", () => {
@@ -57,7 +57,7 @@ describe("World movement simulation", () => {
     }
 
     expect(rig.fakePlayer.entity.position.y).toEqual(groundLevel);
-    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-4.377196061052951, 8);
+    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-4.377196304947304, 8);
   });
 
   it("matches walking fall-speed travel distance", () => {

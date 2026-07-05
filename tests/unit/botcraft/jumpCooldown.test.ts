@@ -3,7 +3,7 @@ import expect from "expect";
 import { Vec3 } from "vec3";
 import { createBotcraftPlayerRig, createFlatWorld } from "../../helpers/unit/botcraftTestSupport";
 
-const version = "1.21.4";
+const version = "26.2";
 const groundLevel = 67;
 
 describe("Botcraft jump cooldown", () => {

@@ -10,6 +10,7 @@ export type MobsByName = { [mobName: string]: Entity };
 export interface IPhysics {
     data: IndexedData;
     supportFeature: ReturnType<typeof makeSupportFeature>;
+    scaleAttribute?: string | null;
     getEffectLevel: (effect: CheapEffects, effects: Effect[]) => number;
     getEnchantmentLevel: (effect: CheapEnchantments, enchantments: any[]) => number;
     // getUnderlyingBlockBBs(queryBB: AABB, world: any): AABB[];

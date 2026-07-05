@@ -17,9 +17,33 @@ import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { EntityState, IEntityState } from "../states";
 import { IPhysics } from "./IPhysics";
 import { PlayerState } from "../states";
+import {
+  boatTickPrelude,
+  makeBoatState,
+  type BoatState,
+  type BoatEnvProbe,
+} from "../../subsystems/boat-physics";
+import {
+  getCurrentBlockPosOrRailBelow,
+  moveAlongTrackOld,
+  getDefaultGravity as minecartDefaultGravity,
+  MAX_MINECART_SPEED_GAMERULE_DEFAULT,
+  MAX_SPEED_ON_LAND,
+  MAX_SPEED_IN_WATER,
+  GROUND_FRICTION,
+  AIR_DRAG as MINECART_AIR_DRAG,
+  type MinecartState,
+  type MinecartConfig,
+  type RailBlockInfo,
+  type RailShape,
+  type BlockGetter as RailBlockGetter,
+} from "../../subsystems/minecart-physics";
 
 type CheapEffectNames = keyof ReturnType<typeof getStatusEffectNamesForVersion>;
 type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersion>;
+
+const MINECART_RAIL_NAMES = new Set(["rail", "powered_rail", "detector_rail", "activator_rail"]);
+const MINECART_CFG: MinecartConfig = { experimental: false, maxMinecartSpeedGamerule: MAX_MINECART_SPEED_GAMERULE_DEFAULT };
 
 /**
  * Looking at this code, it's too specified towards players.
@@ -42,6 +66,7 @@ export class EntityPhysics implements IPhysics {
   protected ladderId: number;
   protected vineId: number;
   protected bubblecolumnId: number;
+  protected lilyPadId: number;
   protected waterLike: Set<number>;
 
   public readonly statusEffectNames: { [type in CheapEffects]: string };
@@ -72,6 +97,7 @@ export class EntityPhysics implements IPhysics {
     this.lavaId = blocksByName.lava.id;
     this.ladderId = blocksByName.ladder.id;
     this.vineId = blocksByName.vine.id;
+    this.lilyPadId = blocksByName.lily_pad ? blocksByName.lily_pad.id : -1;
     this.waterLike = new Set();
     if (blocksByName.seagrass) this.waterLike.add(blocksByName.seagrass.id); // 1.13+
     if (blocksByName.tall_seagrass) this.waterLike.add(blocksByName.tall_seagrass.id); // 1.13+
@@ -629,7 +655,7 @@ export class EntityPhysics implements IPhysics {
           }
         }
         // Calculate what the speed is (0.1 if no modification)
-        const attributeSpeed = attributes.getAttributeValue(playerSpeedAttribute);
+        const attributeSpeed = attributes.getAttributeValue(playerSpeedAttribute, this.movementSpeedAttribute);
 
         dragOrFriction = (this.blockSlipperiness[blockUnder.type] || entity.worldSettings.defaultSlipperiness) * 0.91;
         acceleration = attributeSpeed * (0.1627714 / (dragOrFriction * dragOrFriction * dragOrFriction));
@@ -716,9 +742,283 @@ export class EntityPhysics implements IPhysics {
     }
   }
 
+  isBoatEntity(entity: EPhysicsCtx): boolean {
+    const n = entity.entityType?.name;
+    return !!n && (n.includes("boat") || n.includes("raft"));
+  }
+
+  private tickBoat(entity: EPhysicsCtx, world: any /*prismarine-world*/) {
+    const state = entity.state;
+    const pos = state.pos;
+    const vel = state.vel;
+
+    let boat = (state as any).__boatState as BoatState | undefined;
+    if (!boat) {
+      boat = makeBoatState(pos, { bbHeight: entity.height });
+      (state as any).__boatState = boat;
+    }
+    boat.pos = pos.clone();
+    boat.vel = vel.clone();
+    boat.bbHeight = entity.height;
+    boat.riddenByPlayer = false;
+
+    const lastYd = vel.y;
+    const env = this.boatEnvProbe(entity, boat, world);
+
+    const snap = {
+      getWaterLevelAbove: () => this.boatWaterLevelAbove(this.getEntityBB(entity, boat!.pos), lastYd, world),
+      noCollisionMovedTo: (targetY: number) => {
+        const movedBB = this.getEntityBB(entity, new Vec3(boat!.pos.x, targetY, boat!.pos.z));
+        return this.getSurroundingBBs(movedBB, world).every((b) => !b.intersects(movedBB));
+      },
+    };
+
+    boatTickPrelude(boat, env, {}, snap);
+
+    vel.set(boat.vel.x, boat.vel.y, boat.vel.z);
+    pos.set(boat.pos.x, boat.pos.y, boat.pos.z);
+    this.moveEntity(entity, vel.x, vel.y, vel.z, world);
+
+    state.isInWater = boat.status === "IN_WATER" || boat.status === "UNDER_WATER" || boat.status === "UNDER_FLOWING_WATER";
+    state.isInLava = false;
+  }
+
+  private boatFluidHeight(block: Block, world: any): number {
+    const above = world.getBlock(block.position.offset(0, 1, 0));
+    if (this.boatIsWater(above)) return 1.0;
+    return 1 - this.getLiquidHeightPcent(block);
+  }
+
+  private boatIsWater(block: Block | null): boolean {
+    return !!block && (block.type === this.waterId || this.waterLike.has(block.type) || !!block.getProperties().waterlogged);
+  }
+
+  private boatIsWaterSource(block: Block): boolean {
+    if (block.getProperties().waterlogged) return true;
+    if (this.waterLike.has(block.type)) return true;
+    if (block.type === this.waterId) return block.metadata === 0;
+    return false;
+  }
+
+  private boatIsUnderwater(bb: AABB, world: any): "UNDER_WATER" | "UNDER_FLOWING_WATER" | null {
+    const maxY = bb.maxY + 0.001;
+    const x0 = Math.floor(bb.minX), x1 = Math.ceil(bb.maxX);
+    const y0 = Math.floor(bb.maxY), y1 = Math.ceil(maxY);
+    const z0 = Math.floor(bb.minZ), z1 = Math.ceil(bb.maxZ);
+    let underWater = false;
+    const cursor = new Vec3(0, 0, 0);
+    for (cursor.x = x0; cursor.x < x1; cursor.x++) {
+      for (cursor.y = y0; cursor.y < y1; cursor.y++) {
+        for (cursor.z = z0; cursor.z < z1; cursor.z++) {
+          const block = world.getBlock(cursor);
+          if (this.boatIsWater(block)) {
+            const surface = cursor.y + this.boatFluidHeight(block, world);
+            if (maxY < surface) {
+              if (!this.boatIsWaterSource(block)) return "UNDER_FLOWING_WATER";
+              underWater = true;
+            }
+          }
+        }
+      }
+    }
+    return underWater ? "UNDER_WATER" : null;
+  }
+
+  private boatCheckInWater(bb: AABB, world: any): { inWater: boolean; waterLevel: number } {
+    const minX = Math.floor(bb.minX), maxX = Math.ceil(bb.maxX);
+    const minY = Math.floor(bb.minY), maxY = Math.ceil(bb.minY + 0.001);
+    const minZ = Math.floor(bb.minZ), maxZ = Math.ceil(bb.maxZ);
+    let inWater = false;
+    let waterLevel = -Number.MAX_VALUE;
+    const cursor = new Vec3(0, 0, 0);
+    for (cursor.x = minX; cursor.x < maxX; cursor.x++) {
+      for (cursor.y = minY; cursor.y < maxY; cursor.y++) {
+        for (cursor.z = minZ; cursor.z < maxZ; cursor.z++) {
+          const block = world.getBlock(cursor);
+          if (this.boatIsWater(block)) {
+            const surface = cursor.y + this.boatFluidHeight(block, world);
+            waterLevel = Math.max(surface, waterLevel);
+            inWater = inWater || bb.minY < surface;
+          }
+        }
+      }
+    }
+    return { inWater, waterLevel };
+  }
+
+  private boatGroundFriction(entity: EPhysicsCtx, bb: AABB, world: any): number {
+    const boatBB = new AABB(bb.minX, bb.minY - 0.001, bb.minZ, bb.maxX, bb.minY, bb.maxZ);
+    const x0 = Math.floor(boatBB.minX) - 1, x1 = Math.ceil(boatBB.maxX) + 1;
+    const y0 = Math.floor(boatBB.minY) - 1, y1 = Math.ceil(boatBB.maxY) + 1;
+    const z0 = Math.floor(boatBB.minZ) - 1, z1 = Math.ceil(boatBB.maxZ) + 1;
+    let friction = 0;
+    let count = 0;
+    const cursor = new Vec3(0, 0, 0);
+    for (cursor.x = x0; cursor.x < x1; cursor.x++) {
+      for (cursor.z = z0; cursor.z < z1; cursor.z++) {
+        const edges = (cursor.x !== x0 && cursor.x !== x1 - 1 ? 0 : 1) + (cursor.z !== z0 && cursor.z !== z1 - 1 ? 0 : 1);
+        if (edges === 2) continue;
+        for (cursor.y = y0; cursor.y < y1; cursor.y++) {
+          if (edges > 0 && (cursor.y === y0 || cursor.y === y1 - 1)) continue;
+          const block = world.getBlock(cursor);
+          if (!block || !block.shapes || block.shapes.length === 0) continue;
+          if (this.lilyPadId >= 0 && block.type === this.lilyPadId) continue;
+          let hit = false;
+          for (const shape of block.shapes) {
+            const sb = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]).translate(
+              block.position.x,
+              block.position.y,
+              block.position.z
+            );
+            if (sb.intersects(boatBB)) {
+              hit = true;
+              break;
+            }
+          }
+          if (hit) {
+            friction += this.blockSlipperiness[block.type] ?? entity.worldSettings.defaultSlipperiness;
+            count++;
+          }
+        }
+      }
+    }
+    return count > 0 ? friction / count : NaN;
+  }
+
+  private boatWaterLevelAbove(bb: AABB, lastYd: number, world: any): number {
+    const minX = Math.floor(bb.minX), maxX = Math.ceil(bb.maxX);
+    const minY = Math.floor(bb.maxY), maxY = Math.ceil(bb.maxY - lastYd);
+    const minZ = Math.floor(bb.minZ), maxZ = Math.ceil(bb.maxZ);
+    const cursor = new Vec3(0, 0, 0);
+    for (let y = minY; y < maxY; y++) {
+      let blockHeight = 0;
+      let full = false;
+      for (cursor.x = minX; cursor.x < maxX && !full; cursor.x++) {
+        for (cursor.z = minZ; cursor.z < maxZ; cursor.z++) {
+          cursor.y = y;
+          const block = world.getBlock(cursor);
+          if (this.boatIsWater(block)) blockHeight = Math.max(blockHeight, this.boatFluidHeight(block, world));
+          if (blockHeight >= 1) {
+            full = true;
+            break;
+          }
+        }
+      }
+      if (blockHeight < 1) return y + blockHeight;
+    }
+    return maxY + 1;
+  }
+
+  private boatEnvProbe(entity: EPhysicsCtx, boat: BoatState, world: any): BoatEnvProbe {
+    const bb = this.getEntityBB(entity, boat.pos);
+    const submerged = this.boatIsUnderwater(bb, world);
+    const cw = this.boatCheckInWater(bb, world);
+    const groundFriction = this.boatGroundFriction(entity, bb, world);
+    return {
+      submerged,
+      submergedWaterLevel: bb.maxY,
+      inWater: cw.inWater,
+      inWaterLevel: cw.waterLevel,
+      groundFriction,
+    };
+  }
+
+  isMinecartEntity(entity: EPhysicsCtx): boolean {
+    const n = entity.entityType?.name;
+    return !!n && n.includes("minecart");
+  }
+
+  private minecartBlockGetter(world: any): RailBlockGetter {
+    return (x: number, y: number, z: number): RailBlockInfo => {
+      const block = world.getBlock(new Vec3(x, y, z));
+      if (!block) {
+        return { isRail: false, isRailTagged: false, isPoweredRail: false, isActivatorRail: false, powered: false, isRedstoneConductor: false };
+      }
+      const name = block.name;
+      const isRail = MINECART_RAIL_NAMES.has(name);
+      const props = block.getProperties ? block.getProperties() : {};
+      const rawShape = (props as any).shape;
+      const shape: RailShape | undefined = isRail && rawShape ? (String(rawShape).toUpperCase() as RailShape) : undefined;
+      return {
+        isRail,
+        isRailTagged: isRail,
+        shape,
+        isPoweredRail: name === "powered_rail",
+        isActivatorRail: name === "activator_rail",
+        powered: (props as any).powered === true || (props as any).powered === "true",
+        isRedstoneConductor: block.boundingBox === "block" && !isRail,
+      };
+    };
+  }
+
+  private tickMinecart(entity: EPhysicsCtx, world: any /*prismarine-world*/) {
+    const state = entity.state;
+    const pos = state.pos;
+    const vel = state.vel;
+
+    const waterBB = this.getEntityBB(entity, pos).contract(0.001, 0.001, 0.001);
+    const inWater = this.getWaterInBB(waterBB, world).length > 0;
+
+    vel.y -= minecartDefaultGravity(inWater);
+
+    const getBlock = this.minecartBlockGetter(world);
+    const posI = getCurrentBlockPosOrRailBelow(pos, getBlock, false);
+    const info = getBlock(posI[0], posI[1], posI[2]);
+
+    if (info.isRail && info.shape) {
+      const mc: MinecartState = {
+        pos: pos.clone(),
+        posO: pos.clone(),
+        vel: vel.clone(),
+        isVehicle: false,
+        moveIntent: null,
+        isInWater: inWater,
+        onGround: state.onGround,
+        onRails: true,
+        flipped: false,
+        yRot: 0,
+        yRotO: 0,
+        firstTick: false,
+      };
+      moveAlongTrackOld(mc, posI, getBlock, MINECART_CFG);
+      pos.set(mc.pos.x, mc.pos.y, mc.pos.z);
+      vel.set(mc.vel.x, mc.vel.y, mc.vel.z);
+    } else {
+      const maxSpeed = inWater ? MAX_SPEED_IN_WATER : MAX_SPEED_ON_LAND;
+      vel.x = math.clamp(-maxSpeed, vel.x, maxSpeed);
+      vel.z = math.clamp(-maxSpeed, vel.z, maxSpeed);
+      if (state.onGround) {
+        vel.x *= GROUND_FRICTION;
+        vel.y *= GROUND_FRICTION;
+        vel.z *= GROUND_FRICTION;
+      }
+      this.moveEntity(entity, vel.x, vel.y, vel.z, world);
+      if (!state.onGround) {
+        vel.x *= MINECART_AIR_DRAG;
+        vel.y *= MINECART_AIR_DRAG;
+        vel.z *= MINECART_AIR_DRAG;
+      }
+    }
+
+    state.isInWater = inWater;
+    state.isInLava = false;
+  }
+
   simulate(entity: EPhysicsCtx, world: any /*prismarine-world*/): IEntityState {
     if (!this.shouldMoveEntity(entity)) {
       entity.velocity.set(0, 0, 0);
+      return entity.state;
+    }
+
+    if (this.isMinecartEntity(entity)) {
+      this.tickMinecart(entity, world);
+      entity.state.age++;
+      return entity.state;
+    }
+
+    if (this.isBoatEntity(entity)) {
+      this.tickBoat(entity, world);
+      entity.state.age++;
       return entity.state;
     }
 

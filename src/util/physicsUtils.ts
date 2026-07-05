@@ -46,7 +46,8 @@ export enum CheapEffects {
     DOLPHINS_GRACE,
     SLOW_FALLING,
     LEVITATION,
-    BLINDNESS
+    BLINDNESS,
+    WEAVING
 }
 
 export enum CheapEnchantments {
@@ -89,7 +90,8 @@ export function getStatusEffectNamesForVersion(supportFeature: SupportFeature) {
             dolphinsGraceEffectName: "DolphinsGrace",
             slowFallingEffectName: "SlowFalling",
             levitationEffectName: "Levitation",
-            blindnessEffectName: "Blindnesss"
+            blindnessEffectName: "Blindnesss",
+            weavingEffectName: "Weaving"
 
         };
     } else {
@@ -100,7 +102,8 @@ export function getStatusEffectNamesForVersion(supportFeature: SupportFeature) {
             dolphinsGraceEffectName: "DolphinsGrace",
             slowFallingEffectName: "SlowFalling",
             levitationEffectName: "Levitation",
-            blindnessEffectName: "Blindnesss"
+            blindnessEffectName: "Blindnesss",
+            weavingEffectName: "Weaving"
         };
     }
 }
@@ -235,6 +238,9 @@ export function convertPlayerState(bot: Bot, oldState: any, ctx: IPhysics): Play
     newState.validElytraEquipped = oldState.validElytraEquipped ?? oldState.elytraEquipped ?? newState.validElytraEquipped;
     newState.jumpTicks = oldState.jumpTicks ?? newState.jumpTicks;
     newState.jumpQueued = oldState.jumpQueued ?? newState.jumpQueued;
+    newState.autoSpinAttackTicks = oldState.autoSpinAttackTicks ?? newState.autoSpinAttackTicks;
+    newState.riptideQueued = oldState.riptideQueued ?? newState.riptideQueued;
+    newState.riptideLevel = oldState.riptideLevel ?? newState.riptideLevel;
     newState.fireworkRocketDuration = oldState.fireworkRocketDuration ?? newState.fireworkRocketDuration;
     newState.yaw = oldState.yaw ?? newState.yaw;
     newState.pitch = oldState.pitch ?? newState.pitch;
@@ -256,7 +262,8 @@ export function convertPlayerState(bot: Bot, oldState: any, ctx: IPhysics): Play
     newState.dolphinsGrace = oldState.dolphinsGrace ?? newState.dolphinsGrace;
     newState.slowFalling = oldState.slowFalling ?? newState.slowFalling;
     newState.levitation = oldState.levitation ?? newState.levitation;
-    
+    newState.weaving = oldState.weaving ?? newState.weaving;
+
     newState.depthStrider = oldState.depthStrider ?? newState.depthStrider;
 
     return newState;
@@ -293,6 +300,9 @@ export function applyToPlayerState(newState: PlayerState, oldState: any): void {
     oldState.elytraEquipped = newState.validElytraEquipped;
     oldState.jumpTicks = newState.jumpTicks;
     oldState.jumpQueued = newState.jumpQueued;
+    oldState.autoSpinAttackTicks = newState.autoSpinAttackTicks;
+    oldState.riptideQueued = newState.riptideQueued;
+    oldState.riptideLevel = newState.riptideLevel;
     oldState.fireworkRocketDuration = newState.fireworkRocketDuration;
     oldState.yaw = newState.yaw;
     oldState.pitch = newState.pitch;
@@ -320,5 +330,6 @@ export function applyToPlayerState(newState: PlayerState, oldState: any): void {
     oldState.dolphinsGrace = newState.dolphinsGrace;
     oldState.slowFalling = newState.slowFalling;
     oldState.levitation = newState.levitation;
+    oldState.weaving = newState.weaving;
     oldState.depthStrider = newState.depthStrider;
 }
