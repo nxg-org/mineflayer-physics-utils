@@ -27,6 +27,8 @@ type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersi
 type Heading = { forward: number; strafe: number };
 type World = { getBlock: world.WorldSync["getBlock"]};
 
+const COLLISION_EPSILON = 1e-7;
+
 
 function extractAttribute(ctx: IPhysics, genericName: string) {
   const data = ctx.data.attributesByName[genericName] as any;
@@ -1559,7 +1561,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   shapeCollide(axis: number, bb: AABB, colliders: AABB[], movement: number): number {
-    if (Math.abs(movement) < 1e-7) {
+    if (Math.abs(movement) < COLLISION_EPSILON) {
       return 0.0;
     }
 
@@ -1587,69 +1589,52 @@ export class BotcraftPhysics implements IPhysics {
    * @returns The adjusted movement amount that prevents collisions
    */
   private voxelShapeCollide(axis: number, bb: AABB, movement: number, colliders: AABB[]): number {
-    // If there's no movement or no colliders, return the original movement
-    if (movement === 0 || colliders.length === 0) {
+    if (Math.abs(movement) < COLLISION_EPSILON) {
+      return 0;
+    }
+    if (colliders.length === 0) {
       return movement;
     }
 
     let adjustedMovement = movement;
+    const axis1 = (axis + 1) % 3;
+    const axis2 = (axis + 2) % 3;
+
+    const getMin = (aabb: AABB, ax: number) => {
+      if (ax === 0) return aabb.minX;
+      if (ax === 1) return aabb.minY;
+      return aabb.minZ;
+    };
+    const getMax = (aabb: AABB, ax: number) => {
+      if (ax === 0) return aabb.maxX;
+      if (ax === 1) return aabb.maxY;
+      return aabb.maxZ;
+    };
 
     for (const collider of colliders) {
-      // Calculate offset manually based on the axis
-      if (axis === 0) { // X axis
-        // Check if there's overlap in Y and Z axes
-        if (bb.maxY > collider.minY && bb.minY < collider.maxY &&
-          bb.maxZ > collider.minZ && bb.minZ < collider.maxZ) {
+      const overlapsAxis1 =
+        getMax(bb, axis1) - COLLISION_EPSILON > getMin(collider, axis1) &&
+        getMin(bb, axis1) + COLLISION_EPSILON < getMax(collider, axis1);
+      const overlapsAxis2 =
+        getMax(bb, axis2) - COLLISION_EPSILON > getMin(collider, axis2) &&
+        getMin(bb, axis2) + COLLISION_EPSILON < getMax(collider, axis2);
 
-          if (movement > 0 && bb.maxX + movement > collider.minX && bb.maxX <= collider.minX) {
-            // Moving right and will collide
-            adjustedMovement = Math.min(adjustedMovement, collider.minX - bb.maxX);
-          }
-          else if (movement < 0 && bb.minX + movement < collider.maxX && bb.minX >= collider.maxX) {
-            // Moving left and will collide
-            adjustedMovement = Math.max(adjustedMovement, collider.maxX - bb.minX);
-          }
-        }
+      if (!overlapsAxis1 || !overlapsAxis2) {
+        continue;
       }
-      else if (axis === 1) { // Y axis
-        // Check if there's overlap in X and Z axes
-        if (bb.maxX > collider.minX && bb.minX < collider.maxX &&
-          bb.maxZ > collider.minZ && bb.minZ < collider.maxZ) {
 
-          if (movement > 0 && bb.maxY + movement > collider.minY && bb.maxY <= collider.minY) {
-            // Moving up and will collide
-            adjustedMovement = Math.min(adjustedMovement, collider.minY - bb.maxY);
-          }
-          else if (movement < 0 && bb.minY + movement < collider.maxY && bb.minY >= collider.maxY) {
-            // Moving down and will collide
-            adjustedMovement = Math.max(adjustedMovement, collider.maxY - bb.minY);
-          }
+      if (movement > 0) {
+        const gap = getMin(collider, axis) - getMax(bb, axis);
+        if (gap >= -COLLISION_EPSILON) {
+          adjustedMovement = Math.min(adjustedMovement, gap);
         }
-      }
-      else { // Z axis
-        // Check if there's overlap in X and Y axes
-        if (bb.maxX > collider.minX && bb.minX < collider.maxX &&
-          bb.maxY > collider.minY && bb.minY < collider.maxY) {
-
-          if (movement > 0 && bb.maxZ + movement > collider.minZ && bb.maxZ <= collider.minZ) {
-            // Moving forward and will collide
-            adjustedMovement = Math.min(adjustedMovement, collider.minZ - bb.maxZ);
-          }
-          else if (movement < 0 && bb.minZ + movement < collider.maxZ && bb.minZ >= collider.maxZ) {
-            // Moving backward and will collide
-            adjustedMovement = Math.max(adjustedMovement, collider.maxZ - bb.minZ);
-          }
+      } else {
+        const gap = getMax(collider, axis) - getMin(bb, axis);
+        if (gap <= COLLISION_EPSILON) {
+          adjustedMovement = Math.max(adjustedMovement, gap);
         }
       }
     }
-
-    // if (axis === 0) {
-    //   ('test')
-    //   console.log(bb, colliders,)
-    //   console.log('movement:', movement, 'adjustedMovement', adjustedMovement)
-    //   console.log('end test')
-    //   console.log
-    // }
 
     return adjustedMovement;
   }
