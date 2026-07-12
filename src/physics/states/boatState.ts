@@ -21,6 +21,7 @@ export class BoatState extends EntityState {
   yawVelocity = 0;
   lastVerticalVelocity = 0;
   underwaterTicks = 0;
+  controllingPlayer = false;
 
   worldReady = true;
 
@@ -112,6 +113,7 @@ export class BoatState extends EntityState {
     other.yawVelocity = this.yawVelocity;
     other.lastVerticalVelocity = this.lastVerticalVelocity;
     other.underwaterTicks = this.underwaterTicks;
+    other.controllingPlayer = this.controllingPlayer;
     other.worldReady = this.worldReady;
     other.age = this.age;
     other.isCollidedHorizontally = this.isCollidedHorizontally;

@@ -17,7 +17,6 @@ const FLOWING_WATER_VERTICAL = Math.fround(-0.0007);
 const ROTATION_PER_TICK = Math.PI / 180;
 const DEFAULT_BLOCK_FRICTION = 0.6;
 const MAX_CONTROL_ACCELERATION = Math.fround(0.04);
-const MAX_VERTICAL_MOTION = Math.fround(GRAVITY + BUOYANCY_UNDER_WATER + 0.101);
 
 export class BoatPhysics extends EntityPhysics {
   constructor(mcData: md.IndexedData) {
@@ -52,7 +51,7 @@ export class BoatPhysics extends EntityPhysics {
     return this.getEntityBB(simCtx, state.pos);
   }
 
-  private getWorldQueryBlockRange(simCtx: EPhysicsCtx, state: BoatState): {
+  private getWorldReadinessBlockRange(simCtx: EPhysicsCtx, state: BoatState): {
     minX: number;
     maxX: number;
     minY: number;
@@ -61,33 +60,25 @@ export class BoatPhysics extends EntityPhysics {
     maxZ: number;
   } {
     const bb = this.getBoatBB(simCtx, state);
-    const sweepX = Math.abs(state.vel.x) + MAX_CONTROL_ACCELERATION;
-    const sweepY = Math.max(Math.abs(state.vel.y), Math.abs(state.lastVerticalVelocity), MAX_VERTICAL_MOTION);
-    const sweepZ = Math.abs(state.vel.z) + MAX_CONTROL_ACCELERATION;
-
-    const sweptMinX = bb.minX - sweepX;
-    const sweptMaxX = bb.maxX + sweepX;
-    const sweptMinY = bb.minY - sweepY;
-    const sweptMaxY = bb.maxY + sweepY + 0.001;
-    const sweptMinZ = bb.minZ - sweepZ;
-    const sweptMaxZ = bb.maxZ + sweepZ;
+    const margin = 1;
 
     return {
-      minX: Math.floor(sweptMinX) - 1,
-      maxX: Math.ceil(sweptMaxX) + 1,
-      minY: Math.floor(sweptMinY) - 1,
+      minX: Math.floor(bb.minX) - margin,
+      maxX: Math.ceil(bb.maxX) + margin,
+      minY: Math.floor(bb.minY) - margin,
       maxY: Math.max(
-        Math.ceil(sweptMaxY) + 1,
-        Math.ceil(bb.maxY - state.lastVerticalVelocity) + 1,
-        Math.ceil(bb.maxY) + 1,
+        Math.ceil(bb.maxY) + margin,
+        Math.ceil(bb.maxY - state.lastVerticalVelocity) + margin,
+        Math.ceil(bb.maxY + 0.001) + margin,
+        Math.ceil(bb.minY + 0.001) + margin,
       ),
-      minZ: Math.floor(sweptMinZ) - 1,
-      maxZ: Math.ceil(sweptMaxZ) + 1,
+      minZ: Math.floor(bb.minZ) - margin,
+      maxZ: Math.ceil(bb.maxZ) + margin,
     };
   }
 
   private isWorldReady(simCtx: EPhysicsCtx, state: BoatState, world: PhysicsWorld): boolean {
-    const range = this.getWorldQueryBlockRange(simCtx, state);
+    const range = this.getWorldReadinessBlockRange(simCtx, state);
     const cursor = new Vec3(0, 0, 0);
 
     for (cursor.y = range.minY; cursor.y <= range.maxY; cursor.y++) {
@@ -296,12 +287,18 @@ export class BoatPhysics extends EntityPhysics {
       state.status !== BoatStatus.ON_LAND
     ) {
       const bb = this.getBoatBB(simCtx, state);
+      state.waterLevel = bb.maxY;
       const waterLevelAbove = this.getWaterLevelAbove(bb, state.lastVerticalVelocity, world);
       const targetY = waterLevelAbove - state.height + 0.101;
       const dy = targetY - state.pos.y;
-      this.moveEntity(simCtx, 0, dy, 0, world);
-      state.vel.y = 0;
-      state.lastVerticalVelocity = 0;
+      const targetPos = { x: state.pos.x, y: state.pos.y + dy, z: state.pos.z };
+      const targetBB = this.getEntityBB(simCtx, targetPos);
+      const hasSolidCollision = this.getSurroundingBBs(targetBB, world).some((bb) => targetBB.intersects(bb));
+      if (dy !== 0 && !hasSolidCollision) {
+        this.moveEntity(simCtx, 0, dy, 0, world);
+        state.vel.y = 0;
+        state.lastVerticalVelocity = 0;
+      }
       state.status = BoatStatus.IN_WATER;
       return;
     }
@@ -324,6 +321,9 @@ export class BoatPhysics extends EntityPhysics {
         break;
       case BoatStatus.ON_LAND:
         invFriction = state.landFriction;
+        if (state.controllingPlayer) {
+          state.landFriction /= 2;
+        }
         break;
     }
 
