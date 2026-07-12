@@ -7,6 +7,7 @@ import { AABB } from "@nxg-org/mineflayer-util-plugin";
 export * from "./entityState"
 export * from "./playerState"
 export * from "./poses"
+export * from "./boatState"
 
 export type Heading = {
     forward: number;
