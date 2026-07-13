@@ -3,9 +3,10 @@ import { EPhysicsCtx } from "../physics/settings";
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import features from "../physics/info/features.json";
 import md from "minecraft-data";
-import { ControlStateHandler, EntityState, IEntityState, PlayerState } from "../physics/states";
+import { ControlStateHandler } from "../physics/player/playerControls";
+import { PlayerState } from "../physics/states/playerState";
 import { Vec3 } from "vec3";
-import { IPhysics } from "../physics/engines";
+import type { IPhysics } from "../physics/engines";
 import { Bot } from "mineflayer";
 
 export function makeSupportFeature(mcData: md.IndexedData) {

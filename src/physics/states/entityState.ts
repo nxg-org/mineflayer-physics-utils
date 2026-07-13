@@ -5,13 +5,13 @@ import { Vec3 } from "vec3";
 
 
 import { ControlStateHandler } from "../player/playerControls";
-import { PlayerState } from "./playerState";
+import type { PlayerState } from "./playerState";
 import { PlayerPoses } from "./poses";
 
-import { IPhysics } from "../engines";
+import type { IPhysics } from "../engines";
 import nbt from "prismarine-nbt";
 import {Entity} from "prismarine-entity";
-import { IEntityState } from ".";
+import type { IEntityState } from ".";
 
 
 
