@@ -33,9 +33,9 @@ export class FlatWorld {
     private readonly floorY: number,
   ) {}
 
-  setOverrideBlock(pos: Vec3, type: number) {
+  setOverrideBlock(pos: Vec3, type: number, metadata = 0) {
     const blockPos = pos.floored();
-    const block = new this.Block(type, 0, 0);
+    const block = new this.Block(type, 0, metadata);
     block.position = blockPos;
     this.overrideBlocks[this.keyFor(blockPos)] = block;
   }

@@ -69,6 +69,7 @@ export class BotcraftPhysics implements IPhysics {
   protected vineId: number;
   protected scaffoldId: number;
   protected bubblecolumnId: number;
+  protected airId: number;
   protected waterLike: Set<number>;
 
   public readonly statusEffectNames: { [type in CheapEffects]: string };
@@ -107,6 +108,7 @@ export class BotcraftPhysics implements IPhysics {
     this.lavaId = blocksByName.lava.id;
     this.ladderId = blocksByName.ladder.id;
     this.vineId = blocksByName.vine.id;
+    this.airId = blocksByName.air.id;
     this.waterLike = new Set();
     if (blocksByName.seagrass) this.waterLike.add(blocksByName.seagrass.id); // 1.13+
     if (blocksByName.tall_seagrass) this.waterLike.add(blocksByName.tall_seagrass.id); // 1.13+
@@ -282,7 +284,7 @@ export class BotcraftPhysics implements IPhysics {
   private updatePoses(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
     const swimPose = getCollider(PlayerPoses.SWIMMING, player.pos).expand(-1e-7, -1e-7, -1e-7);
-    if (this.worldIsFree(world, swimPose, false)) {
+    if (this.worldIsFree(world, swimPose, true)) {
       // update poses
       let currentPose: PlayerPoses;
       // player->GetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying)
@@ -307,11 +309,11 @@ export class BotcraftPhysics implements IPhysics {
       }
 
       const poseBB = getCollider(currentPose, player.pos).expand(-1e-7, -1e-7, -1e-7);
-      if (player.gameMode === "spectator" || this.worldIsFree(world, poseBB, false)) {
+      if (player.gameMode === "spectator" || this.worldIsFree(world, poseBB, true)) {
         player.pose = currentPose;
       } else {
         const crouchBB = getCollider(PlayerPoses.SNEAKING, player.pos).expand(-1e-7, -1e-7, -1e-7);
-        if (this.worldIsFree(world, crouchBB, false)) {
+        if (this.worldIsFree(world, crouchBB, true)) {
           player.pose = PlayerPoses.SNEAKING;
         } else {
           player.pose = PlayerPoses.SWIMMING;
@@ -427,7 +429,7 @@ export class BotcraftPhysics implements IPhysics {
       const adjBlock = world.getBlock(block.position.offset(dx, 0, dz));
       const adjLevel = this.getRenderedDepth(adjBlock);
       if (adjLevel < 0) {
-        if (adjBlock && adjBlock.boundingBox !== "empty") {
+        if (adjBlock && adjBlock.boundingBox === "empty") {
           const adjLevel = this.getRenderedDepth(world.getBlock(block.position.offset(dx, -1, dz)));
           if (adjLevel >= 0) {
             const f = adjLevel - (curlevel - 8);
@@ -551,19 +553,7 @@ export class BotcraftPhysics implements IPhysics {
 
       // Compensate water downward speed depending on looking direction (?)
 
-      if (this.isSwimmingAndNotFlying(ctx, world)) {
-        const mSinPitch = player.pitch;
-        let condition = mSinPitch < 0.0 || player.control.jump;
-        if (!condition) {
-          // check above block
-          const bl1 = world.getBlock(new Vec3(player.pos.x, player.pos.y + 1.0 - 0.1, player.pos.z));
-          condition = bl1 != null && (this.waterId === bl1.type || this.waterLike.has(bl1.type))
-        }
-        if (condition) {
-          // console.log('changing vel by',  (mSinPitch - player.vel.y) * (mSinPitch < -0.2 ? 0.085 : 0.06));
-          player.vel.y += (mSinPitch - player.vel.y) * (mSinPitch < -0.2 ? 0.085 : 0.06);
-        }
-      }
+      this.applySwimmingVerticalSteering(ctx, world);
 
 
       // Refresh pose before movement so the first fall-flying tick uses the
@@ -615,8 +605,8 @@ export class BotcraftPhysics implements IPhysics {
 
       player.crouching =
         !this.isSwimmingAndNotFlying(ctx, world) &&
-        this.worldIsFree(world, sneakBb, false) &&
-        (player.prevControl.sneak || !this.worldIsFree(world, standBb, false));
+        this.worldIsFree(world, sneakBb, true) &&
+        (player.prevControl.sneak || !this.worldIsFree(world, standBb, true));
     } else {
       player.crouching = !this.isSwimmingAndNotFlying(ctx, world) && player.prevControl.sneak;
     }
@@ -664,6 +654,22 @@ export class BotcraftPhysics implements IPhysics {
       return !entity.flying && entity.gameMode !== "spectator" && entity.swimming;
     } else {
       return false; // TODO: proper handling of non-player mobs.
+    }
+  }
+
+  private applySwimmingVerticalSteering(ctx: EPhysicsCtx, world: World) {
+    const player = ctx.state as PlayerState;
+    if (!this.isSwimmingAndNotFlying(ctx, world)) return;
+
+    const lookY = getLookingVector(player).lookY;
+    let shouldAdjust = lookY < 0.0 || player.control.jump;
+    if (!shouldAdjust) {
+      const blockAbove = world.getBlock(new Vec3(player.pos.x, player.pos.y + 1.0 - 0.1, player.pos.z));
+      shouldAdjust = blockAbove != null && (this.waterId === blockAbove.type || this.waterLike.has(blockAbove.type));
+    }
+
+    if (shouldAdjust) {
+      player.vel.y += (lookY - player.vel.y) * (lookY < -0.2 ? 0.085 : 0.06);
     }
   }
 
@@ -1018,6 +1024,10 @@ export class BotcraftPhysics implements IPhysics {
         }
 
         if (!player.onGround) {
+          depthStriderMult *= 0.5;
+        }
+
+        if (depthStriderMult > 0.0) {
           waterSlowDown += (0.54600006 - waterSlowDown) * depthStriderMult; // magic number
           const movementSpeed = this.getMovementSpeedAttribute(ctx); // slight deviation, using utility method
           inputStrength += Math.fround(movementSpeed - inputStrength) * depthStriderMult;
@@ -1041,20 +1051,21 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.z *= waterSlowDown;
 
         if (!player.sprinting) {
-          // this logic does not look entirely correct. I believe this is an attempt at version-agnostic water gravity.
-          // originally, the neg. vel value here was hardcoded.
-          // if (goingDown &&
-          //   Math.abs(player.vel.y - 0.005) >= ectx.worldSettings.negligeableVelocity &&
-          //   Math.abs(player.vel.y - gravity / 16) < ectx.worldSettings.negligeableVelocity) {
-          //     player.vel.y -= ectx.worldSettings.negligeableVelocity;
-          //   } else {
-          //     player.vel.y -= gravity / 16
-          //   }
-
-          // because of this, I will implement my own version.
-          // if (goingDown) {
-          player.vel.y -= ctx.waterGravity;
-          // }
+          if (this.verGreaterThan("1.12.2")) {
+            if (gravity !== 0.0) {
+              if (
+                goingDown &&
+                Math.abs(player.vel.y - 0.005) >= 0.003 &&
+                Math.abs(player.vel.y - gravity / 16.0) < 0.003
+              ) {
+                player.vel.y = -0.003;
+              } else {
+                player.vel.y -= gravity / 16.0;
+              }
+            }
+          } else {
+            player.vel.y -= ctx.waterGravity;
+          }
         }
 
         const bb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
@@ -1374,7 +1385,7 @@ export class BotcraftPhysics implements IPhysics {
 
     // Rough fix for now: ignore this if we are flying.
     if (!player.flying) {
-      this.checkInsideBlocks(player, world);
+      this.checkInsideBlocks(player, world, ctx.worldSettings);
     }
 
     let blockSpeedFactor = 1.0;
@@ -1451,7 +1462,7 @@ export class BotcraftPhysics implements IPhysics {
 
   }
 
-  checkInsideBlocks(player: PlayerState, world: World) {
+  checkInsideBlocks(player: PlayerState, world: World, worldSettings = new PhysicsWorldSettings(this.data)) {
     const aabb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
     const [minAABB, maxAABB] = aabb.minAndMaxArrays();
     const blockPos = new Vec3(0, 0, 0);
@@ -1464,12 +1475,16 @@ export class BotcraftPhysics implements IPhysics {
             // WebBlock::entityInside
             player.stuckSpeedMultiplier = new Vec3(0.25, 0.05000000074505806, 0.25);
           } else if (this.bubblecolumnId === block.type) {
+            const down = !block.metadata;
             const aboveBlock = world.getBlock(blockPos.offset(0, 1, 0));
-            if (aboveBlock == null || aboveBlock.boundingBox === "empty") {
-              // Entity::onAboveBubbleColumn
-              player.vel.y = 0.04;
+            const bubbleDrag =
+              aboveBlock?.type === this.airId
+                ? worldSettings.bubbleColumnSurfaceDrag
+                : worldSettings.bubbleColumnDrag;
+            if (down) {
+              player.vel.y = Math.max(bubbleDrag.maxDown, player.vel.y - bubbleDrag.down);
             } else {
-              // Entity::onInsideBubbleColumn
+              player.vel.y = Math.min(bubbleDrag.maxUp, player.vel.y + bubbleDrag.up);
             }
           } else if (this.honeyblockId === block.type) {
             // Check if sliding down on the side of the block
