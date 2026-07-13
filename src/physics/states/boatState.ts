@@ -20,7 +20,6 @@ export class BoatState extends EntityState {
   landFriction = 0;
   yawVelocity = 0;
   lastVerticalVelocity = 0;
-  underwaterTicks = 0;
   controllingPlayer = false;
 
   worldReady = true;
@@ -112,7 +111,6 @@ export class BoatState extends EntityState {
     other.landFriction = this.landFriction;
     other.yawVelocity = this.yawVelocity;
     other.lastVerticalVelocity = this.lastVerticalVelocity;
-    other.underwaterTicks = this.underwaterTicks;
     other.controllingPlayer = this.controllingPlayer;
     other.worldReady = this.worldReady;
     other.age = this.age;
