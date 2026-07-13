@@ -179,6 +179,25 @@ describe("BoatPhysics collisions and world readiness", () => {
     expect(rig.boatState.age).toBe(before.age);
   });
 
+  it("does not require the extra top readiness layer above boat bounds", () => {
+    const rig = setupWaterBoat();
+    const before = rig.boatState.clone();
+    const originalGetBlock = rig.world.getBlock.bind(rig.world);
+    const extraTopY = Math.ceil(boatY + rig.boatState.height) + 1;
+
+    rig.world.getBlock = (pos: Vec3) => {
+      if (pos.y === extraTopY) return null;
+      return originalGetBlock(pos);
+    };
+
+    rig.boatState.control.forward = true;
+    simulateBoatTick(rig);
+
+    expect(rig.boatState.worldReady).toBe(true);
+    expect(rig.boatState.age).toBe(before.age + 1);
+    expect(rig.boatState.pos.z).toBeLessThan(before.pos.z);
+  });
+
   it("clone does not share mutable Vec3 or controls", () => {
     const rig = createBoatRig({ version, position: new Vec3(1, 2, 3), floorY: 0 });
     const clone = rig.boatState.clone();

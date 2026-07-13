@@ -81,7 +81,7 @@ export class BoatPhysics extends EntityPhysics {
     const range = this.getWorldReadinessBlockRange(simCtx, state);
     const cursor = new Vec3(0, 0, 0);
 
-    for (cursor.y = range.minY; cursor.y <= range.maxY; cursor.y++) {
+    for (cursor.y = range.minY; cursor.y < range.maxY; cursor.y++) {
       for (cursor.z = range.minZ; cursor.z < range.maxZ; cursor.z++) {
         for (cursor.x = range.minX; cursor.x < range.maxX; cursor.x++) {
           if (world.getBlock(cursor) == null) {
@@ -354,7 +354,7 @@ export class BoatPhysics extends EntityPhysics {
     state.yaw += state.yawVelocity;
 
     if (control.forward) {
-      acceleration += Math.fround(0.04);
+      acceleration += MAX_CONTROL_ACCELERATION;
     }
     if (control.back) {
       acceleration -= Math.fround(0.005);
