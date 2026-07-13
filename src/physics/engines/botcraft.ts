@@ -1,4 +1,4 @@
-import { AABB, AABBUtils } from "@nxg-org/mineflayer-util-plugin";
+import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import md from "minecraft-data";
 import { Block } from "prismarine-block";
 import { Effect } from "prismarine-entity";
@@ -14,7 +14,7 @@ import {
 import * as math from "../info/math";
 import * as attributes from "../info/attributes";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
-import { EntityState, IEntityState } from "../states";
+import { IEntityState } from "../states";
 import { IPhysics } from "./IPhysics";
 import { PlayerPoses, PlayerState, convInpToAxes, getCollider } from "../states";
 import { PhysicsWorldSettings } from "../settings";

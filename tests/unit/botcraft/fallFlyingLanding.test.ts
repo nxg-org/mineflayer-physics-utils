@@ -9,7 +9,7 @@ const version = "1.21.4";
 const groundLevel = 67;
 
 describe("Botcraft fall-flying landing", () => {
-  it("clears sprinting while preserving grounded fall-flying state", () => {
+  it("preserves sprinting while preserving grounded fall-flying state", () => {
     const rig = createBotcraftPlayerRig({
       version,
       position: new Vec3(0, groundLevel + 1, 0),
@@ -31,7 +31,7 @@ describe("Botcraft fall-flying landing", () => {
 
     expect(rig.playerState.onGround).toBe(true);
     expect(rig.playerState.fallFlying).toBe(true);
-    expect(rig.playerState.sprinting).toBe(false);
+    expect(rig.playerState.sprinting).toBe(true);
   });
 
   it("re-launches on the tick after a fall-flying landing", () => {
