@@ -444,7 +444,10 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
 
-    if (block.metadata >= 8) {
+    // Match Grim's FluidTypeFlowing: only actual water/lava block states carry
+    // a falling fluid level. Waterlogged and source-like blocks use unrelated metadata.
+    const hasFluidLevel = block.type === this.waterId || block.type === this.lavaId;
+    if (hasFluidLevel && block.metadata >= 8) {
       for (const [dx, dz] of [
         [0, 1],
         [-1, 0],
@@ -455,6 +458,7 @@ export class BotcraftPhysics implements IPhysics {
         const adjUpBlock = world.getBlock(block.position.offset(dx, 1, dz));
         if ((adjBlock && adjBlock.boundingBox !== "empty") || (adjUpBlock && adjUpBlock.boundingBox !== "empty")) {
           flow.normalize().translate(0, -6, 0);
+          break;
         }
       }
     }
@@ -533,14 +537,23 @@ export class BotcraftPhysics implements IPhysics {
     // livingEntity::AiStep
     {
       player.jumpTicks = Math.max(0, player.jumpTicks - 1);
-      if (Math.abs(player.vel.x) < ctx.worldSettings.negligeableVelocity) {
-        player.vel.x = 0;
+      if (this.verGreaterThan("1.21.4")) {
+        const horizontalVelocitySqr = player.vel.x * player.vel.x + player.vel.z * player.vel.z;
+        const movementThresholdSqr = ctx.worldSettings.negligeableVelocity * ctx.worldSettings.negligeableVelocity;
+        if (horizontalVelocitySqr < movementThresholdSqr) {
+          player.vel.x = 0;
+          player.vel.z = 0;
+        }
+      } else {
+        if (Math.abs(player.vel.x) < ctx.worldSettings.negligeableVelocity) {
+          player.vel.x = 0;
+        }
+        if (Math.abs(player.vel.z) < ctx.worldSettings.negligeableVelocity) {
+          player.vel.z = 0;
+        }
       }
       if (Math.abs(player.vel.y) < ctx.worldSettings.negligeableVelocity) {
         player.vel.y = 0;
-      }
-      if (Math.abs(player.vel.z) < ctx.worldSettings.negligeableVelocity) {
-        player.vel.z = 0;
       }
 
       this.inputsToJump(player, world, ctx.worldSettings);

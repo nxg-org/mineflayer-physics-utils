@@ -12,6 +12,8 @@ const playerY = 67;
 type BotcraftTestAccess = {
   applyMovement: () => void;
   applySwimmingVerticalSteering: (ctx: EPhysicsCtx, world: FlatWorld) => void;
+  localPlayerAIStep: (ctx: EPhysicsCtx, world: FlatWorld) => void;
+  movePlayer: () => void;
   updatePoses: (ctx: EPhysicsCtx, world: FlatWorld) => void;
   worldIsFree: (world: FlatWorld, box: AABB, ignoreLiquid: boolean) => boolean;
 };
@@ -115,6 +117,39 @@ describe("Botcraft water physics", () => {
         expect(flow.z).toBeCloseTo(0, 12);
       });
 
+      it("applies falling-water wall drag only once in an enclosed channel", () => {
+        const { mcData, physics, world } = createWaterRig(version);
+        world.setOverrideBlock(new Vec3(0, playerY, 0), mcData.blocksByName.water.id, 8);
+        world.setOverrideBlock(new Vec3(1, playerY - 1, 0), mcData.blocksByName.water.id);
+        world.setOverrideBlock(new Vec3(-1, playerY, 0), mcData.blocksByName.glass.id);
+        world.setOverrideBlock(new Vec3(0, playerY, -1), mcData.blocksByName.glass.id);
+        world.setOverrideBlock(new Vec3(0, playerY, 1), mcData.blocksByName.glass.id);
+
+        const flow = physics.getFlow(world.getBlock(new Vec3(0, playerY, 0))!, world);
+
+        expect(flow.x).toBeCloseTo(1 / Math.sqrt(37), 12);
+        expect(flow.y).toBeCloseTo(-6 / Math.sqrt(37), 12);
+        expect(flow.z).toBeCloseTo(0, 12);
+      });
+
+      it("treats waterlogged sign metadata as source-like water", () => {
+        const { mcData, physics, world } = createWaterRig(version);
+        world.setOverrideBlock(new Vec3(0, playerY, 0), mcData.blocksByName.oak_sign.id, 8);
+        world.setOverrideBlock(new Vec3(1, playerY - 1, 0), mcData.blocksByName.water.id);
+        world.setOverrideBlock(new Vec3(-1, playerY, 0), mcData.blocksByName.glass.id);
+        world.setOverrideBlock(new Vec3(0, playerY, -1), mcData.blocksByName.glass.id);
+        world.setOverrideBlock(new Vec3(0, playerY, 1), mcData.blocksByName.glass.id);
+
+        const sign = world.getBlock(new Vec3(0, playerY, 0))!;
+        expect(sign.getProperties().waterlogged).toBe(true);
+
+        const flow = physics.getFlow(sign, world);
+
+        expect(flow.x).toBeCloseTo(1, 12);
+        expect(flow.y).toBeCloseTo(0, 12);
+        expect(flow.z).toBeCloseTo(0, 12);
+      });
+
       it("uses effective slow-falling gravity in water", () => {
         const { physics, playerCtx, playerState, world } = createWaterRig(version);
         const testPhysics = physics as unknown as BotcraftTestAccess;
@@ -130,4 +165,20 @@ describe("Botcraft water physics", () => {
       });
     });
   }
+
+  it("uses the combined horizontal movement threshold starting in 1.21.5", () => {
+    const run = (version: string) => {
+      const { physics, playerCtx, playerState, world } = createWaterRig(version);
+      const testPhysics = physics as unknown as BotcraftTestAccess;
+      testPhysics.movePlayer = () => {};
+      playerState.vel.set(0.0025, 0.01, 0.002);
+
+      testPhysics.localPlayerAIStep(playerCtx, world);
+
+      return playerState.vel.clone();
+    };
+
+    expect(run("1.21.4")).toEqual(new Vec3(0, 0.01, 0));
+    expect(run("1.21.5")).toEqual(new Vec3(0.0025, 0.01, 0.002));
+  });
 });
