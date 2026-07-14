@@ -10,3 +10,4 @@ AGENTS.md
 debug_notes/
 pnpm-lock.yaml
 development-logs/
+.patches

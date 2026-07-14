@@ -28,6 +28,44 @@ function createWaterRig(version: string) {
   return { ...rig, world };
 }
 
+function createAfkWaterFlowRig(version: string) {
+  const rig = createBotcraftPlayerRig({
+    version,
+    position: new Vec3(0.5, 0, 0.5),
+    groundLevel: 0,
+  });
+  const world = createFlatWorld(version, -100);
+  const blocks = rig.mcData.blocksByName;
+
+  // One-wide channel with enough headroom for the raised stream and its drop.
+  for (let x = -1; x <= 12; x++) {
+    world.setOverrideBlock(new Vec3(x, -1, 0), blocks.packed_ice.id);
+    for (let y = 0; y <= 2; y++) {
+      world.setOverrideBlock(new Vec3(x, y, -1), blocks.glass.id);
+      world.setOverrideBlock(new Vec3(x, y, 1), blocks.glass.id);
+    }
+  }
+  world.setOverrideBlock(new Vec3(-1, 0, 0), blocks.glass.id);
+  world.setOverrideBlock(new Vec3(-1, 1, 0), blocks.glass.id);
+
+  // Lower stream: a source followed by each decreasing fluid height through level 7.
+  for (let x = 0; x <= 7; x++) {
+    world.setOverrideBlock(new Vec3(x, 0, 0), blocks.water.id, x);
+  }
+
+  // The dry signs retain the raised source without presenting entity collision.
+  // oak_wall_sign metadata 1 is north-facing and waterlogged=false in both tested versions.
+  world.setOverrideBlock(new Vec3(7, 1, 0), blocks.oak_wall_sign.id, 1);
+  world.setOverrideBlock(new Vec3(8, 0, 0), blocks.oak_wall_sign.id, 1);
+
+  // Raised source flows east, then falls into the lower channel.
+  world.setOverrideBlock(new Vec3(8, 1, 0), blocks.water.id, 0);
+  world.setOverrideBlock(new Vec3(9, 1, 0), blocks.water.id, 1);
+  world.setOverrideBlock(new Vec3(9, 0, 0), blocks.water.id, 8);
+
+  return { ...rig, world };
+}
+
 describe("Botcraft water physics", () => {
   for (const version of versions) {
     describe(version, () => {
@@ -148,6 +186,35 @@ describe("Botcraft water physics", () => {
         expect(flow.x).toBeCloseTo(1, 12);
         expect(flow.y).toBeCloseTo(0, 12);
         expect(flow.z).toBeCloseTo(0, 12);
+      });
+
+      it("keeps both AFK-channel source currents flowing east across dry signs", () => {
+        const { physics, world } = createAfkWaterFlowRig(version);
+        const lowerSource = world.getBlock(new Vec3(0, 0, 0))!;
+        const upperSource = world.getBlock(new Vec3(8, 1, 0))!;
+        const retainingSign = world.getBlock(new Vec3(7, 1, 0))!;
+        const supportingSign = world.getBlock(new Vec3(8, 0, 0))!;
+
+        expect(retainingSign.getProperties()).toMatchObject({ facing: "north", waterlogged: false });
+        expect(supportingSign.getProperties()).toMatchObject({ facing: "north", waterlogged: false });
+
+        expect([
+          { sourcePosition: lowerSource.position, flowDirection: physics.getFlow(lowerSource, world) },
+          { sourcePosition: upperSource.position, flowDirection: physics.getFlow(upperSource, world) },
+        ]).toEqual([
+          { sourcePosition: new Vec3(0, 0, 0), flowDirection: new Vec3(1, 0, 0) },
+          { sourcePosition: new Vec3(8, 1, 0), flowDirection: new Vec3(1, 0, 0) },
+        ]);
+      });
+
+      it("carries an idle player beyond the two-level dry-sign transfer", () => {
+        const { physics, playerCtx, playerState, world } = createAfkWaterFlowRig(version);
+
+        for (let tick = 0; tick < 600 && playerState.pos.x <= 10; tick++) {
+          physics.simulate(playerCtx, world);
+        }
+
+        expect(playerState.pos.x).toBeGreaterThan(10);
       });
 
       it("uses effective slow-falling gravity in water", () => {

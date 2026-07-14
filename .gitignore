@@ -4,3 +4,4 @@ research_refs/
 tests/**/*.log
 AGENTS.md
 development-logs/
+.patches
