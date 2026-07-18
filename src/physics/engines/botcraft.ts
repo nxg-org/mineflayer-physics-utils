@@ -808,19 +808,7 @@ export class BotcraftPhysics implements IPhysics {
 
       // Compensate water downward speed depending on looking direction (?)
 
-      if (this.isSwimmingAndNotFlying(ctx, world)) {
-        const mSinPitch = Math.sin(player.pitch);
-        let condition = mSinPitch <= 0.0 || player.control.jump;
-        if (!condition) {
-          // check above block
-          const bl1 = world.getBlock(new Vec3(player.pos.x, player.pos.y + 1.0 - 0.1, player.pos.z));
-          condition = bl1 != null && (this.waterId === bl1.type || this.waterLike.has(bl1.type))
-        }
-        if (condition) {
-          // console.log('changing vel by',  (mSinPitch - player.vel.y) * (mSinPitch < -0.2 ? 0.085 : 0.06));
-          player.vel.y += (mSinPitch - player.vel.y) * (mSinPitch < -0.2 ? 0.085 : 0.06);
-        }
-      }
+      this.applySwimmingVerticalSteering(ctx, world);
 
 
       // Must run unconditionally before movement; gating it to fall-flying only causes a velocity blowup.
@@ -937,6 +925,22 @@ export class BotcraftPhysics implements IPhysics {
       return !entity.flying && entity.gameMode !== "spectator" && entity.swimming;
     } else {
       return false; // TODO: proper handling of non-player mobs.
+    }
+  }
+
+  private applySwimmingVerticalSteering(ctx: EPhysicsCtx, world: World) {
+    const player = ctx.state as PlayerState;
+    if (!this.isSwimmingAndNotFlying(ctx, world)) return;
+
+    const lookY = getLookingVector(player).lookY;
+    let shouldAdjust = lookY <= 0.0 || player.control.jump;
+    if (!shouldAdjust) {
+      const blockAbove = world.getBlock(new Vec3(player.pos.x, player.pos.y + 1.0 - 0.1, player.pos.z));
+      shouldAdjust = blockAbove != null && (this.waterId === blockAbove.type || this.waterLike.has(blockAbove.type));
+    }
+
+    if (shouldAdjust) {
+      player.vel.y += (lookY - player.vel.y) * (lookY < -0.2 ? 0.085 : 0.06);
     }
   }
 
