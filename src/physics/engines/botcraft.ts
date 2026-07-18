@@ -669,7 +669,8 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
 
-    if (block.metadata >= 8) {
+    const hasFluidLevel = block.type === this.waterId || block.type === this.lavaId;
+    if (hasFluidLevel && block.metadata >= 8) {
       for (const [dx, dz] of [
         [0, 1],
         [-1, 0],
