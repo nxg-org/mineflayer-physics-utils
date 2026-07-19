@@ -42,6 +42,30 @@ function fillWaterPool(world: BoatTestWorld, fromZ: number, toZ: number) {
   }
 }
 
+function setupSingleBlockLandWallRig(version: string, entityName: string) {
+  const landY = 64;
+  const rig = createBoatRig({
+    version,
+    entityName,
+    position: new Vec3(0, landY, 0),
+    floorY: landY,
+  });
+  for (let x = -2; x <= 2; x++) {
+    rig.world.setStone(new Vec3(x, landY, -2));
+  }
+  return rig;
+}
+
+function simulateSingleBlockLandWallApproach(rig: ReturnType<typeof createBoatRig>, ticks = 8) {
+  rig.boatState.control.forward = true;
+  let maxY = rig.boatState.pos.y;
+  for (let i = 0; i < ticks; i++) {
+    simulateBoatTick(rig);
+    maxY = Math.max(maxY, rig.boatState.pos.y);
+  }
+  return maxY;
+}
+
 function setupWaterBoat(version: string, entityName: string) {
   const rig = createBoatRig({
     version,
@@ -80,22 +104,14 @@ describe("BoatPhysics multiversion compatibility", () => {
             expectBoatPhysicsContext(rig);
           });
 
-          it("does not step up or blow through a single-block land wall immediately", () => {
-            const rig = createBoatRig({
-              version,
-              entityName,
-              position: new Vec3(0, waterSurfaceY, 0),
-              floorY: waterSurfaceY - 1,
-            });
-            rig.world.setStone(new Vec3(0, waterSurfaceY - 1, 0));
-            rig.world.setStone(new Vec3(0, waterSurfaceY, -1));
-            rig.boatState.control.forward = true;
-
-            for (let i = 0; i < 8; i++) simulateBoatTick(rig);
+          it("does not step up over a single-block land wall", () => {
+            const rig = setupSingleBlockLandWallRig(version, entityName);
+            const maxY = simulateSingleBlockLandWallApproach(rig);
 
             expect(rig.boatCtx.stepHeight).toBe(0);
             expect(rig.boatState.pos.z).toBeGreaterThan(-1);
-            expect(rig.boatState.pos.y).toBeLessThan(waterSurfaceY + 0.5);
+            expect(maxY).toBeLessThan(64.5);
+            expect(rig.boatState.isCollidedHorizontally).toBe(true);
           });
 
           it("detects water, land, and air status", () => {
