@@ -18,7 +18,7 @@ const versions = [
   { version: "1.11.2", entityNames: ["boat"] },
   { version: "1.17.1", entityNames: ["boat"] },
   { version: "1.20.4", entityNames: ["boat", "chest_boat"] },
-  { version: "1.21.2", entityNames: ["boat", "chest_boat"] },
+  { version: "1.21.1", entityNames: ["boat", "chest_boat"] },
   { version: "1.21.3", entityNames: ["oak_boat", "oak_chest_boat", "bamboo_raft"] },
   { version: "1.21.11", entityNames: ["oak_boat", "oak_chest_boat", "bamboo_raft"] },
 ];
@@ -163,13 +163,17 @@ describe("BoatPhysics multiversion compatibility", () => {
 
           it("turns left and right with opposite yaw deltas", () => {
             const leftRig = setupWaterBoat(version, entityName);
+            const leftStartYaw = leftRig.boatState.yaw;
             leftRig.boatState.control.left = true;
             simulateBoatTick(leftRig);
 
             const rightRig = setupWaterBoat(version, entityName);
+            const rightStartYaw = rightRig.boatState.yaw;
             rightRig.boatState.control.right = true;
             simulateBoatTick(rightRig);
 
+            expect(leftRig.boatState.yaw).toBeGreaterThan(leftStartYaw);
+            expect(rightRig.boatState.yaw).toBeLessThan(rightStartYaw);
             expect(leftRig.boatState.yaw).toBeGreaterThan(0);
             expect(rightRig.boatState.yaw).toBeLessThan(0);
             expect(leftRig.boatState.yaw).toBeCloseTo(-rightRig.boatState.yaw, 5);

@@ -51,6 +51,18 @@ export class BoatPhysics extends EntityPhysics {
     return this.getEntityBB(simCtx, state.pos);
   }
 
+  private hasSolidCollision(targetBB: AABB, solidBB: AABB): boolean {
+    const epsilon = 1e-7;
+    return (
+      targetBB.minX < solidBB.maxX - epsilon &&
+      targetBB.maxX > solidBB.minX + epsilon &&
+      targetBB.minY < solidBB.maxY - epsilon &&
+      targetBB.maxY > solidBB.minY + epsilon &&
+      targetBB.minZ < solidBB.maxZ - epsilon &&
+      targetBB.maxZ > solidBB.minZ + epsilon
+    );
+  }
+
   private getWorldReadinessBlockRange(simCtx: EPhysicsCtx, state: BoatState): {
     minX: number;
     maxX: number;
@@ -291,10 +303,19 @@ export class BoatPhysics extends EntityPhysics {
       const waterLevelAbove = this.getWaterLevelAbove(bb, state.lastVerticalVelocity, world);
       const targetY = waterLevelAbove - state.height + 0.101;
       const dy = targetY - state.pos.y;
+      const useCollisionGuard = this.supportFeature("boatWaterEntryCollisionGuard");
       const targetPos = { x: state.pos.x, y: state.pos.y + dy, z: state.pos.z };
       const targetBB = this.getEntityBB(simCtx, targetPos);
-      const hasSolidCollision = this.getSurroundingBBs(targetBB, world).some((bb) => targetBB.intersects(bb));
-      if (dy !== 0 && !hasSolidCollision) {
+      const hasSolidCollision = this.getSurroundingBBs(targetBB, world).some((solidBB) =>
+        this.hasSolidCollision(targetBB, solidBB),
+      );
+      if (!useCollisionGuard) {
+        if (dy !== 0) {
+          this.moveEntity(simCtx, 0, dy, 0, world);
+        }
+        state.vel.y = 0;
+        state.lastVerticalVelocity = 0;
+      } else if (dy !== 0 && !hasSolidCollision) {
         this.moveEntity(simCtx, 0, dy, 0, world);
         state.vel.y = 0;
         state.lastVerticalVelocity = 0;
