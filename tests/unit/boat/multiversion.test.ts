@@ -20,8 +20,19 @@ const versions = [
   { version: "1.20.4", entityNames: ["boat", "chest_boat"] },
   { version: "1.21.2", entityNames: ["boat", "chest_boat"] },
   { version: "1.21.3", entityNames: ["oak_boat", "oak_chest_boat", "bamboo_raft"] },
-  { version: "1.21.5", entityNames: ["oak_boat", "oak_chest_boat", "bamboo_raft"] },
+  { version: "1.21.11", entityNames: ["oak_boat", "oak_chest_boat", "bamboo_raft"] },
 ];
+
+function expectBoatPhysicsContext(rig: ReturnType<typeof createBoatRig>) {
+  expect(rig.boatCtx.stepHeight).toBe(0);
+  expect(rig.boatCtx.useControls).toBe(false);
+  expect(rig.boatCtx.gravity).toBe(0.04);
+  expect(rig.boatCtx.airdrag).toBe(1);
+  expect(rig.boatCtx.collisionBehavior).toEqual({
+    blockEffects: false,
+    affectedAfterCollision: true,
+  });
+}
 
 function fillWaterPool(world: BoatTestWorld, fromZ: number, toZ: number) {
   for (let x = -1; x <= 1; x++) {
@@ -58,6 +69,33 @@ describe("BoatPhysics multiversion compatibility", () => {
             expect(rig.entityDescriptor).toBe(rig.mcData.entitiesByName[entityName]);
             expect(rig.boatState.height).toBe(rig.entityDescriptor.height);
             expect(rig.boatState.halfWidth * 2).toBe(rig.entityDescriptor.width);
+          });
+
+          it("uses boat vehicle physics context instead of living-entity defaults", () => {
+            const rig = createBoatRig({
+              version,
+              entityName,
+              position: new Vec3(0, boatY, 0),
+            });
+            expectBoatPhysicsContext(rig);
+          });
+
+          it("does not step up or blow through a single-block land wall immediately", () => {
+            const rig = createBoatRig({
+              version,
+              entityName,
+              position: new Vec3(0, waterSurfaceY, 0),
+              floorY: waterSurfaceY - 1,
+            });
+            rig.world.setStone(new Vec3(0, waterSurfaceY - 1, 0));
+            rig.world.setStone(new Vec3(0, waterSurfaceY, -1));
+            rig.boatState.control.forward = true;
+
+            for (let i = 0; i < 8; i++) simulateBoatTick(rig);
+
+            expect(rig.boatCtx.stepHeight).toBe(0);
+            expect(rig.boatState.pos.z).toBeGreaterThan(-1);
+            expect(rig.boatState.pos.y).toBeLessThan(waterSurfaceY + 0.5);
           });
 
           it("detects water, land, and air status", () => {
@@ -234,5 +272,17 @@ describe("BoatPhysics entity descriptor resolution", () => {
     expect(() => resolveBoatEntityDescriptor(mcData, "boat", "1.21.3")).toThrow(
       'Boat entity descriptor "boat" not found for Minecraft 1.21.3',
     );
+  });
+
+  it("applies boat vehicle context for 1.11.2 even when boat id overlaps mobData", () => {
+    const { mcData } = loadMcData("1.11.2");
+    const boat = mcData.entitiesByName.boat;
+    expect(mcData.mobs[boat.id]).toBeTruthy();
+    const rig = createBoatRig({
+      version: "1.11.2",
+      entityName: "boat",
+      position: new Vec3(0, boatY, 0),
+    });
+    expectBoatPhysicsContext(rig);
   });
 });
