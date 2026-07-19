@@ -302,21 +302,15 @@ export class BoatPhysics extends EntityPhysics {
       state.waterLevel = bb.maxY;
       const waterLevelAbove = this.getWaterLevelAbove(bb, state.lastVerticalVelocity, world);
       const targetY = waterLevelAbove - state.height + 0.101;
-      const dy = targetY - state.pos.y;
       const useCollisionGuard = this.supportFeature("boatWaterEntryCollisionGuard");
-      const targetPos = { x: state.pos.x, y: state.pos.y + dy, z: state.pos.z };
+      const targetPos = { x: state.pos.x, y: targetY, z: state.pos.z };
       const targetBB = this.getEntityBB(simCtx, targetPos);
       const hasSolidCollision = this.getSurroundingBBs(targetBB, world).some((solidBB) =>
         this.hasSolidCollision(targetBB, solidBB),
       );
-      if (!useCollisionGuard) {
-        if (dy !== 0) {
-          this.moveEntity(simCtx, 0, dy, 0, world);
-        }
-        state.vel.y = 0;
-        state.lastVerticalVelocity = 0;
-      } else if (dy !== 0 && !hasSolidCollision) {
-        this.moveEntity(simCtx, 0, dy, 0, world);
+      const canReposition = !useCollisionGuard || !hasSolidCollision;
+      if (canReposition) {
+        state.pos.y = targetY;
         state.vel.y = 0;
         state.lastVerticalVelocity = 0;
       }
