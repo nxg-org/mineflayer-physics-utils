@@ -1,0 +1,2 @@
+minimumReleaseAgeExclude:
+  - '@nxg-org/mineflayer-physics-util@1.9.6'

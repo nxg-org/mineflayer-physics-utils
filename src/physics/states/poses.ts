@@ -19,15 +19,17 @@ export enum PlayerPoses {
 
 type PlayerPoseContext = { [key in PlayerPoses]: { width: number; height: number } };
 
+const f32 = Math.fround;
+
 export const playerPoseCtx: PlayerPoseContext = {
-  0: { width: 0.6, height: 1.8 },
-  1: { width: 0.6, height: 0.6 },
-  2: { width: 0.2, height: 0.2 },
-  3: { width: 0.6, height: 0.6 },
-  4: { width: 0.6, height: 0.6 },
-  5: { width: 0.6, height: 1.5 },
-  6: { width: 0.6, height: 1.8 },
-  7: { width: 0.2, height: 0.2 },
+  0: { width: f32(0.6), height: f32(1.8) },
+  1: { width: f32(0.6), height: f32(0.6) },
+  2: { width: f32(0.2), height: f32(0.2) },
+  3: { width: f32(0.6), height: f32(0.6) },
+  4: { width: f32(0.6), height: f32(0.6) },
+  5: { width: f32(0.6), height: f32(1.5) },
+  6: { width: f32(0.6), height: f32(1.8) },
+  7: { width: f32(0.2), height: f32(0.2) },
 };
 
 export function getCollider(entityPose: PlayerPoses, middleBottomPos: Vec3): AABB {

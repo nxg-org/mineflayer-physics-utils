@@ -7,7 +7,7 @@ import { createBotcraftPlayerRig, createFlatWorld, loadMcData } from "../../help
 const version = "1.12.2";
 const groundLevel = 67;
 const CONTACT_EPSILON = 1e-7;
-const PLAYER_HALF_WIDTH = 0.3;
+const PLAYER_HALF_WIDTH = Math.fround(0.6) / 2;
 
 function simulateTicks(
   rig: ReturnType<typeof createBotcraftPlayerRig>,
@@ -48,7 +48,7 @@ describe("World collision simulation", () => {
       rig.playerState.apply(rig.fakePlayer);
     }
 
-    expect(rig.playerState.pos.z).toEqual(-0.7);
+    expect(rig.playerState.pos.z).toEqual(-1 + PLAYER_HALF_WIDTH);
     expect(rig.playerState.isCollidedHorizontally).toEqual(true);
   });
 
@@ -68,7 +68,7 @@ describe("World collision simulation", () => {
       rig.playerState.apply(rig.fakePlayer);
     }
 
-    expect(rig.playerState.pos.z).toEqual(0.7);
+    expect(rig.playerState.pos.z).toEqual(1 - PLAYER_HALF_WIDTH);
     expect(rig.playerState.isCollidedHorizontally).toEqual(true);
   });
 
@@ -88,7 +88,7 @@ describe("World collision simulation", () => {
       rig.playerState.apply(rig.fakePlayer);
     }
 
-    expect(rig.playerState.pos.x).toEqual(-0.7);
+    expect(rig.playerState.pos.x).toEqual(-1 + PLAYER_HALF_WIDTH);
     expect(rig.playerState.isCollidedHorizontally).toEqual(true);
   });
 
@@ -108,7 +108,7 @@ describe("World collision simulation", () => {
       rig.playerState.apply(rig.fakePlayer);
     }
 
-    expect(rig.playerState.pos.x).toEqual(0.7);
+    expect(rig.playerState.pos.x).toEqual(1 - PLAYER_HALF_WIDTH);
     expect(rig.playerState.isCollidedHorizontally).toEqual(true);
   });
 
@@ -132,7 +132,7 @@ describe("World collision simulation", () => {
       rig.playerState.apply(rig.fakePlayer);
     }
 
-    expect(rig.playerState.pos.z).toEqual(0.7);
+    expect(rig.playerState.pos.z).toEqual(1 - PLAYER_HALF_WIDTH);
     expect(rig.playerState.isCollidedHorizontally).toEqual(true);
   });
 

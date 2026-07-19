@@ -38,7 +38,7 @@ importers:
         version: 3.111.0
       mineflayer:
         specifier: github:generelschwerz/mineflayer#dev
-        version: https://codeload.github.com/generelschwerz/mineflayer/tar.gz/445814f8a221521ddc124552aae5a3a567801f4b
+        version: https://codeload.github.com/generelschwerz/mineflayer/tar.gz/0628a4bee10150806dba8f869da95ac933ec84f7
       mineflayer-pathfinder:
         specifier: ^2.4.4
         version: 2.4.5
@@ -182,8 +182,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@nxg-org/mineflayer-physics-util@1.9.5':
-    resolution: {integrity: sha512-JOyCIt3/3I/u/nyKGCG9EcW12rUHwUSkhENoaYn/HBjqxcknsqJ35ZlXEMQQVGY4B40J3AbDtAOIMsEzuhZdvw==}
+  '@nxg-org/mineflayer-physics-util@1.9.6':
+    resolution: {integrity: sha512-41mZS6aEU+I2ldeP4iHJI+9iQ1TgX0NEduFYEBnD1kYT+6v7l9Vto7mB+AZdLaRooSNznaebu5XrEyYhPN9/Yw==}
 
   '@nxg-org/mineflayer-util-plugin@1.9.4':
     resolution: {integrity: sha512-keJBi+LznM3AngHXOmMfT5ldqcpwv0RC79GOrX1TZ0bRS4bK8qxyxV2NVUadfdkWqNxwVmUK8b++i+0Ogcksfg==}
@@ -800,8 +800,8 @@ packages:
   mineflayer-pathfinder@2.4.5:
     resolution: {integrity: sha512-Jh3JnUgRLwhMh2Dugo4SPza68C41y+NPP5sdsgxRu35ydndo70i1JJGxauVWbXrpNwIxYNztUw78aFyb7icw8g==}
 
-  mineflayer@https://codeload.github.com/generelschwerz/mineflayer/tar.gz/445814f8a221521ddc124552aae5a3a567801f4b:
-    resolution: {gitHosted: true, integrity: sha512-6lDOJJG1Qq6DowOGs3gv3OHhdAWvHlWjD96xGUxs2tr+G7YVMb6WbYlAfzu8bD9H+tCdsqdR48yVow/FZPyJ2A==, tarball: https://codeload.github.com/generelschwerz/mineflayer/tar.gz/445814f8a221521ddc124552aae5a3a567801f4b}
+  mineflayer@https://codeload.github.com/generelschwerz/mineflayer/tar.gz/0628a4bee10150806dba8f869da95ac933ec84f7:
+    resolution: {gitHosted: true, integrity: sha512-LeOLHCDvVZ2MY5Yj/5wCFkF5+EOBbXFOzAFQQAcLXyYeJdMEv0nxM4MioWodWLKcoIR/AIU275dvf/dvOnvMlw==, tarball: https://codeload.github.com/generelschwerz/mineflayer/tar.gz/0628a4bee10150806dba8f869da95ac933ec84f7}
     version: 4.37.1
     engines: {node: '>=22'}
 
@@ -1333,7 +1333,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@nxg-org/mineflayer-physics-util@1.9.5(vec3@0.1.10)':
+  '@nxg-org/mineflayer-physics-util@1.9.6(vec3@0.1.10)':
     dependencies:
       '@nxg-org/mineflayer-util-plugin': 1.9.4(vec3@0.1.10)
     transitivePeerDependencies:
@@ -1977,9 +1977,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  mineflayer@https://codeload.github.com/generelschwerz/mineflayer/tar.gz/445814f8a221521ddc124552aae5a3a567801f4b:
+  mineflayer@https://codeload.github.com/generelschwerz/mineflayer/tar.gz/0628a4bee10150806dba8f869da95ac933ec84f7:
     dependencies:
-      '@nxg-org/mineflayer-physics-util': 1.9.5(vec3@0.1.10)
+      '@nxg-org/mineflayer-physics-util': 1.9.6(vec3@0.1.10)
       minecraft-data: 3.111.0
       minecraft-protocol: 1.66.2
       mojangson: 2.0.4

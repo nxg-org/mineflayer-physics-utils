@@ -4,6 +4,7 @@ import { Vec3 } from "vec3";
 import { createBotcraftPlayerRig, createFlatWorld } from "../../helpers/unit/botcraftTestSupport";
 
 const versions = ["1.18.2", "1.21.11"];
+const playerHalfWidth = Math.fround(0.6) / 2;
 
 const waterPath = [
   new Vec3(0, 0, 0),
@@ -181,10 +182,10 @@ describe("Botcraft right-angle water channel", () => {
           }
         }
 
-        // A 0.6-wide player contacting the x=5 outer wall stops at center x=4.7.
+        // A 0.6F-wide player contacting the x=5 outer wall stops one half-width away.
         // Requiring contact ensures this test exercises wall sliding, not a wide path.
         expect(firstCollisionZ).not.toBeNull();
-        expect(playerState.pos.x).toBeCloseTo(4.7, 12);
+        expect(playerState.pos.x).toBeCloseTo(5 - playerHalfWidth, 12);
 
         // The downstream component must survive while the wall clips the +X component.
         expect(lastCollisionZ! - firstCollisionZ!).toBeGreaterThan(0.25);
@@ -226,7 +227,7 @@ describe("Botcraft right-angle water channel", () => {
         // The northward component must move the player fully into L4, after which
         // its straight north current no longer produces a horizontal collision.
         expect(collisionTicks).toBeGreaterThan(0);
-        expect(playerState.pos.x).toBeCloseTo(-16.7, 12);
+        expect(playerState.pos.x).toBeCloseTo(-17 + playerHalfWidth, 12);
         expect(playerState.pos.z).toBeLessThan(start.z - 0.8);
       });
     });

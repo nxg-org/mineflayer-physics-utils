@@ -5,3 +5,4 @@ tests/**/*.log
 AGENTS.md
 development-logs/
 .patches
+tests/throwaway
