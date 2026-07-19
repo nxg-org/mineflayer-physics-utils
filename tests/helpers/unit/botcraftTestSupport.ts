@@ -193,30 +193,47 @@ export function createBoatTestWorld(version: string, floorY: number) {
   return new BoatTestWorld(mcData.blocksByName, Block, floorY);
 }
 
+export function resolveBoatEntityDescriptor(
+  mcData: ReturnType<typeof md>,
+  entityName: string,
+  version: string,
+) {
+  const descriptor = mcData.entitiesByName[entityName];
+  if (descriptor == null) {
+    throw new Error(
+      `Boat entity descriptor "${entityName}" not found for Minecraft ${version}`,
+    );
+  }
+
+  return descriptor;
+}
+
 export function createBoatRig(options: {
   version: string;
   position: Vec3;
   floorY?: number;
+  entityName?: string;
 }) {
   const { version, position } = options;
+  const entityName = options.entityName ?? "boat";
   const floorY = options.floorY ?? Math.floor(position.y) - 1;
   const { mcData } = loadMcData(version);
 
   const physics = new BoatPhysics(mcData);
-  const boatEntityType = mcData.entitiesByName.boat;
+  const entityDescriptor = resolveBoatEntityDescriptor(mcData, entityName, version);
   const boatState = BoatState.CREATE_FROM_ENTITY(physics, {
     position: position.clone(),
     velocity: new Vec3(0, 0, 0),
     yaw: 0,
     pitch: 0,
-    height: 0.5625,
-    width: 1.375,
+    height: entityDescriptor.height,
+    width: entityDescriptor.width,
     onGround: false,
-    name: "boat",
+    name: entityName,
   } as Entity);
   boatState.control = ControlStateHandler.DEFAULT();
 
-  const boatCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, boatState, boatEntityType);
+  const boatCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, boatState, entityDescriptor);
   const world = createBoatTestWorld(version, floorY);
 
   return {
@@ -225,6 +242,8 @@ export function createBoatRig(options: {
     boatState,
     boatCtx,
     world,
+    entityName,
+    entityDescriptor,
   };
 }
 
