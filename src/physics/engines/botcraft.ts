@@ -1207,6 +1207,7 @@ export class BotcraftPhysics implements IPhysics {
     const player = ctx.state as PlayerState;
     if (player.gameMode === "spectator") {
       player.pos.translate(player.vel.x, player.vel.y, player.vel.z);
+      if (!player.isInWater && this.data.version.minecraftVersion !== "1.21.4") this.fluidPhysics(ctx, world, true);
       return;
     }
 
@@ -1399,6 +1400,10 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.y = newSpeed;
       }
     }
+
+    // Vanilla refreshes water contact here, before travel applies friction, except in 1.21.4.
+    // https://github.com/GrimAnticheat/Grim/blob/2fe3b3e5ab9bd4ea692d712712645cf38209378b/common/src/main/java/ac/grim/grimac/predictionengine/movementtick/MovementTicker.java#L172-L184
+    if (!player.isInWater && this.data.version.minecraftVersion !== "1.21.4") this.fluidPhysics(ctx, world, true);
 
     // Rough fix for now: ignore this if we are flying.
     if (!player.flying) {
