@@ -1026,7 +1026,7 @@ export class BotcraftPhysics implements IPhysics {
 
       if (player.isInWater && !player.flying) {
         const initY = player.pos.y;
-        let waterSlowDown = player.sprinting ? ctx.sprintWaterInertia : ctx.waterInertia;
+        let waterSlowDown = Math.fround(player.sprinting ? ctx.sprintWaterInertia : ctx.waterInertia);
         let inputStrength = 0.02;
         let depthStriderMult;
         if (this.verLessThan("1.21")) {
