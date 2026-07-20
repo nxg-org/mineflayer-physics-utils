@@ -1,2 +1,4 @@
 minimumReleaseAgeExclude:
-  - '@nxg-org/mineflayer-physics-util@1.9.6 || 1.9.7'
+  - '@nxg-org/mineflayer-physics-util@1.9.6 || 1.9.7 || 1.9.8'
+overrides:
+  mineflayer: link:../mineflayer
