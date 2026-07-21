@@ -3,11 +3,12 @@ import md from "minecraft-data";
 import block, { Block as PBlock } from "prismarine-block";
 import { Vec3 } from "vec3";
 import { initSetup } from "../../../src";
-import { BotcraftPhysics } from "../../../src/physics/engines";
+import { BotcraftPhysics, BoatPhysics } from "../../../src/physics/engines";
 import { ControlStateHandler } from "../../../src/physics/player";
 import { EPhysicsCtx } from "../../../src/physics/settings";
-import { PlayerState } from "../../../src/physics/states";
+import { BoatState, PlayerState } from "../../../src/physics/states";
 import { applyMdToNewEntity } from "../../../src/util/physicsUtils";
+import type { Entity } from "prismarine-entity";
 
 const initializedVersions = new Set<string>();
 
@@ -133,4 +134,125 @@ export function createBotcraftPlayerRig(options: {
     playerCtx,
     playerState,
   };
+}
+
+export class BoatTestWorld {
+  private readonly overrideBlocks: Record<string, PBlock> = {};
+
+  constructor(
+    private readonly blocksByName: ReturnType<typeof md>["blocksByName"],
+    private readonly Block: typeof PBlock,
+    private readonly floorY: number,
+  ) {}
+
+  setBlock(pos: Vec3, type: number, metadata = 0) {
+    const blockPos = pos.floored();
+    const blockInstance = new this.Block(type, 0, metadata);
+    blockInstance.position = blockPos;
+    this.overrideBlocks[this.keyFor(blockPos)] = blockInstance;
+  }
+
+  setWater(pos: Vec3, metadata = 0) {
+    this.setBlock(pos, this.blocksByName.water.id, metadata);
+  }
+
+  setStone(pos: Vec3) {
+    this.setBlock(pos, this.blocksByName.stone.id, 0);
+  }
+
+  setIce(pos: Vec3) {
+    this.setBlock(pos, this.blocksByName.ice.id, 0);
+  }
+
+  clearOverrides() {
+    for (const key of Object.keys(this.overrideBlocks)) {
+      delete this.overrideBlocks[key];
+    }
+  }
+
+  getBlock(pos: Vec3): PBlock | null {
+    const blockPos = pos.floored();
+    const override = this.overrideBlocks[this.keyFor(blockPos)];
+    if (override) {
+      return override;
+    }
+
+    const type = blockPos.y < this.floorY ? this.blocksByName.stone.id : this.blocksByName.air.id;
+    const blockInstance = new this.Block(type, 0, 0);
+    blockInstance.position = blockPos;
+    return blockInstance;
+  }
+
+  private keyFor(pos: Vec3) {
+    return `${pos.x},${pos.y},${pos.z}`;
+  }
+}
+
+export function createBoatTestWorld(version: string, floorY: number) {
+  const { mcData, Block } = loadMcData(version);
+  return new BoatTestWorld(mcData.blocksByName, Block, floorY);
+}
+
+export function resolveBoatEntityDescriptor(
+  mcData: ReturnType<typeof md>,
+  entityName: string,
+  version: string,
+) {
+  const descriptor = mcData.entitiesByName[entityName];
+  if (descriptor == null) {
+    throw new Error(
+      `Boat entity descriptor "${entityName}" not found for Minecraft ${version}`,
+    );
+  }
+
+  return descriptor;
+}
+
+export function createBoatRig(options: {
+  version: string;
+  position: Vec3;
+  floorY?: number;
+  entityName?: string;
+}) {
+  const { version, position } = options;
+  const entityName = options.entityName ?? "boat";
+  const floorY = options.floorY ?? Math.floor(position.y) - 1;
+  const { mcData } = loadMcData(version);
+
+  const physics = new BoatPhysics(mcData);
+  const entityDescriptor = resolveBoatEntityDescriptor(mcData, entityName, version);
+  const boatState = BoatState.CREATE_FROM_ENTITY(physics, {
+    position: position.clone(),
+    velocity: new Vec3(0, 0, 0),
+    yaw: 0,
+    pitch: 0,
+    height: entityDescriptor.height,
+    width: entityDescriptor.width,
+    onGround: false,
+    name: entityName,
+  } as Entity);
+  boatState.control = ControlStateHandler.DEFAULT();
+
+  const boatCtx = EPhysicsCtx.FROM_ENTITY_STATE(physics, boatState, entityDescriptor);
+  const world = createBoatTestWorld(version, floorY);
+
+  return {
+    mcData,
+    physics,
+    boatState,
+    boatCtx,
+    world,
+    entityName,
+    entityDescriptor,
+  };
+}
+
+export function simulateBoatTick(rig: ReturnType<typeof createBoatRig>) {
+  rig.physics.simulate(rig.boatCtx, rig.world);
+}
+
+export function fillWaterColumn(world: BoatTestWorld, x: number, z: number, fromY: number, toY: number, metadata = 0) {
+  for (let y = fromY; y <= toY; y++) {
+    world.setWater(new Vec3(x, y, z), metadata);
+  }
 }

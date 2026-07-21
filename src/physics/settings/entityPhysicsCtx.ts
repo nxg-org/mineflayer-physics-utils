@@ -12,6 +12,15 @@ import info from "../info/entity_physics.json";
 import { PhysicsWorldSettings } from "./physicsSettings";
 import { getPose, PlayerState } from "../states";
 
+function isBoatLikeEntity(entityType: md.Entity): boolean {
+    const name = entityType.name ?? "";
+    return name === "boat" || name.endsWith("_boat") || name.endsWith("_raft");
+}
+
+function applyBoatVehiclePhysics(ctx: EPhysicsCtx): void {
+    Object.assign(ctx, info.dead_vehicles.default, info.dead_vehicles.boat);
+}
+
 
 
 function load(data: md.IndexedData) {
@@ -77,7 +86,9 @@ export class EPhysicsCtx<State extends IEntityState=IEntityState> {
     ) {
 
         // TODO cleanup all of this code.
-        if (entityType.type === "player" || !!EPhysicsCtx.mobData[entityType.id]) {
+        if (isBoatLikeEntity(entityType)) {
+            applyBoatVehiclePhysics(this);
+        } else if (entityType.type === "player" || !!EPhysicsCtx.mobData[entityType.id]) {
             // @ts-expect-error
             const additional = info.living_entities[entityType.type];
             Object.assign(this, info.living_entities.default, additional);
@@ -127,8 +138,8 @@ export class EPhysicsCtx<State extends IEntityState=IEntityState> {
                     };
                     break
                 case "other":
-                    if (entityType.name.includes("minecart") || entityType.name.includes("boat")) {
-                        Object.assign(this, info.dead_vehicles.default, entityType.name === "boat" ? info.dead_vehicles.boat : undefined);
+                    if (entityType.name.includes("minecart")) {
+                        Object.assign(this, info.dead_vehicles.default);
                     } else if (entityType.name?.includes("block") || entityType.name?.includes("tnt")) {
                         Object.assign(this, info.blocks.default);
                     } else if (
