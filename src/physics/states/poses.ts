@@ -1,4 +1,5 @@
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
+import type { Entity } from "prismarine-entity";
 import { Vec3 } from "vec3";
 
 //0: STANDING, 1: FALL_FLYING, 2: SLEEPING, 3: SWIMMING, 4: SPIN_ATTACK, 5: SNEAKING, 6: LONG_JUMPING, 7: DYING
@@ -11,6 +12,11 @@ export enum PlayerPoses {
   SNEAKING,
   LONG_JUMPING,
   DYING,
+}
+
+export function getPose(entity: Entity) {
+  const pose = entity.metadata.find((entry) => (entry as any)?.type === 18);
+  return pose ? ((pose as any).value as number) : PlayerPoses.STANDING;
 }
 
 /**

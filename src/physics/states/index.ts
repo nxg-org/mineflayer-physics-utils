@@ -7,6 +7,8 @@ import { AABB } from "@nxg-org/mineflayer-util-plugin";
 export * from "./entityState"
 export * from "./playerState"
 export * from "./poses"
+export * from "./boatState"
+export * from "./horseState"
 
 export type Heading = {
     forward: number;
@@ -57,9 +59,4 @@ export interface IEntityState {
     clone(): IEntityState;
 
     getBB(): AABB;
-}
-
-export function getPose(entity: Entity) {
-    const pose = entity.metadata.find((e) => (e as any)?.type === 18);
-    return pose ? ((pose as any).value as number) : PlayerPoses.STANDING;
 }

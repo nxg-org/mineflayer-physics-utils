@@ -26,8 +26,8 @@ export { PhysicsUtilWrapper } from "./wrapper";
 
 export { EPhysicsCtx, PhysicsWorldSettings } from "./physics/settings";
 export { BaseSimulator } from "./simulators";
-export { EntityPhysics, BotcraftPhysics } from "./physics/engines";
-export { EntityState, PlayerState, PlayerPoses, IEntityState } from "./physics/states";
+export { EntityPhysics, BotcraftPhysics, BoatPhysics, HorsePhysics } from "./physics/engines";
+export { EntityState, PlayerState, PlayerPoses, IEntityState, BoatState, BoatStatus, HorseState } from "./physics/states";
 export { ControlStateHandler } from "./physics/player";
 
 export type { SimulationGoal, Controller, OnGoalReachFunction }from "./simulators";
