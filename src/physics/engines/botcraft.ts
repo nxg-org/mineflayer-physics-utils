@@ -32,6 +32,344 @@ type CollisionCtx = { entityY: number; descending: boolean; fallDistance: number
 
 const COLLISION_EPSILON = 1e-7;
 
+// Vanilla Vec3.normalize() returns ZERO when the length is below 1.0E-5F (26.2
+// net/minecraft/world/phys/Vec3.java: `dist < 1.0E-5F ? ZERO : ...`). The npm vec3
+// normalize() only guards exact zero, so every fluid-flow normalize must apply this
+// epsilon explicitly or a ~1e-8 residue becomes a full unit vector.
+const VANILLA_NORMALIZE_EPSILON = 1.0000000116860974e-5; // (double)(float)1.0E-5
+
+function vanillaNormalize(v: Vec3): Vec3 {
+  const dist = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+  if (dist < VANILLA_NORMALIZE_EPSILON) {
+    v.set(0, 0, 0);
+    return v;
+  }
+  v.x /= dist;
+  v.y /= dist;
+  v.z /= dist;
+  return v;
+}
+
+/**
+ * Blocks that call `.forceSolidOn()` in their BlockBehaviour.Properties (26.2, transcribed
+ * from the decompiled net/minecraft/world/level/block/Blocks.java registrations).
+ *
+ * These have an EMPTY or tiny collision shape yet vanilla still reports `isSolid()` (and
+ * therefore `blocksMotion()`) as true for them. `boundingBox === "empty"` is NOT a valid
+ * stand-in for `blocksMotion()` because of exactly this set: all signs, wall signs, hanging
+ * signs, fence gates, walls, pressure plates, dead corals, etc.
+ *
+ * Note `oak_fence` is present but no other fence type is. That is genuinely what vanilla
+ * says (a long-standing Mojang inconsistency) - do NOT "correct" it to all fences.
+ *
+ * VERSION-SENSITIVE: this list is 26.2. Re-derive it from `genSources` when bumping versions.
+ */
+const FORCE_SOLID_ON_BLOCKS = new Set<string>([
+  "acacia_fence_gate", "acacia_hanging_sign", "acacia_pressure_plate", "acacia_sign",
+  "acacia_wall_hanging_sign", "acacia_wall_sign", "amethyst_cluster", "andesite_wall", "bamboo",
+  "bamboo_fence_gate", "bamboo_hanging_sign", "bamboo_pressure_plate", "bamboo_sapling",
+  "bamboo_sign", "bamboo_wall_hanging_sign", "bamboo_wall_sign", "bell", "birch_fence_gate",
+  "birch_hanging_sign", "birch_pressure_plate", "birch_sign", "birch_wall_hanging_sign",
+  "birch_wall_sign", "blackstone_wall", "brick_wall", "cake", "cherry_fence_gate",
+  "cherry_hanging_sign", "cherry_pressure_plate", "cherry_sign", "cherry_wall_hanging_sign",
+  "cherry_wall_sign", "cobbled_deepslate_wall", "cobblestone_wall", "cobweb", "conduit",
+  "crimson_fence_gate", "crimson_hanging_sign", "crimson_pressure_plate", "crimson_sign",
+  "crimson_wall_hanging_sign", "crimson_wall_sign", "dark_oak_fence_gate",
+  "dark_oak_hanging_sign", "dark_oak_pressure_plate", "dark_oak_sign",
+  "dark_oak_wall_hanging_sign", "dark_oak_wall_sign", "dead_brain_coral",
+  "dead_brain_coral_block", "dead_brain_coral_fan", "dead_brain_coral_wall_fan",
+  "dead_bubble_coral", "dead_bubble_coral_block", "dead_bubble_coral_fan",
+  "dead_bubble_coral_wall_fan", "dead_fire_coral", "dead_fire_coral_block",
+  "dead_fire_coral_fan", "dead_fire_coral_wall_fan", "dead_horn_coral",
+  "dead_horn_coral_block", "dead_horn_coral_fan", "dead_horn_coral_wall_fan",
+  "dead_tube_coral", "dead_tube_coral_block", "dead_tube_coral_fan",
+  "dead_tube_coral_wall_fan", "deepslate_brick_wall", "deepslate_tile_wall", "diorite_wall",
+  "dried_ghast", "end_stone_brick_wall", "granite_wall", "heavy_weighted_pressure_plate",
+  "iron_chain", "jungle_fence_gate", "jungle_hanging_sign", "jungle_pressure_plate",
+  "jungle_sign", "jungle_wall_hanging_sign", "jungle_wall_sign", "lantern",
+  "light_weighted_pressure_plate", "mangrove_fence_gate", "mangrove_hanging_sign",
+  "mangrove_pressure_plate", "mangrove_sign", "mangrove_wall_hanging_sign",
+  "mangrove_wall_sign", "mossy_cobblestone_wall", "mossy_stone_brick_wall", "moving_piston",
+  "mud_brick_wall", "nether_brick_wall", "oak_fence", "oak_fence_gate", "oak_hanging_sign",
+  "oak_pressure_plate", "oak_sign", "oak_wall_hanging_sign", "oak_wall_sign",
+  "pale_oak_fence_gate", "pale_oak_hanging_sign", "pale_oak_pressure_plate", "pale_oak_sign",
+  "pale_oak_wall_hanging_sign", "pale_oak_wall_sign", "pointed_dripstone",
+  "polished_blackstone_brick_wall", "polished_blackstone_pressure_plate",
+  "polished_blackstone_wall", "polished_deepslate_wall", "polished_tuff_wall",
+  "prismarine_wall", "red_nether_brick_wall", "red_sandstone_wall", "sandstone_wall",
+  "sculk_vein", "soul_lantern", "spruce_fence_gate", "spruce_hanging_sign",
+  "spruce_pressure_plate", "spruce_sign", "spruce_wall_hanging_sign", "spruce_wall_sign",
+  "stone_brick_wall", "stone_pressure_plate", "sulfur_spike", "tuff_brick_wall", "tuff_wall",
+  "turtle_egg", "warped_fence_gate", "warped_hanging_sign", "warped_pressure_plate",
+  "warped_sign", "warped_wall_hanging_sign", "warped_wall_sign",
+]);
+
+/**
+ * Blocks that call `.forceSolidOff()` (26.2). These have a collision shape big enough that
+ * the AABB size rule would call them solid, but vanilla forces `isSolid()` to false.
+ * `ladder` is the load-bearing one: its shape averages exactly 0.7291666666666667, which
+ * would otherwise clear the >= 0.7291666666666666 threshold.
+ *
+ * VERSION-SENSITIVE: 26.2.
+ */
+const FORCE_SOLID_OFF_BLOCKS = new Set<string>([
+  "azalea", "big_dripleaf", "chorus_flower", "chorus_plant", "end_rod", "flowering_azalea",
+  "ladder", "snow",
+]);
+
+/**
+ * `blocksMotion()` excludes these by identity BEFORE consulting `isSolid()`
+ * (26.2 BlockBehaviour.java:542). Both are also in `forceSolidOn`, so this check MUST run
+ * first or they would wrongly come back true.
+ */
+const NEVER_BLOCKS_MOTION = new Set<string>(["cobweb", "bamboo_sapling"]);
+
+/** 26.2 BlockBehaviour.calculateSolid (line 484): `bounds.getSize() >= 0.7291666666666666`. */
+const SOLID_AABB_AVERAGE_SIZE = 0.7291666666666666;
+
+function stripBlockNamespace(name: string): string {
+  const sep = name.indexOf(":");
+  return sep === -1 ? name : name.slice(sep + 1);
+}
+
+/**
+ * Faithful port of vanilla `BlockState.blocksMotion()` (26.2 BlockBehaviour.java:542):
+ *
+ *   return block != COBWEB && block != BAMBOO_SAPLING && this.isSolid();
+ *
+ * where `isSolid()` is the cached `calculateSolid()` (BlockBehaviour.java:484):
+ *
+ *   if (forceSolidOn) return true;
+ *   if (forceSolidOff) return false;
+ *   if (cache == null) return false;
+ *   if (collisionShape.isEmpty()) return false;
+ *   AABB b = collisionShape.bounds();
+ *   return b.getSize() >= 0.7291666666666666 ? true : b.getYsize() >= 1.0;
+ *
+ * `AABB.getSize()` is the AVERAGE of the three edge lengths, and `bounds()` is the union
+ * box over every collision box - not any single box.
+ *
+ * A null block reports false (no block cannot block motion); callers that need vanilla's
+ * "unloaded chunk" behaviour must guard for null themselves.
+ */
+export function blocksMotion(block: Block | null | undefined): boolean {
+  if (block == null) return false;
+  const name = stripBlockNamespace(block.name ?? "");
+
+  // Identity exclusions run FIRST - both are also in forceSolidOn.
+  if (NEVER_BLOCKS_MOTION.has(name)) return false;
+  if (FORCE_SOLID_ON_BLOCKS.has(name)) return true;
+  if (FORCE_SOLID_OFF_BLOCKS.has(name)) return false;
+
+  const shapes = block.shapes;
+  if (shapes == null || shapes.length === 0) return false;
+
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (const s of shapes) {
+    if (s[0] < minX) minX = s[0];
+    if (s[1] < minY) minY = s[1];
+    if (s[2] < minZ) minZ = s[2];
+    if (s[3] > maxX) maxX = s[3];
+    if (s[4] > maxY) maxY = s[4];
+    if (s[5] > maxZ) maxZ = s[5];
+  }
+
+  const ySize = maxY - minY;
+  if ((maxX - minX + ySize + (maxZ - minZ)) / 3.0 >= SOLID_AABB_AVERAGE_SIZE) return true;
+  return ySize >= 1.0;
+}
+
+/**
+ * `true` when the block has an EMPTY collision shape for THIS state.
+ *
+ * `block.boundingBox` is a per-BLOCK field in minecraft-data, not a per-STATE one, so it is
+ * not a stand-in for vanilla's `state.getCollisionShape(...).isEmpty()`. On 1.21.11 data 42
+ * blocks disagree between the two: `snow` reports `boundingBox === "empty"` yet has real
+ * collision boxes for layers 2-8, and 41 blocks (every fence gate, every wall, `big_dripleaf`,
+ * `pale_moss_carpet`, `pitcher_crop`) report `boundingBox === "block"` yet have states with no
+ * collision boxes at all (open gates, unconnected walls, ...). `shapes` IS per-state
+ * (prismarine-block indexes `stateShapes[metadata]`), so it is the correct source.
+ */
+function hasEmptyCollisionShape(block: Block | null | undefined): boolean {
+  if (block == null) return true;
+  const shapes = block.shapes;
+  return shapes == null || shapes.length === 0;
+}
+
+/**
+ * Blocks that are `instanceof IceBlock` in 26.2. `FlowingFluid.isSolidFace` short-circuits
+ * these to false, so falling water beside them never picks up the -6.0 downward bias.
+ *
+ * Verified against the decompiled 26.2 tree:
+ *   Blocks.java:1945  ICE          -> `IceBlock::new`
+ *   Blocks.java:3727  FROSTED_ICE  -> `FrostedIceBlock::new`,
+ *                                     and FrostedIceBlock.java:22 `extends IceBlock`
+ *   Blocks.java:3019  PACKED_ICE   -> registered with NO block factory, i.e. a plain `Block`
+ *   Blocks.java:4224  BLUE_ICE     -> `HalfTransparentBlock::new`
+ * `grep -rn "extends IceBlock"` over the whole tree returns FrostedIceBlock and nothing else,
+ * so this set is exactly complete. PACKED_ICE and BLUE_ICE are deliberately NOT here: they are
+ * ordinary full blocks and DO give a sturdy face.
+ *
+ * VERSION-SENSITIVE: 26.2.
+ */
+const ICE_BLOCKS = new Set<string>(["ice", "frosted_ice"]);
+
+/**
+ * `BlockState.getBlockSupportShape()` (26.2 BlockBehaviour.java:291) defaults to the COLLISION
+ * shape, which is what `block.shapes` gives us. A few blocks override it, so for those the
+ * collision shape is the WRONG input. Only the overrides that change the answer for a
+ * HORIZONTAL face are encoded - `getFlow` never reaches the shape logic for UP (vanilla
+ * short-circuits UP to true) or DOWN.
+ *
+ * Always sturdy (`getBlockSupportShape` returns `Shapes.block()` while the collision shape is a
+ * 14/16-tall column, which is NOT face-full):
+ *   SoulSandBlock.java:32-34 + :15  `SHAPE = Block.column(16.0, 0.0, 14.0)`
+ *   MudBlock.java:32-34      + :15  same
+ */
+const SUPPORT_SHAPE_FULL_CUBE_BLOCKS = new Set<string>(["soul_sand", "mud"]);
+
+/**
+ * Never sturdy, despite a collision shape that would say otherwise:
+ *   LeavesBlock.java:57-59        `getBlockSupportShape` -> `Shapes.empty()` (leaves collide
+ *                                 as a full cube, so the collision shape alone says "sturdy").
+ *                                 All 11 leaf blocks are named `*_leaves` (BlockItemIds.java:178-188)
+ *                                 and every registration goes through a LeavesBlock subclass
+ *                                 (Blocks.java:565-619), so the suffix test is exact.
+ *   ChorusFlowerBlock.java:59-61  -> `SHAPE_BLOCK_SUPPORT = Block.column(14.0, 0.0, 15.0)`
+ *                                 (:32), which spans 1/16..15/16 horizontally and can never be
+ *                                 face-full on a horizontal face.
+ */
+const SUPPORT_SHAPE_NEVER_STURDY_BLOCKS = new Set<string>(["chorus_flower"]);
+
+/**
+ * `VoxelShape.calculateFace` (26.2 VoxelShape.java:216-230) slices the shape at
+ * `findIndex(axis, POSITIVE ? 0.9999999 : 1.0E-7)`.
+ */
+const FACE_SLICE_SAMPLE_POSITIVE = 0.9999999;
+const FACE_SLICE_SAMPLE_NEGATIVE = 1.0e-7;
+
+/** Shape coordinates come off a 1/16 grid, so this only absorbs float noise. */
+const FACE_SHAPE_EPSILON = 1.0e-9;
+
+/** Index into a prismarine-block shape tuple `[x1, y1, z1, x2, y2, z2]`. 0 = X, 1 = Y, 2 = Z. */
+export type ShapeAxis = 0 | 1 | 2;
+
+/**
+ * Faithful port of vanilla `BlockState.isFaceSturdy(level, pos, direction)` (26.2
+ * BlockBehaviour.java:885-886), which is `isFaceSturdy(..., SupportType.FULL)`:
+ *
+ *   SupportType.java:13-16   FULL.isSupporting = Block.isFaceFull(state.getBlockSupportShape(level, pos), direction)
+ *   Block.java:345-348       isFaceFull(shape, dir) = isShapeFullBlock(shape.getFaceShape(dir))
+ *   VoxelShape.java:216-230  getFaceShape/calculateFace = the slice of the shape at the boundary
+ *                            plane (sample 0.9999999 for a POSITIVE direction, 1.0E-7 for a
+ *                            NEGATIVE one), re-normalised to span the whole axis
+ *   Block.java:350-352       isShapeFullBlock(shape) = the shape IS the full unit cube
+ *
+ * So: take the collision sub-boxes that TOUCH the requested face, project them onto that face,
+ * and the face is sturdy iff their union is EXACTLY the unit square - no gap and no overhang.
+ * A sub-box `b` lands in vanilla's slice iff `b.min[axis] <= sample < b.max[axis]`; because
+ * every box edge is itself a coordinate in vanilla's merged index list, that test is equivalent
+ * to "b fills the boundary bin".
+ *
+ * The overhang half matters: `isShapeFullBlock` is a NOT_SAME (XOR) join against `Shapes.block()`,
+ * so a face projection that spills outside [0,1] is NOT a full block. Hence the explicit
+ * out-of-range rejection rather than clamping.
+ *
+ * KNOWN DIVERGENCES from vanilla (all documented, none reachable from `getFlow`'s horizontal
+ * probe except the ones handled by the two override sets above):
+ *  - `getBlockSupportShape` overrides that need a block ENTITY: `ShulkerBoxBlock.java:147-151`
+ *    returns an inset shape while the box is animating open. A client cannot see that state, so
+ *    a shulker box is always treated as closed (= full cube), which is also what its collision
+ *    shape says.
+ *  - `SnowLayerBlock.java:57-58` supports on `SHAPES[layers]` while it COLLIDES on
+ *    `SHAPES[layers - 1]`, i.e. the support shape is one layer taller. Handled explicitly below.
+ *  - `FenceGateBlock.java:99-102`, `ChorusFlowerBlock`, and both hanging-sign blocks override
+ *    `getBlockSupportShape` too, but none of their support shapes is ever full on a HORIZONTAL
+ *    face, and neither is their collision shape - so only chorus flower (whose collision shape
+ *    is a full cube) needed encoding.
+ *  - Collision shapes that depend on `CollisionContext` (scaffolding, powder snow) are baked to
+ *    their entity-independent form by minecraft-data. Vanilla computes face sturdiness with
+ *    `CollisionContext.empty()` (BlockBehaviour.java:949 Cache), which is the same choice.
+ *
+ * VERSION-SENSITIVE: the override sets are 26.2.
+ */
+export function isFaceSturdy(block: Block | null | undefined, axis: ShapeAxis, positive: boolean): boolean {
+  if (block == null) return false;
+  const name = stripBlockNamespace(block.name ?? "");
+
+  if (SUPPORT_SHAPE_FULL_CUBE_BLOCKS.has(name)) return true;
+  if (SUPPORT_SHAPE_NEVER_STURDY_BLOCKS.has(name) || name.endsWith("_leaves")) return false;
+  if (name === "snow") {
+    // SnowLayerBlock.java:28 `SHAPES = Block.boxes(8, height -> Block.column(16.0, 0.0, height * 2))`
+    // and :57-58 support on `SHAPES[layers]`. That column is full-height (and so face-full on a
+    // horizontal face) only at layers == 8.
+    const layers = Number((block.getProperties() as Record<string, unknown>).layers ?? 1);
+    return layers >= 8;
+  }
+
+  const shapes = block.shapes;
+  if (shapes == null || shapes.length === 0) return false;
+
+  const sample = positive ? FACE_SLICE_SAMPLE_POSITIVE : FACE_SLICE_SAMPLE_NEGATIVE;
+  // The two axes that span the face: X -> (Y, Z), Y -> (X, Z), Z -> (X, Y).
+  const u: ShapeAxis = axis === 0 ? 1 : 0;
+  const v: ShapeAxis = axis === 2 ? 1 : 2;
+
+  const rects: number[][] = [];
+  for (const s of shapes) {
+    if (!(s[axis] <= sample && sample < s[axis + 3])) continue;
+    const u0 = s[u];
+    const u1 = s[u + 3];
+    const v0 = s[v];
+    const v1 = s[v + 3];
+    // Any overhang past the unit square leaves a non-empty XOR against Shapes.block().
+    if (u0 < -FACE_SHAPE_EPSILON || u1 > 1 + FACE_SHAPE_EPSILON) return false;
+    if (v0 < -FACE_SHAPE_EPSILON || v1 > 1 + FACE_SHAPE_EPSILON) return false;
+    rects.push([u0, v0, u1, v1]);
+  }
+  if (rects.length === 0) return false;
+
+  return unitSquareFullyCovered(rects);
+}
+
+/** Sorted, de-duplicated cut lines through [0, 1] for one axis of the face. */
+function faceGridLines(rects: number[][], lowIdx: number, highIdx: number): number[] {
+  const set = new Set<number>([0, 1]);
+  for (const r of rects) {
+    if (r[lowIdx] > FACE_SHAPE_EPSILON && r[lowIdx] < 1 - FACE_SHAPE_EPSILON) set.add(r[lowIdx]);
+    if (r[highIdx] > FACE_SHAPE_EPSILON && r[highIdx] < 1 - FACE_SHAPE_EPSILON) set.add(r[highIdx]);
+  }
+  return [...set].sort((a, b) => a - b);
+}
+
+/**
+ * Exact union-coverage test: cut [0,1]x[0,1] on every rectangle edge and require every resulting
+ * cell to sit inside at least one rectangle. This is the same decision vanilla's merged-index
+ * voxel grid makes, just computed on demand.
+ */
+function unitSquareFullyCovered(rects: number[][]): boolean {
+  const us = faceGridLines(rects, 0, 2);
+  const vs = faceGridLines(rects, 1, 3);
+  for (let i = 0; i + 1 < us.length; i++) {
+    const uMid = (us[i] + us[i + 1]) / 2;
+    if (us[i + 1] - us[i] <= FACE_SHAPE_EPSILON) continue;
+    for (let j = 0; j + 1 < vs.length; j++) {
+      if (vs[j + 1] - vs[j] <= FACE_SHAPE_EPSILON) continue;
+      const vMid = (vs[j] + vs[j + 1]) / 2;
+      let covered = false;
+      for (const r of rects) {
+        if (r[0] <= uMid && uMid <= r[2] && r[1] <= vMid && vMid <= r[3]) {
+          covered = true;
+          break;
+        }
+      }
+      if (!covered) return false;
+    }
+  }
+  return true;
+}
+
 
 function extractAttribute(ctx: IPhysics, genericName: string) {
   const data = ctx.data.attributesByName[genericName] as any;
@@ -321,8 +659,17 @@ export class BotcraftPhysics implements IPhysics {
     for (cursor.y = Math.floor(testArea.minY); cursor.y <= Math.floor(testArea.maxY); ++cursor.y) {
       for (cursor.z = Math.floor(testArea.minZ); cursor.z <= Math.floor(testArea.maxZ); ++cursor.z) {
         for (cursor.x = Math.floor(testArea.minX); cursor.x <= Math.floor(testArea.maxX); ++cursor.x) {
+          // Vanilla `isSuffocating` (26.2 BlockBehaviour.java:1011) is
+          //   `state.blocksMotion() && state.isCollisionShapeFullBlock(level, pos)`.
+          // The unit-cube shape test below is `isCollisionShapeFullBlock` (no block in 1.21.11 data
+          // tiles the unit cube out of several boxes, so the single-shape restriction loses
+          // nothing), and the `boundingBox === "empty"` guard is a redundant fast path - the only
+          // block whose per-block boundingBox disagrees with its per-state shapes is `snow`, which
+          // is never a unit cube. `blocksMotion()` is NOT redundant though: `chorus_flower` has a
+          // full-cube collision shape yet is forceSolidOff, so vanilla does not suffocate on it.
           const block = world.getBlock(cursor) as Block | null;
           if (block == null || block.boundingBox === "empty" || !block.shapes || block.shapes.length !== 1) continue;
+          if (!blocksMotion(block)) continue;
           const s = block.shapes[0];
           if (s[0] === 0 && s[1] === 0 && s[2] === 0 && s[3] === 1 && s[4] === 1 && s[5] === 1) {
             const blockBB = new AABB(s[0], s[1], s[2], s[3], s[4], s[5]).translate(cursor.x, cursor.y, cursor.z);
@@ -548,9 +895,12 @@ export class BotcraftPhysics implements IPhysics {
     let fluidRelativeHeight = 0.0;
     let numPush = 0;
     let eyeInFluidThisTick = false;
-    for (blockPos.x = Math.floor(minAABB.x); blockPos.x <= Math.floor(maxAABB.x); ++blockPos.x) {
-      for (blockPos.y = Math.floor(minAABB.y); blockPos.y <= Math.floor(maxAABB.y); ++blockPos.y) {
-        for (blockPos.z = Math.floor(minAABB.z); blockPos.z <= Math.floor(maxAABB.z); ++blockPos.z) {
+    // Vanilla iterates floor(min)..ceil(max)-1 per axis (26.2 EntityFluidInteraction.update,
+    // lines 36-41). ceil(max)-1 === floor(max) except when max is exactly integral, where
+    // floor(max) would scan one extra all-outside layer and dilute the player push average.
+    for (blockPos.x = Math.floor(minAABB.x); blockPos.x <= Math.ceil(maxAABB.x) - 1; ++blockPos.x) {
+      for (blockPos.y = Math.floor(minAABB.y); blockPos.y <= Math.ceil(maxAABB.y) - 1; ++blockPos.y) {
+        for (blockPos.z = Math.floor(minAABB.z); blockPos.z <= Math.ceil(maxAABB.z) - 1; ++blockPos.z) {
           const block = world.getBlock(blockPos);
           if (block == null) continue;
 
@@ -608,8 +958,10 @@ export class BotcraftPhysics implements IPhysics {
       player.lavaHeight = fluidRelativeHeight;
     }
 
+    // Vanilla gate: `currentCount != 0 && !(accumulatedCurrent.lengthSqr() < 1.0E-5F)`
+    // (26.2 EntityFluidInteraction.Tracker.applyCurrentTo, line 172). Note the float literal.
     const pushLenSqr = push.x * push.x + push.y * push.y + push.z * push.z;
-    if (numPush === 0 || pushLenSqr < 1.0e-5) {
+    if (numPush === 0 || pushLenSqr < VANILLA_NORMALIZE_EPSILON) {
       return;
     }
 
@@ -628,8 +980,9 @@ export class BotcraftPhysics implements IPhysics {
       Math.abs(player.vel.z) < ctx.worldSettings.negligeableVelocity &&
       pushNorm < 0.0045000000000000005
     ) {
-      // normalize and scale
-      push.normalize().scale(0.0045000000000000005);
+      // normalize and scale; vanilla's normalize zeroes lengths below 1.0E-5F, so a
+      // sub-epsilon impulse yields NO push here rather than a full 0.0045 push.
+      vanillaNormalize(push).scale(0.0045000000000000005);
     }
     player.vel.add(push);
   }
@@ -647,9 +1000,12 @@ export class BotcraftPhysics implements IPhysics {
       const adjLevel = this.getRenderedDepth(adjBlock, water);
       let distance = 0.0;
       if (adjLevel < 0) {
-        // A neighbour that isn't this fluid contributes nothing if solid; approximate !blocksMotion()
-        // via boundingBox === "empty".
-        if (adjBlock && adjBlock.boundingBox === "empty") {
+        // Vanilla gates the fall-through on `!level.getBlockState(pos).blocksMotion()`
+        // (26.2 FlowingFluid.getFlow). `boundingBox === "empty"` is NOT equivalent: 138
+        // blocks (signs, walls, fence gates, pressure plates, ...) are forceSolidOn and so
+        // block motion despite having no collision box. The `adjBlock &&` guard preserves
+        // the existing behaviour for a null (unloaded) neighbour: it takes no fall-through.
+        if (adjBlock && !blocksMotion(adjBlock)) {
           const belowBlock = world.getBlock(block.position.offset(dx, -1, dz));
           const belowLevel = this.getRenderedDepth(belowBlock, water);
           if (belowLevel >= 0) {
@@ -677,17 +1033,62 @@ export class BotcraftPhysics implements IPhysics {
         [0, -1],
         [1, 0],
       ]) {
-        const adjBlock = world.getBlock(block.position.offset(dx, 0, dz));
-        const adjUpBlock = world.getBlock(block.position.offset(dx, 1, dz));
-        if ((adjBlock && adjBlock.boundingBox !== "empty") || (adjUpBlock && adjUpBlock.boundingBox !== "empty")) {
-          // normalize() mutates flow in place, so this bias is applied before breaking out.
-          flow.normalize().translate(0, -6, 0);
+        // Vanilla (26.2 FlowingFluid.getFlow line 91):
+        //   `this.isSolidFace(level, blockPos, direction) || this.isSolidFace(level, blockPos.above(), direction)`
+        // BOTH calls take the SAME horizontal `direction` - the second one probes the block
+        // ABOVE the neighbour with that horizontal direction, NOT with UP. Do not collapse them.
+        const adjPos = block.position.offset(dx, 0, dz);
+        const axis: ShapeAxis = dx !== 0 ? 0 : 2;
+        const positive = (dx !== 0 ? dx : dz) > 0;
+        if (
+          this.isSolidFace(world, adjPos, axis, positive, water) ||
+          this.isSolidFace(world, adjPos.offset(0, 1, 0), axis, positive, water)
+        ) {
+          // normalize mutates flow in place, so this bias is applied before breaking out.
+          // Vanilla: `flow = flow.normalize().add(0.0, -6.0, 0.0)` (26.2 FlowingFluid.getFlow line 92).
+          vanillaNormalize(flow).translate(0, -6, 0);
           break;
         }
       }
     }
 
-    return flow.normalize();
+    // Vanilla: `return flow.normalize()` with the 1.0E-5F zero-guard (FlowingFluid.getFlow line 98).
+    return vanillaNormalize(flow);
+  }
+
+  /**
+   * Faithful port of `FlowingFluid.isSolidFace` (26.2 FlowingFluid.java:105-115):
+   *
+   *   BlockState state = level.getBlockState(pos);
+   *   FluidState fluidState = level.getFluidState(pos);
+   *   if (fluidState.getType().isSame(this)) return false;
+   *   else if (direction == Direction.UP) return true;
+   *   else return state.getBlock() instanceof IceBlock ? false : state.isFaceSturdy(level, pos, direction);
+   *
+   * The direction is `(axis, positive)`: axis 0 = X, 1 = Y, 2 = Z. `getFlow` only ever passes a
+   * HORIZONTAL direction (`Direction.Plane.HORIZONTAL`), so the `direction == UP` arm is
+   * unreachable from there, but it is modelled anyway so this is a complete port. Note the
+   * direction points FROM the fluid TOWARDS the neighbour, so the face tested is the neighbour's
+   * FAR face (an east neighbour is asked for its east face). That is genuinely what vanilla
+   * does - keep it.
+   *
+   * `fluidState.getType().isSame(this)` is water-vs-lava aware: `WaterFluid.isSame`
+   * (WaterFluid.java:101-103) matches WATER and FLOWING_WATER, `LavaFluid.isSame`
+   * (LavaFluid.java:159-161) matches LAVA and FLOWING_LAVA. `getRenderedDepth(block, water) >= 0`
+   * is exactly that predicate for the fluid currently being solved, and it already accounts for
+   * waterlogged blocks and the water-like plants (kelp, seagrass, bubble column), all of which
+   * really do carry a water FluidState in vanilla.
+   *
+   * A null (unloaded) neighbour reports false, preserving the previous behaviour of taking no
+   * bias rather than inventing a solid face out of unloaded terrain.
+   */
+  isSolidFace(world: World, pos: Vec3, axis: ShapeAxis, positive: boolean, water: boolean): boolean {
+    const block = world.getBlock(pos);
+    if (block == null) return false;
+    if (this.getRenderedDepth(block, water) >= 0) return false;
+    if (axis === 1 && positive) return true; // direction == Direction.UP
+    if (ICE_BLOCKS.has(stripBlockNamespace(block.name ?? ""))) return false;
+    return isFaceSturdy(block, axis, positive);
   }
 
   getLiquidHeightPcent(block: Block, water: boolean) {
@@ -1633,14 +2034,25 @@ export class BotcraftPhysics implements IPhysics {
             }
             break;
           }
-          if (block.boundingBox !== "empty") break;
+          if (!this.isGeyserPassable(block)) break;
         }
       }
     }
   }
 
+  /**
+   * Vanilla `PotentSulfurBlockEntity.isGeyserPassableBlock` (26.2, line 204-206):
+   *
+   *   return !state.isAir() && !state.is(Blocks.WATER) ? state.getCollisionShape(level, pos, context).isEmpty() : true;
+   *
+   * air and water both have an empty collision shape anyway, so the whole predicate collapses to
+   * "the collision shape is empty". This used to test `boundingBox === "empty"`, which is a
+   * per-BLOCK field and therefore wrong for the 42 blocks where the two disagree - most
+   * relevantly it called an OPEN fence gate (empty collision) an obstruction and a 2+ layer
+   * `snow` block (real collision) passable.
+   */
   private isGeyserPassable(block: Block | null): boolean {
-    return block != null && block.boundingBox === "empty";
+    return block != null && hasEmptyCollisionShape(block);
   }
 
   private isGeyserWaterSource(block: Block | null): boolean {
@@ -2066,7 +2478,10 @@ export class BotcraftPhysics implements IPhysics {
   private bubbleColumnAbove(world: World, blockPos: Vec3): boolean {
     const aboveBlock = world.getBlock(blockPos.offset(0, 1, 0));
     if (!this.verLessThan("1.21.11")) {
-      const collisionEmpty = aboveBlock == null || aboveBlock.boundingBox === "empty";
+      // Vanilla BubbleColumnBlock.java:57-58:
+      //   `stateAbove.getCollisionShape(level, pos).isEmpty() && stateAbove.getFluidState().isEmpty()`
+      // - a per-STATE collision test, so `shapes`, not the per-block `boundingBox` field.
+      const collisionEmpty = aboveBlock == null || hasEmptyCollisionShape(aboveBlock);
       const fluidEmpty =
         aboveBlock == null ||
         !(aboveBlock.type === this.waterId ||
@@ -2404,7 +2819,12 @@ export class BotcraftPhysics implements IPhysics {
       for (blockPos.x = Math.floor(minAABB[0]); blockPos.x <= Math.floor(maxAABB[0]); ++blockPos.x) {
         for (blockPos.z = Math.floor(minAABB[2]); blockPos.z <= Math.floor(maxAABB[2]); ++blockPos.z) {
           const block = world.getBlock(blockPos);
-          if (block == null || block.boundingBox === "empty") continue;
+          // Vanilla walks real block collisions here, so the skip must be a per-STATE collision
+          // test. The old `boundingBox === "empty"` guard skipped `snow` outright (minecraft-data
+          // reports `boundingBox: "empty"` for it even though layers 2-8 have real collision
+          // boxes), which lost the supporting block - and therefore the slipperiness and the
+          // fall-landing block - for anything standing on snow layers.
+          if (block == null || hasEmptyCollisionShape(block)) continue;
           // console.log('checking block', block.name, block.position)
           for (const shape of block.shapes) {
             const bb1 = AABB.fromShape(shape).translateVec(blockPos);

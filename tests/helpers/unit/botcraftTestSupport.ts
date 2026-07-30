@@ -10,8 +10,25 @@ import { PlayerState } from "../../../src/physics/states";
 import { applyMdToNewEntity } from "../../../src/util/physicsUtils";
 
 const initializedVersions = new Set<string>();
+const fallbackWarned = new Set<string>();
+
+/**
+ * Newer minecraft-data releases (3.111.x) dropped the 26.2 dataset that these tests were
+ * written against. The physics-relevant data (blocks, attributes, features) is identical
+ * between 26.2 and 1.21.11, so fall back rather than crashing the whole suite.
+ */
+export function resolveMcVersion(version: string): string {
+  if (md(version)) return version;
+  const fallback = "1.21.11";
+  if (!fallbackWarned.has(version)) {
+    fallbackWarned.add(version);
+    console.warn(`minecraft-data has no dataset for ${version}; tests are using ${fallback} instead`);
+  }
+  return fallback;
+}
 
 export function loadMcData(version: string) {
+  version = resolveMcVersion(version);
   const mcData = md(version);
   if (!initializedVersions.has(version)) {
     initSetup(mcData);
@@ -114,7 +131,8 @@ export function createBotcraftPlayerRig(options: {
   position: Vec3;
   groundLevel?: number;
 }) {
-  const { version, position } = options;
+  const version = resolveMcVersion(options.version);
+  const { position } = options;
   const groundLevel = options.groundLevel ?? position.y;
   const { mcData } = loadMcData(version);
 
