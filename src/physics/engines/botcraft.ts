@@ -16,7 +16,9 @@ import * as attributes from "../info/attributes";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { IEntityState } from "../states";
 import { IPhysics } from "./IPhysics";
-import { PlayerPoses, PlayerState, convInpToAxes, getCollider } from "../states";
+// imported from the defining modules: the "../states" barrel re-exports through getters, which cost on hot paths.
+import { PlayerPoses, getCollider } from "../states/poses";
+import { PlayerState, convInpToAxes } from "../states/playerState";
 import { PhysicsWorldSettings } from "../settings";
 
 import type { world } from "prismarine-world"
@@ -25,9 +27,59 @@ type CheapEffectNames = keyof ReturnType<typeof getStatusEffectNamesForVersion>;
 type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersion>;
 
 type Heading = { forward: number; strafe: number };
-type World = { getBlock: world.WorldSync["getBlock"]};
+type World = {
+  getBlock: world.WorldSync["getBlock"];
+  /**
+   * Optional fast path (prismarine-world's WorldSync has it). Must agree with `getBlock`:
+   * the same state id at the same position, and null/undefined where `getBlock` returns null.
+   */
+  getBlockStateId?: (pos: Vec3) => number | null | undefined;
+};
 
 const COLLISION_EPSILON = 1e-7;
+
+const FLOW_DIRECTIONS = [
+  [0, 1],
+  [-1, 0],
+  [0, -1],
+  [1, 0],
+];
+
+/**
+ * The block fields the engine reads. Built from a world Block, and shared per block state
+ * when the world exposes state ids.
+ */
+class BlockInfo {
+  public readonly type: number;
+  public readonly metadata: number;
+  public readonly shapes: number[][];
+  public readonly emptyBB: boolean;
+  /** state id 0 from getBlockStateId: prismarine-world also returns that for unloaded chunks. */
+  public readonly maybeUnloaded: boolean;
+  private waterloggedValue: boolean | undefined;
+
+  constructor(private readonly block: Block, fromStateId0 = false) {
+    this.type = block.type;
+    this.metadata = block.metadata;
+    this.shapes = block.shapes;
+    this.emptyBB = block.boundingBox === "empty";
+    this.maybeUnloaded = fromStateId0;
+  }
+
+  get waterlogged(): boolean {
+    if (this.waterloggedValue === undefined) this.waterloggedValue = !!this.block.getProperties().waterlogged;
+    return this.waterloggedValue;
+  }
+}
+
+// keyed by registry, so engines built from the same minecraft-data share it.
+const blockInfoByStateId = new WeakMap<object, Map<number, BlockInfo>>();
+
+// the per-tick lookup memo is a 16^3 window centred on the entity's block.
+const MEMO_BITS = 4;
+const MEMO_SPAN = 1 << MEMO_BITS;
+const MEMO_RADIUS = MEMO_SPAN >> 1;
+const MEMO_SIZE = MEMO_SPAN * MEMO_SPAN * MEMO_SPAN;
 
 
 function extractAttribute(ctx: IPhysics, genericName: string) {
@@ -75,8 +127,31 @@ export class BotcraftPhysics implements IPhysics {
   public readonly statusEffectNames: { [type in CheapEffects]: string };
   public readonly enchantmentNames: { [type in CheapEnchantments]: string };
 
+  private readonly stateInfos: Map<number, BlockInfo>;
+  private readonly verGreaterCache = new Map<string, boolean>();
+  private readonly verLessCache = new Map<string, boolean>();
+
+  // block lookups memoized for the duration of one simulate() call; the world can't change mid-tick.
+  // a slot is valid when its stamp equals memoGen (0 = no memo active).
+  private readonly memoStamps = new Int32Array(MEMO_SIZE);
+  private readonly memoInfos: (BlockInfo | null)[] = new Array(MEMO_SIZE).fill(null);
+  private memoGen = 0;
+  private lastMemoGen = 0;
+  private memoX = 0;
+  private memoY = 0;
+  private memoZ = 0;
+
+  // flat [minX, minY, minZ, maxX, maxY, maxZ, ...] scratch buffer for collision sweeps.
+  private readonly colliderScratch: number[] = [];
+
   constructor(mcData: md.IndexedData) {
     this.data = mcData;
+    let stateInfos = blockInfoByStateId.get(mcData);
+    if (stateInfos == null) {
+      stateInfos = new Map();
+      blockInfoByStateId.set(mcData, stateInfos);
+    }
+    this.stateInfos = stateInfos;
     const blocksByName = mcData.blocksByName;
     this.supportFeature = makeSupportFeature(mcData);
     this.movementSpeedAttribute = extractAttribute(this, "movementSpeed");
@@ -147,18 +222,72 @@ export class BotcraftPhysics implements IPhysics {
     pos.z = bb.minZ + halfWidth;
   }
 
+  /**
+   * Block at the given (unfloored) coordinates, or null where the world has none.
+   * An unloaded position may come back as air when the world only reports state ids;
+   * use blockOrNullAt where that difference matters.
+   */
+  private blockAt(world: World, x: number, y: number, z: number): BlockInfo | null {
+    const bx = Math.floor(x);
+    const by = Math.floor(y);
+    const bz = Math.floor(z);
+    if (this.memoGen !== 0) {
+      const dx = bx - this.memoX + MEMO_RADIUS;
+      const dy = by - this.memoY + MEMO_RADIUS;
+      const dz = bz - this.memoZ + MEMO_RADIUS;
+      if (dx >= 0 && dx < MEMO_SPAN && dy >= 0 && dy < MEMO_SPAN && dz >= 0 && dz < MEMO_SPAN) {
+        const slot = (((dx << MEMO_BITS) | dy) << MEMO_BITS) | dz;
+        if (this.memoStamps[slot] === this.memoGen) return this.memoInfos[slot];
+        const info = this.lookupBlock(world, bx, by, bz);
+        this.memoStamps[slot] = this.memoGen;
+        this.memoInfos[slot] = info;
+        return info;
+      }
+    }
+    return this.lookupBlock(world, bx, by, bz);
+  }
+
+  /** blockAt, but tells an unloaded position (getBlock() === null) apart from air. */
+  private blockOrNullAt(world: World, x: number, y: number, z: number): BlockInfo | null {
+    const info = this.blockAt(world, x, y, z);
+    if (info !== null && info.maybeUnloaded && world.getBlock(new Vec3(Math.floor(x), Math.floor(y), Math.floor(z))) == null) {
+      return null;
+    }
+    return info;
+  }
+
+  private lookupBlock(world: World, bx: number, by: number, bz: number): BlockInfo | null {
+    const pos = new Vec3(bx, by, bz);
+    if (typeof world.getBlockStateId === "function") {
+      const stateId = world.getBlockStateId(pos);
+      if (stateId == null) return null;
+      const cached = this.stateInfos.get(stateId);
+      if (cached !== undefined) return cached;
+
+      const block = world.getBlock(pos) as Block | null;
+      if (block == null) return null;
+      const info = new BlockInfo(block, stateId === 0);
+      if (block.stateId === stateId) this.stateInfos.set(stateId, info);
+      return info;
+    }
+    const block = world.getBlock(pos) as Block | null;
+    return block == null ? null : new BlockInfo(block);
+  }
+
+  private isWaterBlock(info: BlockInfo) {
+    return info.type === this.waterId || this.waterLike.has(info.type) || info.waterlogged;
+  }
+
   getSurroundingBBs(queryBB: AABB, world: World, underlying = true): AABB[] {
     const surroundingBBs = [];
-    const cursor = new Vec3(0, 0, 0);
-    for (cursor.y = Math.floor(queryBB.minY) - Number(underlying); cursor.y <= Math.floor(queryBB.maxY); ++cursor.y) {
-      for (cursor.z = Math.floor(queryBB.minZ); cursor.z <= Math.floor(queryBB.maxZ); ++cursor.z) {
-        for (cursor.x = Math.floor(queryBB.minX); cursor.x <= Math.floor(queryBB.maxX); ++cursor.x) {
-          const block = world.getBlock(cursor) as Block | null;
+    for (let y = Math.floor(queryBB.minY) - Number(underlying); y <= Math.floor(queryBB.maxY); ++y) {
+      for (let z = Math.floor(queryBB.minZ); z <= Math.floor(queryBB.maxZ); ++z) {
+        for (let x = Math.floor(queryBB.minX); x <= Math.floor(queryBB.maxX); ++x) {
+          const block = this.blockAt(world, x, y, z);
           if (block != null) {
-            const blockPos = block.position;
             for (const shape of block.shapes) {
               const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
-              blockBB.translate(blockPos.x, blockPos.y, blockPos.z);
+              blockBB.translate(x, y, z);
               surroundingBBs.push(blockBB);
             }
           }
@@ -168,17 +297,54 @@ export class BotcraftPhysics implements IPhysics {
     return surroundingBBs;
   }
 
+  /**
+   * getSurroundingBBs, written into a flat scratch array instead of AABBs.
+   * @returns number of values written (6 per box)
+   */
+  private collectSurroundingShapes(
+    world: World,
+    minX: number,
+    minY: number,
+    minZ: number,
+    maxX: number,
+    maxY: number,
+    maxZ: number,
+    underlying: boolean,
+    out: number[],
+    start: number,
+  ): number {
+    let n = start;
+    for (let y = Math.floor(minY) - Number(underlying); y <= Math.floor(maxY); ++y) {
+      for (let z = Math.floor(minZ); z <= Math.floor(maxZ); ++z) {
+        for (let x = Math.floor(minX); x <= Math.floor(maxX); ++x) {
+          const block = this.blockAt(world, x, y, z);
+          if (block == null) continue;
+          const shapes = block.shapes;
+          for (let i = 0; i < shapes.length; i++) {
+            const shape = shapes[i];
+            out[n++] = shape[0] + x;
+            out[n++] = shape[1] + y;
+            out[n++] = shape[2] + z;
+            out[n++] = shape[3] + x;
+            out[n++] = shape[4] + y;
+            out[n++] = shape[5] + z;
+          }
+        }
+      }
+    }
+    return n;
+  }
+
   getWaterInBBs(bb: AABB, world: World) {
     const bbs = [];
-    const cursor = new Vec3(0, 0, 0);
-    for (cursor.y = Math.floor(bb.minY); cursor.y <= Math.floor(bb.maxY); cursor.y++) {
-      for (cursor.z = Math.floor(bb.minZ); cursor.z <= Math.floor(bb.maxZ); cursor.z++) {
-        for (cursor.x = Math.floor(bb.minX); cursor.x <= Math.floor(bb.maxX); cursor.x++) {
-          const block = world.getBlock(cursor);
-          if (block && (block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged)) {
-            const waterLevel = cursor.y + 1 - this.getLiquidHeightPcent(block);
+    for (let y = Math.floor(bb.minY); y <= Math.floor(bb.maxY); y++) {
+      for (let z = Math.floor(bb.minZ); z <= Math.floor(bb.maxZ); z++) {
+        for (let x = Math.floor(bb.minX); x <= Math.floor(bb.maxX); x++) {
+          const block = this.blockAt(world, x, y, z);
+          if (block && this.isWaterBlock(block)) {
+            const waterLevel = y + 1 - this.liquidHeightPcentOf(block);
             if (Math.ceil(bb.maxY) >= waterLevel) {
-              bbs.push(new AABB(cursor.x, cursor.y, cursor.z, cursor.x + 1, cursor.y + 1, cursor.z + 1));
+              bbs.push(new AABB(x, y, z, x + 1, y + 1, z + 1));
             }
           }
         }
@@ -219,22 +385,62 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   private verGreaterThan(ver: string) {
-    return this.data.version[">"](ver);
+    let res = this.verGreaterCache.get(ver);
+    if (res === undefined) {
+      res = this.data.version[">"](ver);
+      this.verGreaterCache.set(ver, res);
+    }
+    return res;
   }
 
   private verLessThan(ver: string) {
-    return this.data.version["<"](ver);
+    let res = this.verLessCache.get(ver);
+    if (res === undefined) {
+      res = this.data.version["<"](ver);
+      this.verLessCache.set(ver, res);
+    }
+    return res;
   }
 
   private worldIsFree(world: World, bb: AABB, ignoreLiquid: boolean) {
-    const bbs = ignoreLiquid ? this.getSurroundingBBs(bb, world, false) : [...this.getSurroundingBBs(bb, world, false), ...this.getWaterInBBs(bb, world)];
+    const { minX, minY, minZ, maxX, maxY, maxZ } = bb;
 
-    // now we have to actually check for collisions.
-    for (const blockBB of bbs) {
-      if (blockBB.intersects(bb)) {
-        const blockAt = world.getBlock(blockBB.minPoint())!;
-        // console.log('world not free due to block: ', blockAt.name, blockAt.position)
-        return false;
+    // same as AABB.intersects against every block shape from getSurroundingBBs(bb, world, false)
+    for (let y = Math.floor(minY); y <= Math.floor(maxY); ++y) {
+      for (let z = Math.floor(minZ); z <= Math.floor(maxZ); ++z) {
+        for (let x = Math.floor(minX); x <= Math.floor(maxX); ++x) {
+          const block = this.blockAt(world, x, y, z);
+          if (block == null) continue;
+          for (const shape of block.shapes) {
+            if (
+              shape[0] + x < maxX &&
+              shape[3] + x > minX &&
+              shape[1] + y < maxY &&
+              shape[4] + y > minY &&
+              shape[2] + z < maxZ &&
+              shape[5] + z > minZ
+            ) {
+              return false;
+            }
+          }
+        }
+      }
+    }
+
+    if (ignoreLiquid) return true;
+
+    // and against every box from getWaterInBBs(bb, world)
+    for (let y = Math.floor(minY); y <= Math.floor(maxY); y++) {
+      for (let z = Math.floor(minZ); z <= Math.floor(maxZ); z++) {
+        for (let x = Math.floor(minX); x <= Math.floor(maxX); x++) {
+          const block = this.blockAt(world, x, y, z);
+          if (block && this.isWaterBlock(block)) {
+            const waterLevel = y + 1 - this.liquidHeightPcentOf(block);
+            if (Math.ceil(maxY) >= waterLevel && x < maxX && x + 1 > minX && y < maxY && y + 1 > minY && z < maxZ && z + 1 > minZ) {
+              return false;
+            }
+          }
+        }
       }
     }
     return true;
@@ -333,58 +539,54 @@ export class BotcraftPhysics implements IPhysics {
       player.isUnderLava = false;
     }
 
-    const minAABB = aabb.minPoint();
-    const maxAABB = aabb.maxPoint();
+    const { minX, minY, minZ, maxX, maxY, maxZ } = aabb;
     const eyeHeight = player.eyeHeight + player.pos.y;
 
-    const waterCond = (block: Block) => block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged;
-    const lavaCond = (block: Block) => block.type === this.lavaId;
-
     const push = new Vec3(0, 0, 0);
-    const blockPos = new Vec3(0, 0, 0);
     let fluidRelativeHeight = 0.0;
     let numPush = 0;
-    for (blockPos.x = Math.floor(minAABB.x); blockPos.x <= Math.floor(maxAABB.x); ++blockPos.x) {
-      for (blockPos.y = Math.floor(minAABB.y); blockPos.y <= Math.floor(maxAABB.y); ++blockPos.y) {
-        for (blockPos.z = Math.floor(minAABB.z); blockPos.z <= Math.floor(maxAABB.z); ++blockPos.z) {
-          const block = world.getBlock(blockPos);
+    for (let x = Math.floor(minX); x <= Math.floor(maxX); ++x) {
+      for (let y = Math.floor(minY); y <= Math.floor(maxY); ++y) {
+        for (let z = Math.floor(minZ); z <= Math.floor(maxZ); ++z) {
+          const block = this.blockAt(world, x, y, z);
           if (block == null) continue;
 
-          const waterRes = waterCond(block);
-          const lavaRes = lavaCond(block);
+          const waterRes = this.isWaterBlock(block);
+          const lavaRes = block.type === this.lavaId;
           if ((waterRes && !water) || (lavaRes && water) || (!waterRes && !lavaRes)) {
             continue;
           }
 
           let fluidHeight = 0.0;
-          const blockAbv = world.getBlock(blockPos.offset(0, 1, 0));
-          if ((blockAbv != null && waterCond(blockAbv) && waterRes) || (lavaCond(blockAbv) && lavaRes)) {
+          const blockAbv = this.blockOrNullAt(world, x, y + 1, z);
+          // (a null blockAbv throws on .type, as before)
+          if ((blockAbv != null && this.isWaterBlock(blockAbv) && waterRes) || (blockAbv!.type === this.lavaId && lavaRes)) {
             fluidHeight = 1.0;
           } else {
-            fluidHeight = this.getLiquidHeightPcent(block);
+            fluidHeight = this.liquidHeightPcentOf(block);
           }
 
-          if (fluidHeight + blockPos.y < minAABB.y) {
+          if (fluidHeight + y < minY) {
             continue;
           }
 
           if (water) {
             player.isInWater = true;
-            if (fluidHeight + blockPos.y > eyeHeight) {
+            if (fluidHeight + y > eyeHeight) {
               player.isUnderWater = true;
             }
           } else {
             player.isInLava = true;
-            if (fluidHeight + blockPos.y > eyeHeight) {
+            if (fluidHeight + y > eyeHeight) {
               player.isUnderLava = true;
             }
           }
 
-          fluidRelativeHeight = Math.max(fluidHeight + blockPos.y - minAABB.y, fluidRelativeHeight);
+          fluidRelativeHeight = Math.max(fluidHeight + y - minY, fluidRelativeHeight);
 
           if (player.flying) continue;
 
-          const currentPush = this.getFlow(block, world);
+          const currentPush = this.flowAt(block, x, y, z, world);
           if (fluidRelativeHeight < 0.4) {
             currentPush.scale(fluidRelativeHeight);
           }
@@ -418,19 +620,19 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   getFlow(block: Block, world: World) {
-    const curlevel = this.getRenderedDepth(block);
+    const pos = block.position;
+    return this.flowAt(new BlockInfo(block), pos.x, pos.y, pos.z, world);
+  }
+
+  private flowAt(block: BlockInfo, x: number, y: number, z: number, world: World) {
+    const curlevel = this.renderedDepthOf(block);
     const flow = new Vec3(0, 0, 0);
-    for (const [dx, dz] of [
-      [0, 1],
-      [-1, 0],
-      [0, -1],
-      [1, 0],
-    ]) {
-      const adjBlock = world.getBlock(block.position.offset(dx, 0, dz));
-      const adjLevel = this.getRenderedDepth(adjBlock);
+    for (const [dx, dz] of FLOW_DIRECTIONS) {
+      const adjBlock = this.blockOrNullAt(world, x + dx, y, z + dz);
+      const adjLevel = this.renderedDepthOf(adjBlock);
       if (adjLevel < 0) {
-        if (adjBlock && adjBlock.boundingBox === "empty") {
-          const adjLevel = this.getRenderedDepth(world.getBlock(block.position.offset(dx, -1, dz)));
+        if (adjBlock && adjBlock.emptyBB) {
+          const adjLevel = this.renderedDepthOf(this.blockAt(world, x + dx, y - 1, z + dz));
           if (adjLevel >= 0) {
             const f = adjLevel - (curlevel - 8);
             flow.x += dx * f;
@@ -448,15 +650,10 @@ export class BotcraftPhysics implements IPhysics {
     // a falling fluid level. Waterlogged and source-like blocks use unrelated metadata.
     const hasFluidLevel = block.type === this.waterId || block.type === this.lavaId;
     if (hasFluidLevel && block.metadata >= 8) {
-      for (const [dx, dz] of [
-        [0, 1],
-        [-1, 0],
-        [0, -1],
-        [1, 0],
-      ]) {
-        const adjBlock = world.getBlock(block.position.offset(dx, 0, dz));
-        const adjUpBlock = world.getBlock(block.position.offset(dx, 1, dz));
-        if ((adjBlock && adjBlock.boundingBox !== "empty") || (adjUpBlock && adjUpBlock.boundingBox !== "empty")) {
+      for (const [dx, dz] of FLOW_DIRECTIONS) {
+        const adjBlock = this.blockAt(world, x + dx, y, z + dz);
+        const adjUpBlock = this.blockAt(world, x + dx, y + 1, z + dz);
+        if ((adjBlock && !adjBlock.emptyBB) || (adjUpBlock && !adjUpBlock.emptyBB)) {
           flow.normalize().translate(0, -6, 0);
           break;
         }
@@ -467,13 +664,21 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   getLiquidHeightPcent(block: Block) {
-    return 1 - (this.getRenderedDepth(block) + 1) / 9;
+    return this.liquidHeightPcentOf(block ? new BlockInfo(block) : null);
+  }
+
+  private liquidHeightPcentOf(block: BlockInfo | null) {
+    return 1 - (this.renderedDepthOf(block) + 1) / 9;
   }
 
   getRenderedDepth(block: Block) {
+    return this.renderedDepthOf(block ? new BlockInfo(block) : null);
+  }
+
+  private renderedDepthOf(block: BlockInfo | null) {
     if (!block) return -1;
     if (this.waterLike.has(block.type)) return 0;
-    if (block.getProperties().waterlogged) return 0;
+    if (block.waterlogged) return 0;
     if (block.type !== this.waterId) return -1;
     const meta = block.metadata;
     return meta >= 8 ? 0 : meta;
@@ -485,12 +690,8 @@ export class BotcraftPhysics implements IPhysics {
     } else if (player.swimming) {
       player.swimming = player.sprinting && player.isInWater;
     } else {
-      const block = world.getBlock(player.pos);
-      player.swimming =
-        player.sprinting &&
-        player.isUnderWater &&
-        block != null &&
-        !!(block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged);
+      const block = this.blockAt(world, player.pos.x, player.pos.y, player.pos.z);
+      player.swimming = player.sprinting && player.isUnderWater && block != null && this.isWaterBlock(block);
     }
   }
 
@@ -677,7 +878,7 @@ export class BotcraftPhysics implements IPhysics {
     const lookY = getLookingVector(player).lookY;
     let shouldAdjust = lookY < 0.0 || player.control.jump;
     if (!shouldAdjust) {
-      const blockAbove = world.getBlock(new Vec3(player.pos.x, player.pos.y + 1.0 - 0.1, player.pos.z));
+      const blockAbove = this.blockAt(world, player.pos.x, player.pos.y + 1.0 - 0.1, player.pos.z);
       shouldAdjust = blockAbove != null && (this.waterId === blockAbove.type || this.waterLike.has(blockAbove.type));
     }
 
@@ -914,11 +1115,12 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   private getBlockJumpFactor(entity: IEntityState, world: World, worldSettings: PhysicsWorldSettings) {
-    const feetBlock = world.getBlock(new Vec3(entity.pos.x, entity.pos.y, entity.pos.z));
+    const feetBlock = this.blockAt(world, entity.pos.x, entity.pos.y, entity.pos.z);
     const feetJumpFactor = this.getKnownJumpFactor(feetBlock?.type, worldSettings);
     if (feetJumpFactor !== 1.0) return feetJumpFactor;
 
-    const supportBlock = world.getBlock(this.getBlockBelowAffectingMovement(entity, world));
+    const below = this.getBlockBelowAffectingMovement(entity, world);
+    const supportBlock = this.blockAt(world, below.x, below.y, below.z);
     return this.getKnownJumpFactor(supportBlock?.type, worldSettings);
   }
 
@@ -1139,7 +1341,12 @@ export class BotcraftPhysics implements IPhysics {
 
         this.handleFallFlyingCollisions(player, previousHorizontalSpeed);
       } else {
-        const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
+        const below = this.getBlockBelowAffectingMovement(player, world);
+        let blockBelow = this.blockAt(world, below.x, below.y, below.z);
+        // only an unloaded position (null) can tell apart from air here, if air has a slipperiness entry.
+        if (blockBelow !== null && blockBelow.maybeUnloaded && this.blockSlipperiness[blockBelow.type] !== undefined) {
+          blockBelow = this.blockOrNullAt(world, below.x, below.y, below.z);
+        }
 
         // deviation. using our stores slipperiness values.
         const blockSlipperiness = blockBelow ? this.blockSlipperiness[blockBelow.type] : undefined;
@@ -1172,7 +1379,7 @@ export class BotcraftPhysics implements IPhysics {
           player.vel.x = math.clamp(-0.15000000596046448, player.vel.x, 0.15000000596046448); // Math.fround(0.15)
           player.vel.z = math.clamp(-0.15000000596046448, player.vel.z, 0.15000000596046448); // Math.fround(0.15)
           player.vel.y = Math.max(-0.15000000596046448, player.vel.y); // Math.fround(0.15)
-          const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
+          const feetBlock = this.blockOrNullAt(world, player.pos.x, player.pos.y, player.pos.z);
           if (feetBlock && (this.scaffoldId === feetBlock.type) !== player.control.sneak) {
             player.vel.y = 0.0;
           }
@@ -1388,7 +1595,7 @@ export class BotcraftPhysics implements IPhysics {
       if (player.control.sneak) {
         player.vel.y = 0.0;
       } else {
-        const blockBelow = world.getBlock(player.pos.offset(0, -0.2, 0));
+        const blockBelow = this.blockAt(world, player.pos.x, player.pos.y + -0.2, player.pos.z);
         let newSpeed = 0.0;
         if (blockBelow != null) {
           if (this.slimeBlockId === blockBelow.type) {
@@ -1413,12 +1620,13 @@ export class BotcraftPhysics implements IPhysics {
     let blockSpeedFactor = 1.0;
     if (this.verGreaterThan("1.15.2") && this.verLessThan("1.21")) {
       const soulSpeed = player.soulSpeed;
-      const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
+      const feetBlock = this.blockAt(world, player.pos.x, player.pos.y, player.pos.z);
       if (feetBlock && (this.honeyblockId === feetBlock.type || (this.soulsandId === feetBlock.type && soulSpeed === 0))) {
         blockSpeedFactor = 0.4;
       }
       if (blockSpeedFactor === 1.0) {
-        const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
+        const below = this.getBlockBelowAffectingMovement(player, world);
+        const blockBelow = this.blockAt(world, below.x, below.y, below.z);
         if (blockBelow && (this.honeyblockId === blockBelow.type || (this.soulsandId === blockBelow.type && soulSpeed === 0))) {
           blockSpeedFactor = 0.4;
         }
@@ -1486,19 +1694,17 @@ export class BotcraftPhysics implements IPhysics {
 
   checkInsideBlocks(player: PlayerState, world: World, worldSettings = new PhysicsWorldSettings(this.data)) {
     const aabb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
-    const [minAABB, maxAABB] = aabb.minAndMaxArrays();
-    const blockPos = new Vec3(0, 0, 0);
-    for (blockPos.y = Math.floor(minAABB[1]); blockPos.y <= Math.floor(maxAABB[1]); ++blockPos.y) {
-      for (blockPos.x = Math.floor(minAABB[0]); blockPos.x <= Math.floor(maxAABB[0]); ++blockPos.x) {
-        for (blockPos.z = Math.floor(minAABB[2]); blockPos.z <= Math.floor(maxAABB[2]); ++blockPos.z) {
-          const block = world.getBlock(blockPos);
+    for (let y = Math.floor(aabb.minY); y <= Math.floor(aabb.maxY); ++y) {
+      for (let x = Math.floor(aabb.minX); x <= Math.floor(aabb.maxX); ++x) {
+        for (let z = Math.floor(aabb.minZ); z <= Math.floor(aabb.maxZ); ++z) {
+          const block = this.blockAt(world, x, y, z);
           if (block == null) continue;
           if (this.webId === block.type) {
             // WebBlock::entityInside
             player.stuckSpeedMultiplier = new Vec3(0.25, 0.05000000074505806, 0.25);
           } else if (this.bubblecolumnId === block.type) {
             const down = !block.metadata;
-            const aboveBlock = world.getBlock(blockPos.offset(0, 1, 0));
+            const aboveBlock = this.blockOrNullAt(world, x, y + 1, z);
             const bubbleDrag =
               aboveBlock?.type === this.airId
                 ? worldSettings.bubbleColumnSurfaceDrag
@@ -1512,10 +1718,10 @@ export class BotcraftPhysics implements IPhysics {
             // Check if sliding down on the side of the block
             if (
               !player.onGround &&
-              player.pos.y <= blockPos.y + 0.9375 - 1e-7 &&
+              player.pos.y <= y + 0.9375 - 1e-7 &&
               player.vel.y < -0.08 &&
-              (Math.abs(blockPos.x + 0.5 - player.pos.x) + 1e-7 > 0.4375 + player.halfWidth ||
-                Math.abs(blockPos.z + 0.5 - player.pos.z) + 1e-7 > 0.4375 + player.halfWidth)
+              (Math.abs(x + 0.5 - player.pos.x) + 1e-7 > 0.4375 + player.halfWidth ||
+                Math.abs(z + 0.5 - player.pos.z) + 1e-7 > 0.4375 + player.halfWidth)
             ) {
               if (player.vel.y < -0.13) {
                 const factor = -0.05 / player.vel.y; // magic number.
@@ -1531,7 +1737,7 @@ export class BotcraftPhysics implements IPhysics {
             player.stuckSpeedMultiplier = new Vec3(0.800000011920929, 0.75, 0.800000011920929); // magic number
           } else if (this.powderSnowId === block.type) {
             // PowderSnowBlock::entityInside
-            const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
+            const feetBlock = this.blockAt(world, player.pos.x, player.pos.y, player.pos.z);
             if (feetBlock && this.powderSnowId === feetBlock.type) {
               player.stuckSpeedMultiplier = new Vec3(0.8999999761581421, 1.5, 0.8999999761581421);
             }
@@ -1542,60 +1748,139 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   collideBoundingBox(world: World, bb: AABB, movement: Vec3, colliders: AABB[] = []): Vec3 {
-    const queryBB = bb.expandTowards(movement);
+    // same box as bb.expandTowards(movement)
+    let qMinX = bb.minX;
+    let qMinY = bb.minY;
+    let qMinZ = bb.minZ;
+    let qMaxX = bb.maxX;
+    let qMaxY = bb.maxY;
+    let qMaxZ = bb.maxZ;
+    if (movement.x < 0.0) qMinX += movement.x;
+    else if (movement.x > 0.0) qMaxX += movement.x;
+    if (movement.y < 0.0) qMinY += movement.y;
+    else if (movement.y > 0.0) qMaxY += movement.y;
+    if (movement.z < 0.0) qMinZ += movement.z;
+    else if (movement.z > 0.0) qMaxZ += movement.z;
 
-    const combinedColliders = [...colliders];
-
-    const blockCollisions = this.getSurroundingBBs(queryBB, world);
-    for (const block of blockCollisions) {
-      combinedColliders.push(block);
+    // passed colliders first, then block shapes, as flat [minX, minY, minZ, maxX, maxY, maxZ] runs.
+    const flat = this.colliderScratch;
+    let n = 0;
+    for (const c of colliders) {
+      flat[n++] = c.minX;
+      flat[n++] = c.minY;
+      flat[n++] = c.minZ;
+      flat[n++] = c.maxX;
+      flat[n++] = c.maxY;
+      flat[n++] = c.maxZ;
     }
+    n = this.collectSurroundingShapes(world, qMinX, qMinY, qMinZ, qMaxX, qMaxY, qMaxZ, true, flat, n);
 
-    // console.log('queryBB', queryBB, combinedColliders.length)
-
-    return this.collideWithShapes(movement, bb, combinedColliders);
-  }
-
-
-  private collideWithShapes(movement: Vec3, bb: AABB, colliders: AABB[] = []): Vec3 {
-    if (colliders.length === 0) {
+    if (n === 0) {
       return movement;
     }
+    return this.collideWithFlatShapes(movement, bb, flat, n);
+  }
 
+  /** Entity::collide axis order (y, then the larger of x/z, then the other) over a flat collider buffer holding `n` values. */
+  private collideWithFlatShapes(movement: Vec3, bb: AABB, flat: number[], n: number): Vec3 {
     let dx = movement.x;
     let dy = movement.y;
     let dz = movement.z;
 
+    let minX = bb.minX;
+    let minY = bb.minY;
+    let minZ = bb.minZ;
+    let maxX = bb.maxX;
+    let maxY = bb.maxY;
+    let maxZ = bb.maxZ;
+
     if (dy !== 0.0) {
-      dy = this.shapeCollide(1, bb, colliders, dy);
+      dy = this.flatShapeCollide(1, minX, minY, minZ, maxX, maxY, maxZ, flat, n, dy);
       if (dy !== 0.0) {
-        bb = bb.moveCoords(0, dy, 0);
+        minY += dy;
+        maxY += dy;
       }
     }
 
     const prioritizeZ = Math.abs(dx) < Math.abs(dz);
     if (prioritizeZ && dz !== 0.0) {
-      dz = this.shapeCollide(2, bb, colliders, dz);
+      dz = this.flatShapeCollide(2, minX, minY, minZ, maxX, maxY, maxZ, flat, n, dz);
       if (dz !== 0.0) {
-        bb = bb.moveCoords(0, 0, dz);
+        minZ += dz;
+        maxZ += dz;
       }
     }
 
     if (dx !== 0.0) {
-      dx = this.shapeCollide(0, bb, colliders, dx);
+      dx = this.flatShapeCollide(0, minX, minY, minZ, maxX, maxY, maxZ, flat, n, dx);
       if (!prioritizeZ && dx !== 0.0) {
-        bb = bb.moveCoords(dx, 0, 0);
+        minX += dx;
+        maxX += dx;
       }
     }
 
     if (!prioritizeZ && dz !== 0.0) {
-      dz = this.shapeCollide(2, bb, colliders, dz);
+      dz = this.flatShapeCollide(2, minX, minY, minZ, maxX, maxY, maxZ, flat, n, dz);
     }
-
-    // console.log('shift', dx, dy, dz)
 
     return new Vec3(dx, dy, dz);
   }
+
+  /** shapeCollide + voxelShapeCollide over a flat collider buffer. */
+  private flatShapeCollide(
+    axis: number,
+    minX: number,
+    minY: number,
+    minZ: number,
+    maxX: number,
+    maxY: number,
+    maxZ: number,
+    flat: number[],
+    n: number,
+    movement: number,
+  ): number {
+    if (Math.abs(movement) < COLLISION_EPSILON) {
+      return 0.0;
+    }
+
+    // bb extents on the swept axis (a0) and the two others (a1, a2), and the matching buffer offsets.
+    let min0: number, max0: number, min1: number, max1: number, min2: number, max2: number;
+    let o0: number, o1: number, o2: number;
+    if (axis === 0) {
+      min0 = minX; max0 = maxX; min1 = minY; max1 = maxY; min2 = minZ; max2 = maxZ;
+      o0 = 0; o1 = 1; o2 = 2;
+    } else if (axis === 1) {
+      min0 = minY; max0 = maxY; min1 = minZ; max1 = maxZ; min2 = minX; max2 = maxX;
+      o0 = 1; o1 = 2; o2 = 0;
+    } else {
+      min0 = minZ; max0 = maxZ; min1 = minX; max1 = maxX; min2 = minY; max2 = maxY;
+      o0 = 2; o1 = 0; o2 = 1;
+    }
+
+    let adjustedMovement = movement;
+    for (let i = 0; i < n; i += 6) {
+      const overlapsAxis1 = max1 - COLLISION_EPSILON > flat[i + o1] && min1 + COLLISION_EPSILON < flat[i + 3 + o1];
+      const overlapsAxis2 = max2 - COLLISION_EPSILON > flat[i + o2] && min2 + COLLISION_EPSILON < flat[i + 3 + o2];
+      if (!overlapsAxis1 || !overlapsAxis2) {
+        continue;
+      }
+
+      if (movement > 0) {
+        const gap = flat[i + o0] - max0;
+        if (gap >= -COLLISION_EPSILON) {
+          adjustedMovement = Math.min(adjustedMovement, gap);
+        }
+      } else {
+        const gap = flat[i + 3 + o0] - min0;
+        if (gap <= COLLISION_EPSILON) {
+          adjustedMovement = Math.max(adjustedMovement, gap);
+        }
+      }
+    }
+
+    return adjustedMovement;
+  }
+
 
   shapeCollide(axis: number, bb: AABB, colliders: AABB[], movement: number): number {
     if (Math.abs(movement) < COLLISION_EPSILON) {
@@ -1751,7 +2036,7 @@ export class BotcraftPhysics implements IPhysics {
       return false;
     }
 
-    const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
+    const feetBlock = this.blockAt(world, player.pos.x, player.pos.y, player.pos.z);
     // TODO: if trapdoor AND below block is a ladder with the same facing property
     // as the trapdoor then the trapdoor is a climbable block too
 
@@ -1760,24 +2045,34 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   getSupportingBlockPos(world: World, feetSliceAABB: AABB): Vec3 | null {
-    const aabb = feetSliceAABB;
-    const [minAABB, maxAABB] = aabb.minAndMaxArrays();
-    const blockPos = new Vec3(0, 0, 0);
+    const { minX, minY, minZ, maxX, maxY, maxZ } = feetSliceAABB;
+    // AABB.getCenter() of the slice, then of each colliding shape: lerp(0.5, min, max)
+    const centerX = minX + 0.5 * (maxX - minX);
+    const centerY = minY + 0.5 * (maxY - minY);
+    const centerZ = minZ + 0.5 * (maxZ - minZ);
     let minDistance = Infinity;
     let ret = null;
-    for (blockPos.y = Math.floor(minAABB[1] - 1); blockPos.y <= Math.floor(maxAABB[1]); ++blockPos.y) {
-      for (blockPos.x = Math.floor(minAABB[0]); blockPos.x <= Math.floor(maxAABB[0]); ++blockPos.x) {
-        for (blockPos.z = Math.floor(minAABB[2]); blockPos.z <= Math.floor(maxAABB[2]); ++blockPos.z) {
-          const block = world.getBlock(blockPos);
-          if (block == null || block.boundingBox === "empty") continue;
-          // console.log('checking block', block.name, block.position)
+    for (let y = Math.floor(minY - 1); y <= Math.floor(maxY); ++y) {
+      for (let x = Math.floor(minX); x <= Math.floor(maxX); ++x) {
+        for (let z = Math.floor(minZ); z <= Math.floor(maxZ); ++z) {
+          const block = this.blockAt(world, x, y, z);
+          if (block == null || block.emptyBB) continue;
           for (const shape of block.shapes) {
-            const bb1 = AABB.fromShape(shape).translateVec(blockPos);
-            if (aabb.collides(bb1)) {
-              const distance = aabb.getCenter().distanceTo(bb1.getCenter());
+            const sMinX = shape[0] + x;
+            const sMinY = shape[1] + y;
+            const sMinZ = shape[2] + z;
+            const sMaxX = shape[3] + x;
+            const sMaxY = shape[4] + y;
+            const sMaxZ = shape[5] + z;
+            // AABB.collides
+            if (minX <= sMaxX && maxX >= sMinX && minY <= sMaxY && maxY >= sMinY && minZ <= sMaxZ && maxZ >= sMinZ) {
+              const dx = sMinX + 0.5 * (sMaxX - sMinX) - centerX;
+              const dy = sMinY + 0.5 * (sMaxY - sMinY) - centerY;
+              const dz = sMinZ + 0.5 * (sMaxZ - sMinZ) - centerZ;
+              const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
               if (distance < minDistance) {
                 minDistance = distance;
-                ret = blockPos.clone();
+                ret = new Vec3(x, y, z);
               }
             }
           }
@@ -1789,7 +2084,23 @@ export class BotcraftPhysics implements IPhysics {
 
   simulate(entity: EPhysicsCtx, world: World): IEntityState {
     entity.state.attributes ??= {}
-    this.physicsTick(entity, world);
+    const { memoGen, memoX, memoY, memoZ } = this;
+    if (this.lastMemoGen === 0x7fffffff) {
+      this.memoStamps.fill(0);
+      this.lastMemoGen = 0;
+    }
+    this.memoGen = ++this.lastMemoGen;
+    this.memoX = Math.floor(entity.state.pos.x);
+    this.memoY = Math.floor(entity.state.pos.y);
+    this.memoZ = Math.floor(entity.state.pos.z);
+    try {
+      this.physicsTick(entity, world);
+    } finally {
+      this.memoGen = memoGen;
+      this.memoX = memoX;
+      this.memoY = memoY;
+      this.memoZ = memoZ;
+    }
     entity.state.age++;
     return entity.state;
   }

@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import block, { Block as PBlock } from "prismarine-block";
 import { Vec3 } from "vec3";
+import { BotcraftPhysics } from "../../../src/physics/engines";
 import { ControlStateHandler } from "../../../src/physics/player";
 import { PlayerState } from "../../../src/physics/states/playerState";
 import { createBotcraftPlayerRig, loadMcData } from "./botcraftTestSupport";
@@ -302,8 +303,8 @@ export const scenarios: Scenario[] = [
       s.attributes["minecraft:movement_speed"] = {
         value: 0.10000000149011612,
         modifiers: [{ uuid: "662a6b8d-da3e-4c1c-8813-96ea6097278d", amount: 0.30000001192092896, operation: 2 }],
-      } as any;
-      const effects: any = {};
+      } as PlayerState["attributes"][string];
+      const effects: PlayerState["effects"] = [];
       effects[mcData.effectsByName.Speed.id] = { id: mcData.effectsByName.Speed.id, amplifier: 1, duration: 1000 };
       effects[mcData.effectsByName.JumpBoost.id] = { id: mcData.effectsByName.JumpBoost.id, amplifier: 0, duration: 1000 };
       s.effects = effects;
@@ -399,14 +400,15 @@ export function prepareScenario(version: string, scenario: Scenario): PreparedSc
 }
 
 export type WorldMode = "getBlock" | "stateId";
+export type SimWorld = Parameters<BotcraftPhysics["simulate"]>[1];
 
 export function runScenario(prepared: PreparedScenario, mode: WorldMode): TickRecord[] {
   const rig = prepared.makeRig();
-  const world = mode === "stateId" ? prepared.world : prepared.world.blockOnly();
+  const world: SimWorld = mode === "stateId" ? prepared.world : prepared.world.blockOnly();
   const out: TickRecord[] = [];
   for (let t = 0; t < prepared.ticks; t++) {
     prepared.controls(t, rig.playerState);
-    rig.physics.simulate(rig.playerCtx, world as any);
+    rig.physics.simulate(rig.playerCtx, world);
     out.push(recordTick(rig.playerState));
   }
   const speedAttr = rig.playerState.attributes[rig.physics.movementSpeedAttribute];
