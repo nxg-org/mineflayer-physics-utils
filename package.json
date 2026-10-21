@@ -19,7 +19,8 @@
         "lint": "eslint src --ext .ts,.tsx",
         "build": "tsc",
         "prepublishOnly": "npm run build",
-        "test": "mocha --require ts-node/register --recursive tests/**/*.test.ts"
+        "test": "mocha --require ts-node/register --recursive tests/**/*.test.ts",
+        "bench": "ts-node --transpile-only tests/bench/botcraftTick.bench.ts"
     },
     "dependencies": {
         "@nxg-org/mineflayer-util-plugin": "^1.8.2"
