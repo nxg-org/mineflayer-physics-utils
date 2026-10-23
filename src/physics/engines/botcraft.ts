@@ -41,6 +41,36 @@ function extractAttribute(ctx: IPhysics, genericName: string) {
 }
 
 /**
+ * Comparable form of an attribute name: mineflayer stores attributes under the
+ * packet's names, which vary by version ("generic.movementSpeed",
+ * "minecraft:generic.movement_speed", "generic.movement_speed",
+ * "player.sneaking_speed", "sneaking_speed", ...).
+ */
+function normalizeAttributeName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/^minecraft:/, "")
+    .replace(/^[a-z]+\./, "")
+    .replace(/_/g, "");
+}
+
+/**
+ * Since 1.20.5 attribute ids are mapped to names through protocol data. Some
+ * minecraft-data releases miss attributes in that mapping, which shifts every
+ * later id onto the wrong name (pc 1.21.x before PrismarineJS/minecraft-data#1254:
+ * the movement speed shows up as "generic.scale"). A mapping with fewer
+ * entries than the version's attribute list is not trusted.
+ */
+export function attributeNamesTrusted(mcData: md.IndexedData) {
+  const types: Record<string, unknown> = (mcData.protocol as { play?: { toClient?: { types?: Record<string, unknown> } } })?.play?.toClient?.types ?? {};
+  const packet = types.packet_entity_update_attributes ?? types.packet_update_attributes;
+  const mapping = JSON.stringify(packet ?? null).match(/"mappings":\{([^}]*)\}/);
+  if (mapping == null) return true; // string keys
+  const entries = (mapping[1].match(/":/g) ?? []).length;
+  return entries >= (mcData.attributesArray?.length ?? 0);
+}
+
+/**
  * Looking at this code, it's too specified towards players.
  *
  * I will eventually split this code into PlayerState and bot.entityState, where bot.entityState contains fewer controls.
@@ -53,6 +83,10 @@ export class BotcraftPhysics implements IPhysics {
   public movementEfficiencyAttribute: string;
   public waterMovementEfficiencyAttribute: string;
   public stepHeightAttribute: string;
+  /** false when the protocol data's attribute names can't be trusted (see attributeNamesTrusted) */
+  public readonly useServerAttributes: boolean;
+  private readonly attributeKeyCache: Record<string, string | undefined> = {};
+  private readonly canonicalAttributeKeys: Record<string, string | null> = {};
   public supportFeature: ReturnType<typeof makeSupportFeature>;
   public blockSlipperiness: { [name: string]: number };
 
@@ -84,6 +118,7 @@ export class BotcraftPhysics implements IPhysics {
     this.jumpStrengthAttribute = extractAttribute(this, "jumpStrength");
     this.waterMovementEfficiencyAttribute = extractAttribute(this, "waterMovementEfficiency");
     this.stepHeightAttribute = extractAttribute(this, "stepHeight");
+    this.useServerAttributes = attributeNamesTrusted(mcData);
 
     this.blockSlipperiness = {};
     this.slimeBlockId = blocksByName.slime_block ? blocksByName.slime_block.id : blocksByName.slime.id;
@@ -650,7 +685,7 @@ export class BotcraftPhysics implements IPhysics {
         sneakCoefficient = 0.3 + player.swiftSneak * 0.15;
         sneakCoefficient = Math.min(Math.max(0.0, sneakCoefficient), 1.0);
       } else {
-        sneakCoefficient = player.attributes?.sneakingSpeed?.value ?? 0.3; // TODO: this shouldn't be happening!
+        sneakCoefficient = this.getStateAttributeValue(player, "sneakingSpeed") ?? 0.3;
       }
       heading.forward *= sneakCoefficient;
       heading.strafe *= sneakCoefficient;
@@ -791,29 +826,22 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   /**
-   * TODO: almost certainly unfinished.
+   * The sprint speed modifier is applied by getMovementSpeedAttribute from the
+   * sprinting flag, so this only sets the flag. (It used to replace the speed
+   * attribute with a fresh one based on the double 0.1, which is not the
+   * player's 0.1F base and changed the float32 sprint speed from vanilla's
+   * 0.1300000101327896 to 0.12999999523162842 after the first call.)
    * @param player
    * @param value
    */
   setSprinting(ctx: EPhysicsCtx, value: boolean) {
     const player = ctx.state as PlayerState;
-    let attr = player.attributes[this.movementSpeedAttribute];
-    if (attr != null) attributes.deleteAttributeModifier(attr, ctx.worldSettings.sprintingUUID);
-    attr = attributes.createAttributeValue(ctx.worldSettings.playerSpeed);
-    if (value) {
-      attributes.addAttributeModifier(attr, {
-        uuid: ctx.worldSettings.sprintingUUID,
-        amount: ctx.worldSettings.sprintSpeed,
-        operation: 2,
-      });
-    }
 
     // potential deviation from vanilla.
     // if (value != player.sprinting) {
     //   player.sprintTriggerTime = ctx.worldSettings.sprintTimeTriggerCooldown;
     // }
 
-    player.attributes[this.movementSpeedAttribute] = attr;
     player.sprinting = value;
   }
 
@@ -896,7 +924,7 @@ export class BotcraftPhysics implements IPhysics {
             player.vel.z += offsetZ
           }
         } else {
-          const value = Math.fround(entity.attributes[this.jumpStrengthAttribute]?.value ?? Math.fround(0.42));
+          const value = Math.fround(this.getStateAttributeValue(entity, "jumpStrength") ?? Math.fround(0.42));
           const jumpPower = Math.fround(value * Math.fround(blockJumpFactor) + jumpBoost);
           if (jumpPower > 1e-5) {
             player.vel.y = Math.max(jumpPower, player.vel.y);
@@ -949,17 +977,63 @@ export class BotcraftPhysics implements IPhysics {
    * @param entity
    * @returns
    */
+  /**
+   * The state's attribute (as sent by the server) for an attribute name from
+   * minecraft-data's attributes.json, e.g. "movementSpeed", whatever key
+   * mineflayer stored it under.
+   */
+  getStateAttribute(state: IEntityState, name: string): attributes.Attribute | undefined {
+    const attrs = state.attributes;
+    if (attrs == null) return undefined;
+    // the engine's own key ("minecraft:movement_speed") never comes from the id mapping
+    let canonical = this.canonicalAttributeKeys[name];
+    if (canonical === undefined) canonical = this.canonicalAttributeKeys[name] = extractAttribute(this, name);
+    if (canonical != null && attrs[canonical] != null) return attrs[canonical];
+    if (!this.useServerAttributes) return undefined;
+    const cached = this.attributeKeyCache[name];
+    if (cached !== undefined && attrs[cached] != null) return attrs[cached];
+    const wanted = name.toLowerCase();
+    for (const key in attrs) {
+      if (normalizeAttributeName(key) === wanted) {
+        this.attributeKeyCache[name] = key;
+        return attrs[key];
+      }
+    }
+    return undefined;
+  }
+
+  /** Full value (with modifiers) of a state attribute, or undefined if the server didn't send it. */
+  getStateAttributeValue(state: IEntityState, name: string): number | undefined {
+    const attr = this.getStateAttribute(state, name);
+    return attr == null ? undefined : attributes.getAttributeValue(attr);
+  }
+
  getMovementSpeedAttribute(entity: EPhysicsCtx) {
     const isSprinting = entity.state instanceof PlayerState && entity.state.sprinting;
     let attribute;
     
-    // In 1.21+, this should map to 'minecraft:movement_speed'
-    if (entity.state.attributes && entity.state.attributes[this.movementSpeedAttribute]) {
-      attribute = entity.state.attributes[this.movementSpeedAttribute];
-    } else {
-      // Create fallback if server hasn't sent it
-      attribute = attributes.createAttributeValue(Math.fround(entity.worldSettings.playerSpeed));
+    const serverAttribute = this.getStateAttribute(entity.state, "movementSpeed");
+    if (serverAttribute != null) {
+      // state attributes are input only (and shared with the bot): work on a copy
+      attribute = attributes.copyAttributeValue(serverAttribute);
+      // The server's modifiers already include potion effects. Sprinting is
+      // client-side: drop any sprint modifier it sent and apply our own.
+      attribute = attributes.deleteAttributeModifier(attribute, "minecraft:sprinting");
+      for (const mod of attribute.modifiers.slice()) {
+        if (mod.uuid.toLowerCase() === entity.worldSettings.sprintingUUID) attributes.deleteAttributeModifier(attribute, mod.uuid);
+      }
+      if (isSprinting) {
+        attribute = attributes.addAttributeModifier(attribute, {
+          uuid: entity.worldSettings.sprintingUUID,
+          amount: Math.fround(0.3),
+          operation: 2,
+        });
+      }
+      return Math.fround(attributes.getAttributeValue(attribute));
     }
+
+    // Fallback if the server hasn't sent it
+    attribute = attributes.createAttributeValue(Math.fround(entity.worldSettings.playerSpeed));
 
     // --- SPRINTING ---
     attribute = attributes.deleteAttributeModifier(attribute, entity.worldSettings.sprintingUUID);
@@ -1033,7 +1107,7 @@ export class BotcraftPhysics implements IPhysics {
           const depthStrider = player.depthStrider;
           depthStriderMult = Math.min(depthStrider, 3) / 3;
         } else {
-          depthStriderMult = player.attributes[this.waterMovementEfficiencyAttribute]?.value ?? 0; // random value as default
+          depthStriderMult = this.getStateAttributeValue(player, "waterMovementEfficiency") ?? 0;
         }
 
         if (!player.onGround) {
@@ -1227,7 +1301,7 @@ export class BotcraftPhysics implements IPhysics {
 
     let maxUpStep = ctx.stepHeight;
     if (!this.verLessThan("1.20.5")) {
-      maxUpStep = player.attributes[this.stepHeightAttribute]?.value ?? ctx.stepHeight;
+      maxUpStep = this.getStateAttributeValue(player, "stepHeight") ?? ctx.stepHeight;
     }
 
     // const playerAABB = player.getBB();
@@ -1426,7 +1500,7 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     if (this.verGreaterThan("1.20.6")) {
-      const factor = player.attributes[this.movementEfficiencyAttribute]?.value ?? 1
+      const factor = this.getStateAttributeValue(player, "movementEfficiency") ?? 1
       blockSpeedFactor = blockSpeedFactor + factor * (1 - blockSpeedFactor);
     }
 
