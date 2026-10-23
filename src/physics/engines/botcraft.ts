@@ -791,29 +791,22 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   /**
-   * TODO: almost certainly unfinished.
+   * The sprint speed modifier is applied by getMovementSpeedAttribute from the
+   * sprinting flag, so this only sets the flag. (It used to replace the speed
+   * attribute with a fresh one based on the double 0.1, which is not the
+   * player's 0.1F base and changed the float32 sprint speed from vanilla's
+   * 0.1300000101327896 to 0.12999999523162842 after the first call.)
    * @param player
    * @param value
    */
   setSprinting(ctx: EPhysicsCtx, value: boolean) {
     const player = ctx.state as PlayerState;
-    let attr = player.attributes[this.movementSpeedAttribute];
-    if (attr != null) attributes.deleteAttributeModifier(attr, ctx.worldSettings.sprintingUUID);
-    attr = attributes.createAttributeValue(ctx.worldSettings.playerSpeed);
-    if (value) {
-      attributes.addAttributeModifier(attr, {
-        uuid: ctx.worldSettings.sprintingUUID,
-        amount: ctx.worldSettings.sprintSpeed,
-        operation: 2,
-      });
-    }
 
     // potential deviation from vanilla.
     // if (value != player.sprinting) {
     //   player.sprintTriggerTime = ctx.worldSettings.sprintTimeTriggerCooldown;
     // }
 
-    player.attributes[this.movementSpeedAttribute] = attr;
     player.sprinting = value;
   }
 
@@ -955,7 +948,8 @@ export class BotcraftPhysics implements IPhysics {
     
     // In 1.21+, this should map to 'minecraft:movement_speed'
     if (entity.state.attributes && entity.state.attributes[this.movementSpeedAttribute]) {
-      attribute = entity.state.attributes[this.movementSpeedAttribute];
+      // state attributes are input only (and shared with the bot): work on a copy
+      attribute = attributes.copyAttributeValue(entity.state.attributes[this.movementSpeedAttribute]);
     } else {
       // Create fallback if server hasn't sent it
       attribute = attributes.createAttributeValue(Math.fround(entity.worldSettings.playerSpeed));

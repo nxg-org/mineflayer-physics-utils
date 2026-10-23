@@ -31,7 +31,8 @@ describe("World movement simulation", () => {
 
     expect(rig.fakePlayer.entity.position.x).toBe(0);
     expect(rig.fakePlayer.entity.position.y).toBe(groundLevel);
-    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-2.4694803842498265, 8);
+    // vanilla float32 sprint speed 0.1300000101327896 (was 0.12999999523162842 after setSprinting)
+    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-2.4694806673123386, 8);
   });
 
   it("supports sprint-jumping", () => {
@@ -57,7 +58,7 @@ describe("World movement simulation", () => {
     }
 
     expect(rig.fakePlayer.entity.position.y).toEqual(groundLevel);
-    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-4.377196061052951, 8);
+    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-4.377196304947304, 8);
   });
 
   it("matches walking fall-speed travel distance", () => {

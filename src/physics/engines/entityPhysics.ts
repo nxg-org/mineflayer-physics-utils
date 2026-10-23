@@ -608,8 +608,8 @@ export class EntityPhysics implements IPhysics {
       if (entity.state.onGround && blockUnder && blockUnder.type !== entity.ctx.data.blocksByName.air.id) {
         let playerSpeedAttribute;
         if (entity.state.attributes && entity.state.attributes[this.movementSpeedAttribute]) {
-          // Use server-side player attributes
-          playerSpeedAttribute = entity.state.attributes[this.movementSpeedAttribute];
+          // Use server-side player attributes (on a copy: state attributes are input only)
+          playerSpeedAttribute = attributes.copyAttributeValue(entity.state.attributes[this.movementSpeedAttribute]);
         } else {
           // Create an attribute if the player does not have it
           //TODO: Generalize to all entities.
