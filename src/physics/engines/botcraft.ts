@@ -515,7 +515,7 @@ export class BotcraftPhysics implements IPhysics {
     // moved into AiStep since it's tied to player behavior. Strictly, is Player::updateSwimming.
     this.updateSwimming(player, world);
 
-    this.inputsToCrouch(ctx, heading, world);
+    const sneakCoefficient = this.inputsToCrouch(ctx, heading, world);
     this.inputsToSprint(ctx, heading, world);
     this.inputsToFly(ctx, heading, world);
 
@@ -559,8 +559,17 @@ export class BotcraftPhysics implements IPhysics {
       this.inputsToJump(player, world, ctx.worldSettings);
 
       // TODO: properly implement heading handler. forward-axis is forward, left-axis = strafe. weird naming.
-      heading.forward *= 0.98;
-      heading.strafe *= 0.98;
+      if (this.verGreaterThan("1.21.4")) {
+        this.modifyInput(player, heading, sneakCoefficient);
+      } else {
+        // using an item slows the input itself (before any normalization), not the acceleration
+        if (player.isUsingItem) {
+          heading.forward *= Math.fround(0.2);
+          heading.strafe *= Math.fround(0.2);
+        }
+        heading.forward *= 0.98;
+        heading.strafe *= 0.98;
+      }
       // player->inputs.forward_axis *= 0.98f;
       // player->inputs.left_axis *= 0.98f;
 
@@ -608,7 +617,67 @@ export class BotcraftPhysics implements IPhysics {
 
   }
 
-  private inputsToCrouch(ctx: EPhysicsCtx, heading: Heading, world: World) {
+  /**
+   * LocalPlayer::modifyInput (1.21.5+), applied to KeyboardInput's normalized
+   * move vector. Everything is float math, like the client's Vec2. Checked bit
+   * for bit against the 1.21.11 client for every key combination, sneaking and
+   * using an item.
+   * @param sneakCoefficient the sneaking speed when moving slowly, else null
+   */
+  private modifyInput(player: PlayerState, heading: Heading, sneakCoefficient: number | null) {
+    const f = Math.fround;
+    let x = f(heading.strafe);
+    let y = f(heading.forward);
+
+    // KeyboardInput::tick: new Vec2(left, forward).normalized()
+    let length = f(Math.sqrt(f(f(x * x) + f(y * y))));
+    if (length < f(1.0e-4)) {
+      x = 0;
+      y = 0;
+    } else {
+      x = f(x / length);
+      y = f(y / length);
+    }
+
+    if (f(f(x * x) + f(y * y)) !== 0) {
+      x = f(x * f(0.98));
+      y = f(y * f(0.98));
+      if (player.isUsingItem) {
+        // UseEffects.speedMultiplier: 0.2 unless the item overrides it (1.21.11+)
+        x = f(x * f(0.2));
+        y = f(y * f(0.2));
+      }
+      if (sneakCoefficient != null) {
+        const s = f(sneakCoefficient);
+        x = f(x * s);
+        y = f(y * s);
+      }
+
+      // LocalPlayer::modifyInputSpeedForSquareMovement
+      length = f(Math.sqrt(f(f(x * x) + f(y * y))));
+      if (length > 0) {
+        const inverse = f(1.0 / length);
+        const unitX = f(x * inverse);
+        const unitY = f(y * inverse);
+        const absX = Math.abs(unitX);
+        const absY = Math.abs(unitY);
+        const ratio = absY > absX ? f(absX / absY) : f(absY / absX);
+        const distanceToUnitSquare = f(Math.sqrt(f(1.0 + f(ratio * ratio))));
+        const scale = Math.min(f(length * distanceToUnitSquare), 1.0);
+        x = f(unitX * scale);
+        y = f(unitY * scale);
+      }
+    }
+
+    heading.strafe = x;
+    heading.forward = y;
+  }
+
+  /**
+   * @returns the sneaking speed when moving slowly, else null. Before 1.21.5 it
+   * is applied to the heading here; from 1.21.5 on, modifyInput applies it.
+   */
+  private inputsToCrouch(ctx: EPhysicsCtx, heading: Heading, world: World): number | null {
     const player = ctx.state as PlayerState;
     if (this.verGreaterThan("1.13.2")) {
       const sneakBb = getCollider(PlayerPoses.SNEAKING, player.pos);
@@ -652,9 +721,13 @@ export class BotcraftPhysics implements IPhysics {
       } else {
         sneakCoefficient = player.attributes?.sneakingSpeed?.value ?? 0.3; // TODO: this shouldn't be happening!
       }
-      heading.forward *= sneakCoefficient;
-      heading.strafe *= sneakCoefficient;
+      if (!this.verGreaterThan("1.21.4")) {
+        heading.forward *= sneakCoefficient;
+        heading.strafe *= sneakCoefficient;
+      }
+      return sneakCoefficient;
     }
+    return null;
   }
 
   private isSwimmingAndNotFlying(ctx: EPhysicsCtx, world: World): boolean {
@@ -1716,10 +1789,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   applyInputs(inputStrength: number, player: PlayerState) {
-    // Add slowdown when using items (like food)
-    if (player.isUsingItem) {
-      inputStrength *= Math.fround(0.2);
-    }
+    // (the item-use slowdown is applied to the heading in localPlayerAIStep)
 
     // Use flySpeed for horizontal movement when flying
     if (player.flying) {
