@@ -18,6 +18,7 @@ import { IEntityState } from "../states";
 import { IPhysics } from "./IPhysics";
 import { PlayerPoses, PlayerState, convInpToAxes, getCollider } from "../states";
 import { PhysicsWorldSettings } from "../settings";
+import { getHorseBlockBelowAffectingMovementPos } from "../settings/horseBlockSupport";
 
 import type { world } from "prismarine-world"
 
@@ -936,12 +937,16 @@ export class BotcraftPhysics implements IPhysics {
     return player.sprinting ? Math.fround(0.025999999) : Math.fround(0.02);
   }
 
+  /**
+   * Entity::getBlockPosBelowThatAffectsMyMovement, i.e. getOnPos(0.500001F):
+   * the supporting block's column at floor(y - 0.500001F), unless the
+   * supporting block is a fence, wall or fence gate. So standing on a slab
+   * over ice gives ice friction, like vanilla.
+   */
   private getBlockBelowAffectingMovement(entity: IEntityState, world: World) {
-    if (entity.supportingBlockPos != null) {
-      return entity.supportingBlockPos //.offset(0, -0.500001, 0);
-    } else {
-      return entity.pos.offset(0, -0.500001, 0);
-    }
+    return getHorseBlockBelowAffectingMovementPos(this.data, entity.pos, entity.pos.y, entity.supportingBlockPos, (pos) =>
+      world.getBlock(pos),
+    );
   }
 
   /**
@@ -1347,32 +1352,21 @@ export class BotcraftPhysics implements IPhysics {
 
       player.onGround = groundedByCollision;
       if (player.onGround || shouldCheckStandingSupport) {
-        const halfWidth = player.halfWidth;
-        const feetSliceAABB = new AABB(
-          player.pos.x - halfWidth,
-          player.pos.y,
-          player.pos.z - halfWidth,
-          player.pos.x + halfWidth,
-          player.pos.y + 1,
-          player.pos.z + halfWidth
-        );
-        const supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB);
-        // console.log("sBlockPos", feetSliceAABB, supportingBlockPos);
-        if (supportingBlockPos != null || player.onGroundWithoutSupportingBlock) {
-          player.supportingBlockPos = supportingBlockPos;
-        } else {
-
-          player.supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB.translate(-movement.x, 0.0, -movement.z));
+        // Entity::checkSupportingBlock: a 1e-6 thick slice just below the feet.
+        const bb = player.getBB();
+        const feetSliceAABB = new AABB(bb.minX, bb.minY - 1.0e-6, bb.minZ, bb.maxX, bb.minY, bb.maxZ);
+        let supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB, player.pos);
+        if (supportingBlockPos == null && !player.onGroundWithoutSupportingBlock) {
+          supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB.translate(-movement.x, 0.0, -movement.z), player.pos);
         }
+        player.supportingBlockPos = supportingBlockPos;
+        player.onGroundWithoutSupportingBlock = supportingBlockPos == null;
 
         if (!player.onGround && player.supportingBlockPos != null) {
           player.onGround = true;
         }
-        // unnecessary due to it being a getter.
-        //  player->on_ground_without_supporting_block = !player->supporting_block_pos.has_value();
       } else {
-        // player->on_ground_without_supporting_block = false;
-        // player->supporting_block_pos = std::optional<Position>();
+        player.onGroundWithoutSupportingBlock = false;
         player.supportingBlockPos = null;
       }
     }
@@ -1759,27 +1753,38 @@ export class BotcraftPhysics implements IPhysics {
     return feetBlock != null && (this.vineId === feetBlock.type || this.ladderId === feetBlock.type || this.scaffoldId === feetBlock.type);
   }
 
-  getSupportingBlockPos(world: World, feetSliceAABB: AABB): Vec3 | null {
-    const aabb = feetSliceAABB;
-    const [minAABB, maxAABB] = aabb.minAndMaxArrays();
+  /**
+   * CollisionGetter::findSupportingBlock: of the blocks whose collision shape
+   * overlaps `box` (strictly, like BlockCollisions), the one whose center is
+   * closest to the entity's position. Ties go to the greater position in
+   * BlockPos order (y, then z, then x).
+   */
+  getSupportingBlockPos(world: World, box: AABB, entityPos: Vec3): Vec3 | null {
     const blockPos = new Vec3(0, 0, 0);
-    let minDistance = Infinity;
-    let ret = null;
-    for (blockPos.y = Math.floor(minAABB[1] - 1); blockPos.y <= Math.floor(maxAABB[1]); ++blockPos.y) {
-      for (blockPos.x = Math.floor(minAABB[0]); blockPos.x <= Math.floor(maxAABB[0]); ++blockPos.x) {
-        for (blockPos.z = Math.floor(minAABB[2]); blockPos.z <= Math.floor(maxAABB[2]); ++blockPos.z) {
+    let bestDistance = Number.MAX_VALUE;
+    let ret: Vec3 | null = null;
+    // one extra block around the box, like BlockCollisions, for shapes taller than a block (fences, walls)
+    for (blockPos.y = Math.floor(box.minY - 1e-7) - 1; blockPos.y <= Math.floor(box.maxY + 1e-7) + 1; ++blockPos.y) {
+      for (blockPos.z = Math.floor(box.minZ - 1e-7) - 1; blockPos.z <= Math.floor(box.maxZ + 1e-7) + 1; ++blockPos.z) {
+        for (blockPos.x = Math.floor(box.minX - 1e-7) - 1; blockPos.x <= Math.floor(box.maxX + 1e-7) + 1; ++blockPos.x) {
           const block = world.getBlock(blockPos);
           if (block == null || block.boundingBox === "empty") continue;
-          // console.log('checking block', block.name, block.position)
+          let collides = false;
           for (const shape of block.shapes) {
-            const bb1 = AABB.fromShape(shape).translateVec(blockPos);
-            if (aabb.collides(bb1)) {
-              const distance = aabb.getCenter().distanceTo(bb1.getCenter());
-              if (distance < minDistance) {
-                minDistance = distance;
-                ret = blockPos.clone();
-              }
+            if (AABB.fromShape(shape).translateVec(blockPos).intersects(box)) {
+              collides = true;
+              break;
             }
+          }
+          if (!collides) continue;
+          // BlockPos::distToCenterSqr(entity.position())
+          const dx = blockPos.x + 0.5 - entityPos.x;
+          const dy = blockPos.y + 0.5 - entityPos.y;
+          const dz = blockPos.z + 0.5 - entityPos.z;
+          const distance = dx * dx + dy * dy + dz * dz;
+          if (distance < bestDistance || (distance === bestDistance && (ret == null || compareBlockPos(ret, blockPos) < 0))) {
+            bestDistance = distance;
+            ret = blockPos.clone();
           }
         }
       }
@@ -1793,4 +1798,11 @@ export class BotcraftPhysics implements IPhysics {
     entity.state.age++;
     return entity.state;
   }
+}
+
+/** Vec3i::compareTo: y, then z, then x. */
+function compareBlockPos(a: Vec3, b: Vec3): number {
+  if (a.y !== b.y) return a.y - b.y;
+  if (a.z !== b.z) return a.z - b.z;
+  return a.x - b.x;
 }

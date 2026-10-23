@@ -204,9 +204,11 @@ export class PlayerState implements IEntityState {
      */
     public flySpeed: number = 0;
 
-    public get onGroundWithoutSupportingBlock(): boolean {
-        return this.onGround && !this.supportingBlockPos;
-    }
+    /**
+     * Entity::onGroundNoBlocks: set by the last supporting-block check. True when
+     * the entity was on the ground without any block under it.
+     */
+    public onGroundWithoutSupportingBlock: boolean = false;
 
     public get height(): number {
         return playerPoseCtx[this.pose].height;
@@ -252,6 +254,7 @@ export class PlayerState implements IEntityState {
         this.pos.set(bot.entity.position.x, bot.entity.position.y, bot.entity.position.z);
         this.vel.set(bot.entity.velocity.x, bot.entity.velocity.y, bot.entity.velocity.z);
         this.supportingBlockPos = (bot.entity as any).supportingBlockPos ?? null;
+        this.onGroundWithoutSupportingBlock = (bot.entity as any).onGroundWithoutSupportingBlock ?? false;
         this.onGround = bot.entity.onGround;
         this.lastOnGround = (bot.entity as any).lastOnGround ?? bot.entity.onGround;
         this.onClimbable = (bot.entity as any).onClimbable;
@@ -369,6 +372,7 @@ export class PlayerState implements IEntityState {
         (bot.entity as any).isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         (bot.entity as any).isCollidedVertically = this.isCollidedVertically;
         (bot.entity as any).supportingBlockPos = this.supportingBlockPos;
+        (bot.entity as any).onGroundWithoutSupportingBlock = this.onGroundWithoutSupportingBlock;
 
         // dunno what to do about these, ngl.
         (bot as any).jumpTicks = this.jumpTicks;
@@ -416,6 +420,7 @@ export class PlayerState implements IEntityState {
         tmp.isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         tmp.isCollidedVertically = this.isCollidedVertically;
         tmp.supportingBlockPos = this.supportingBlockPos;
+        tmp.onGroundWithoutSupportingBlock = this.onGroundWithoutSupportingBlock;
 
         tmp.sneakCollision = false; //TODO
 
@@ -485,6 +490,7 @@ export class PlayerState implements IEntityState {
         this.isCollidedHorizontallyMinor = other.isCollidedHorizontallyMinor
         this.isCollidedVertically = other.isCollidedVertically;
         this.supportingBlockPos = other.supportingBlockPos;
+        this.onGroundWithoutSupportingBlock = other.onGroundWithoutSupportingBlock;
 
         this.sneakCollision = false; //TODO
 
